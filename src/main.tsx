@@ -15,6 +15,24 @@ import { AuthProvider } from "./context/AuthContext";
 
 import './i18n-config';
 
+// TEMP: invalidar Service Worker y caches en clientes móviles (iOS/Chrome iOS) para evitar loops/crashes.
+// Quitar este bloque tras verificar que /shop carga estable en iPhone.
+if (typeof window !== "undefined" && "serviceWorker" in navigator) {
+  try {
+    navigator.serviceWorker.getRegistrations().then((regs) => {
+      regs.forEach((r) => r.unregister());
+    });
+    // limpiar caches si existen (guardas de tipo sin suprimir errores)
+    if ('caches' in window && typeof caches.keys === 'function') {
+      caches.keys().then((keys: string[]) => {
+        keys.forEach((k) => caches.delete(k));
+      });
+    }
+  } catch {
+    // no-op
+  }
+}
+
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <LanguageProvider>
