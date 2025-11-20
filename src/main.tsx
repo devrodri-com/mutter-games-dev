@@ -33,6 +33,36 @@ if (typeof window !== "undefined" && "serviceWorker" in navigator) {
   }
 }
 
+// iOS: bloquear writes redundantes al history que disparan recargas/loops
+(function () {
+  if (typeof navigator === 'undefined') return;
+  if (!/iP(hone|ad|od)/i.test(navigator.userAgent)) return;
+
+  const sameURL = (next: string) => {
+    try {
+      const u = new URL(next, location.origin);
+      return u.pathname + u.search === location.pathname + location.search;
+    } catch { return false; }
+  };
+
+  const _push = history.pushState;
+  const _replace = history.replaceState;
+
+  history.pushState = function (state: any, title: string, url?: string | URL | null) {
+    if (typeof url === 'string' && sameURL(url)) return;
+    if (url instanceof URL && sameURL(url.toString())) return;
+    // @ts-ignore
+    return _push.apply(this, arguments);
+  };
+
+  history.replaceState = function (state: any, title: string, url?: string | URL | null) {
+    if (typeof url === 'string' && sameURL(url)) return;
+    if (url instanceof URL && sameURL(url.toString())) return;
+    // @ts-ignore
+    return _replace.apply(this, arguments);
+  };
+})();
+
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <LanguageProvider>

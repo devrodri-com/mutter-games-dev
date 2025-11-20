@@ -1,12 +1,11 @@
 //src/components/ShopNavbar.tsx
-
 import { Link } from "react-router-dom";
 import { ShoppingCart } from "lucide-react";
 import { FaSearch, FaWhatsapp, FaInstagram } from "react-icons/fa";
 import { useCart } from "../context/CartContext";
 import i18n from "..";
 import { useTranslation } from "react-i18next";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import logo from "/logo2.png";
 
 export default function ShopNavbar() {
@@ -16,6 +15,33 @@ export default function ShopNavbar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+
+  // iOS detection to mitigate WebKit quirks
+  const isIOS = typeof navigator !== 'undefined' && /iP(hone|ad|od)/i.test(navigator.userAgent);
+  // debounce for mobileSearch to avoid rapid event storms
+  const searchDebounceRef = useRef<number | null>(null);
+  const lastEmittedRef = useRef<string>("");
+
+  const emitMobileSearch = (value: string) => {
+    // avoid redundant emits
+    if (value === lastEmittedRef.current) return;
+    lastEmittedRef.current = value;
+    try {
+      window.dispatchEvent(new CustomEvent("mobileSearch", { detail: value }));
+    } catch {
+      /* no-op */
+    }
+  };
+
+  // cleanup any pending timers on unmount
+  useEffect(() => {
+    return () => {
+      if (searchDebounceRef.current) {
+        clearTimeout(searchDebounceRef.current);
+        searchDebounceRef.current = null;
+      }
+    };
+  }, []);
 
   return (
     <header className="bg-white/95 backdrop-blur-md text-black fixed top-0 w-full z-50 shadow-md border-b border-gray-200 py-0.5">
@@ -28,7 +54,7 @@ export default function ShopNavbar() {
           <Link to="/" className="flex items-center">
             <img
               src={logo}
-              alt="Bionova"
+              alt="Mutter Games"
               className="max-h-[2.25rem] w-auto object-contain"
             />
           </Link>
@@ -82,7 +108,14 @@ export default function ShopNavbar() {
             onChange={(e) => {
               const value = e.target.value;
               setSearchTerm(value);
-              window.dispatchEvent(new CustomEvent("mobileSearch", { detail: value }));
+              // debounce dispatch to reduce churn on iOS WebKit
+              if (searchDebounceRef.current) {
+                clearTimeout(searchDebounceRef.current);
+              }
+              searchDebounceRef.current = window.setTimeout(() => {
+                // On iOS, keep dispatch but throttled to avoid loops
+                emitMobileSearch(value);
+              }, 250);
             }}
           />
         </div>
@@ -107,7 +140,7 @@ export default function ShopNavbar() {
         <Link to="/" className="flex items-center">
           <img
             src={logo}
-            alt="Bionova"
+            alt="Mutter Games"
             className="h-12 w-auto object-contain"
           />
         </Link>

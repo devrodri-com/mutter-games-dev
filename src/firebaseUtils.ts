@@ -1,9 +1,21 @@
 // src/firebaseUtils.ts
 
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, getAuth, signInAnonymously, onAuthStateChanged } from "firebase/auth";
-import { getFirestore, doc as firestoreDoc, setDoc, getDoc as firestoreGetDoc, collection, getDocs, addDoc, doc, updateDoc, deleteDoc, getDoc, query, orderBy, serverTimestamp, where } from "firebase/firestore";
+import { getFirestore, initializeFirestore, doc as firestoreDoc, setDoc, getDoc as firestoreGetDoc, collection, getDocs, addDoc, doc, updateDoc, deleteDoc, getDoc, query, orderBy, serverTimestamp, where } from "firebase/firestore";
 import app from "./firebase";
-export const db = getFirestore(app);
+// Firestore: inicialización segura (evita crash si ya fue inicializado en otro módulo)
+export const db = (() => {
+  try {
+    return initializeFirestore(app, {
+      experimentalForceLongPolling: true,
+      experimentalAutoDetectLongPolling: true,
+      ignoreUndefinedProperties: true,
+    });
+  } catch {
+    // Si ya existe una instancia, obtenerla sin reconfigurar
+    return getFirestore(app);
+  }
+})();
 export const auth = getAuth(app);
 // 🔎 Debug info del proyecto Firebase
 import { getApp } from "firebase/app";
@@ -584,7 +596,7 @@ export const registerClient = async ({
   shouldRegister,
 }: RegisterClientOptions): Promise<void> => {
   const auth = getAuth();
-  const dbFirestore = getFirestore();
+  const dbFirestore = db;
 
   try {
     let uid = "";
@@ -723,7 +735,7 @@ export async function loadCartAuto(): Promise<CartItem[]> {
 // 🔥 Función para guardar un cliente en Firebase (sin registrar Auth)
 export async function saveClientToFirebase(client: Client): Promise<void> {
   try {
-    const dbFirestore = getFirestore();
+    const dbFirestore = db;
     const id = (client as any)?.uid ? String((client as any).uid) : client.email.toLowerCase();
     const clientDocRef = firestoreDoc(dbFirestore, "clients", id);
 
@@ -764,7 +776,7 @@ export async function upsertClientFromCheckout(input: {
   country?: string;
   source?: "checkout";
 }) {
-  const dbFirestore = getFirestore();
+  const dbFirestore = db;
   const emailKey = (input.email ?? "").trim().toLowerCase();
   const id = (input.uid && String(input.uid)) || emailKey;
   if (!id) return;
@@ -844,7 +856,7 @@ export async function decrementVariantStock(productId: string, variantId: string
 
 // 🔥 Actualiza el stock de productos después de un pedido
 async function updateStockAfterOrder(cartItems: CartItem[]) {
-  const db = getFirestore();
+  const dbFs = db;
   const productUpdates = new Map<string, { variantId: string; quantity: number }[]>();
 
   for (const item of cartItems) {
@@ -861,7 +873,7 @@ async function updateStockAfterOrder(cartItems: CartItem[]) {
   }
 
   for (const [productId, updates] of productUpdates.entries()) {
-    const productRef = doc(db, "products", productId);
+    const productRef = doc(dbFs, "products", productId);
     const productSnap = await getDoc(productRef);
 
     if (!productSnap.exists()) continue;
@@ -946,7 +958,7 @@ export async function registerAdminUser({
 }): Promise<void> {
   try {
     const auth = getAuth();
-    const dbFirestore = getFirestore();
+    const dbFirestore = db;
 
     // Crear en Firebase Auth
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
@@ -1077,7 +1089,7 @@ export async function signInAdmin(email: string, password: string): Promise<{
   const cred = await signInWithEmailAndPassword(authInst, email, password);
   const uid = cred.user.uid;
 
-  const dbFs = getFirestore(app);
+  const dbFs = db;
   const key = normalizeEmail(email);
   const adminRef = firestoreDoc(dbFs, "adminUsers", key);
   const adminSnap = await firestoreGetDoc(adminRef);

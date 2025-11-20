@@ -1,6 +1,6 @@
 // src/pages/Shop.tsx
 
-import React, { useState, useEffect, Suspense } from "react";
+import React, { useState, useEffect, Suspense, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useMemo } from "react";
 import { Helmet } from "react-helmet-async";
@@ -19,7 +19,24 @@ import { ArrowUp } from "lucide-react";
 import { Listbox } from "@headlessui/react";
 import { ChevronDownIcon, CheckIcon } from "@heroicons/react/20/solid";
 import { Fragment } from "react";
-import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams as useSearchParamsBase } from "react-router-dom";
+// Wrapper para evitar escrituras redundantes en iOS y compararlas con la URL actual
+const useSearchParamsSafe = () => {
+  const [sp, setSP] = useSearchParamsBase();
+  const isIOS = typeof navigator !== 'undefined' && /iP(hone|ad|od)/i.test(navigator.userAgent);
+  const safeSet = React.useCallback(
+    (p: URLSearchParams | Record<string, string>, opts?: { replace?: boolean }) => {
+      if (isIOS) return; // no escribir querystring en iOS
+      const nextQS =
+        p instanceof URLSearchParams ? p.toString() : new URLSearchParams(p).toString();
+      const currentQS = (location.search || "").replace(/^\?/, "");
+      if (nextQS === currentQS) return; // evitar no-ops redundantes
+      setSP(p as any, opts);
+    },
+    [setSP]
+  );
+  return [sp, safeSet] as const;
+};
 import { AnimatePresence } from "framer-motion";
 import { Rocket } from "lucide-react";
 import { fetchProducts, fetchSubcategories, fetchCategories } from "../firebaseUtils";
@@ -51,7 +68,9 @@ export default function Shop() {
 
   const location = useLocation();
   const navigate = useNavigate();
-  const [urlSearchParams, setSearchParams] = useSearchParams();
+  const [urlSearchParams, setSearchParams] = useSearchParamsSafe();
+  // Detectar iOS para evitar loops de WebKit al escribir querystring
+  const isIOS = typeof navigator !== 'undefined' && /iP(hone|ad|od)/i.test(navigator.userAgent);
 
   const [searchTerm, setSearchTerm] = useState("");
   const [showScrollTop, setShowScrollTop] = useState(false);
@@ -272,13 +291,15 @@ export default function Shop() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ✅ Escritura a la URL al cambiar búsqueda/filtros/orden
+  // ✅ Escritura a la URL al cambiar búsqueda/filtros/orden (evitar loop en iOS/WebKit)
+  const lastQSRef = useRef<string>("");
   useEffect(() => {
-    const params = new URLSearchParams();
+    // En iOS no modificamos la URL para evitar recargas/loops
+    if (isIOS) return;
 
+    const params = new URLSearchParams();
     // Conserva "filter" legado sólo si ya estaba presente
     if (filterParamRaw) params.set("filter", filterParamRaw);
-
     if (searchTerm) params.set("q", searchTerm);
     if (selectedCategory) params.set("cat", selectedCategory);
     if (selectedSubcategory) params.set("sub", selectedSubcategory);
@@ -286,18 +307,22 @@ export default function Shop() {
     if (sortOption) params.set("sort", sortOption);
 
     const next = params.toString();
-    const current = urlSearchParams.toString();
-    if (next !== current) {
+    const current = (location.search || "").replace(/^\?/, "");
+
+    // Evitar reemplazos redundantes
+    if (next !== current && next !== lastQSRef.current) {
       setSearchParams(params, { replace: true });
+      lastQSRef.current = next;
     }
   }, [
+    isIOS,
     searchTerm,
     selectedCategory,
     selectedSubcategory,
     selectedType,
     sortOption,
     filterParamRaw,
-    urlSearchParams,
+    location.search,
     setSearchParams,
   ]);
 
@@ -355,10 +380,12 @@ export default function Shop() {
       }
       return 0;
     });
-    console.log("🔍 Orden actual y precios:");
-    sorted.forEach((p) => {
-      console.log(`→ ${p.title?.es} | price: ${getPrice(p)}`);
-    });
+    if (!import.meta.env.PROD) {
+      console.log("🔍 Orden actual y precios:");
+      sorted.forEach((p) => {
+        console.log(`→ ${p.title?.es} | price: ${getPrice(p)}`);
+      });
+    }
     return sorted;
   }, [filteredProducts, sortOption, i18n.language]);
 
@@ -385,7 +412,6 @@ export default function Shop() {
   }, [filteredProducts, selectedOrderMobile, i18n.language]);
 
   const productsToDisplay = sortedProducts;
-  console.log("[Shop] Productos a mostrar:", productsToDisplay);
 
   // Banner dinámico según filtro (normalizando a mayúsculas)
   const normalizedFilter = filterParam.toUpperCase();
@@ -531,7 +557,7 @@ export default function Shop() {
                     setSelectedSubcategory("");
                     setSelectedType("Todos");
                     setSortOption("");
-                    setSearchParams({}, { replace: true });
+                    if (!isIOS) setSearchParams({}, { replace: true });
                   }}
                   className="mt-2 text-sm font-semibold text-gray-700 hover:text-black underline"
                 >
@@ -615,7 +641,7 @@ export default function Shop() {
                     setSelectedSubcategory("");
                     setSelectedType("Todos");
                     setSortOption("");
-                    setSearchParams({}, { replace: true });
+                    if (!isIOS) setSearchParams({}, { replace: true });
                   }}
                   className="mt-2 text-sm font-semibold text-gray-700 hover:text-black underline"
                 >
@@ -736,7 +762,7 @@ export default function Shop() {
                         setSelectedSubcategory("");
                         setSelectedType("Todos");
                         setSortOption("");
-                        setSearchParams({}, { replace: true });
+                        if (!isIOS) setSearchParams({}, { replace: true });
                       }}
                       className="text-red-600 hover:underline font-semibold mt-2 inline-block"
                     >
