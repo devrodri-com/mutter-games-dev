@@ -12,8 +12,7 @@ dist/
 *.tsbuildinfo
 
 # Archivos sensibles
-.env
-.env.local
+.env*
 secrets/firebase-admin.json
 
 # Archivos del sistema
