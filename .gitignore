@@ -20,3 +20,8 @@ secrets/firebase-admin.json
 
 # Vercel (si lo manejás desde CLI)
 .vercel/
+
+# Firebase Emulator logs
+firebase-debug.log
+firestore-debug.log
+*.log
