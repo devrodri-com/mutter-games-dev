@@ -3,7 +3,7 @@
 // Versión funcional anterior de EditProductModal (restaurada)
 import React, { useState, useEffect, useRef } from "react";
 import { Product } from "../../data/types";
-import { fetchCategories } from "../../firebaseUtils";
+import { fetchCategories } from "@/firebase/categories";
 import { updateProduct } from "@/firebase/products";
 import { generateSlug } from "../../utils/generateSlug";
 import { uploadImageToImageKit } from "../../utils/imagekitUtils";

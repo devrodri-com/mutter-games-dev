@@ -25,7 +25,8 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { fetchSubcategories, fetchCategories, importProductFromCJ } from "../../firebaseUtils";
+import { importProductFromCJ } from "../../firebaseUtils";
+import { fetchSubcategories, fetchCategories } from "@/firebase/categories";
 import { createProduct } from "@/firebase/products";
 import { auth } from "../../firebase";
 

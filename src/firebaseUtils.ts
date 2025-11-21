@@ -54,89 +54,8 @@ export async function ensureAuthedUid(): Promise<string> {
   return uid;
 }
 
-// ✅ Devuelve una referencia al doc del carrito del usuario actual (uid = doc id)
-async function getCurrentCartRef() {
-  const uid = await ensureAuthedUid();
-  return { uid, ref: doc(db, "carts", uid) };
-}
-
-import { Product, Category, ClientWithId } from "./data/types";
-import type { Order } from "./data/types";
+import { Product, ClientWithId } from "./data/types";
 import type { CartItem } from "./data/types";
-
-export async function fetchCategoriesWithSubcategories(): Promise<
-  {
-    id: string;
-    name: string;
-    subcategories: { id: string; name: string }[];
-  }[]
-> {
-  const ref = collection(db, "categories");
-  const snap = await getDocs(ref);
-
-  const categories = await Promise.all(
-    snap.docs.map(async (doc) => {
-      const subRef = collection(db, `categories/${doc.id}/subcategories`);
-      const subSnap = await getDocs(subRef);
-      const subcategories = subSnap.docs.map((subDoc) => ({
-        id: subDoc.id,
-        name: subDoc.data().name,
-      }));
-      return {
-        id: doc.id,
-        name: doc.data().name || "",
-        subcategories,
-      };
-    })
-  );
-
-  return categories;
-}
-
-// ============================================================================
-// === OPERACIONES ADMIN (PRODUCTOS/CATEGORÍAS) === (continuación)
-// ============================================================================
-
-export async function createCategory(name: { es: string; en: string }) {
-  try {
-    const ref = collection(db, "categories");
-    await addDoc(ref, { name });
-  } catch (error) {
-    console.error("Error creando categoría:", error);
-    throw error;
-  }
-}
-
-
-export async function deleteCategory(id: string) {
-  try {
-    const ref = doc(db, "categories", id);
-    await deleteDoc(ref);
-  } catch (error) {
-    console.error("Error eliminando categoría:", error);
-    throw error;
-  }
-}
-
-export async function createSubcategory(categoryId: string, subcategoryName: string) {
-  try {
-    const ref = collection(db, `categories/${categoryId}/subcategories`);
-    await addDoc(ref, { name: subcategoryName });
-  } catch (error) {
-    console.error("Error creando subcategoría:", error);
-    throw error;
-  }
-}
-
-export async function deleteSubcategory(categoryId: string, subcategoryId: string) {
-  try {
-    const ref = doc(db, `categories/${categoryId}/subcategories/${subcategoryId}`);
-    await deleteDoc(ref);
-  } catch (error) {
-    console.error("Error eliminando subcategoría:", error);
-    throw error;
-  }
-}
 
 // ============================================================================
 // === LECTURAS PÚBLICAS / CLIENTE === (continuación)
@@ -173,13 +92,11 @@ export async function fetchClientsFromFirebase(): Promise<ClientWithId[]> {
 
 export async function deleteClientFromFirebase(clientId: string) {
   try {
-    const clientRef = doc(db, "clients", clientId);
-    await deleteDoc(clientRef);
-    if (import.meta?.env?.DEV) {
-      console.log("Cliente eliminado:", clientId);
-    }
+    throw new Error(
+      "deleteClientFromFirebase está deshabilitada en el frontend. Usa el backend /api/admin/clients para eliminar clientes."
+    );
   } catch (error) {
-    console.error("Error eliminando cliente:", error);
+    console.error("❌ Intento de uso de deleteClientFromFirebase en frontend:", error);
     throw error;
   }
 }
@@ -187,29 +104,6 @@ export async function deleteClientFromFirebase(clientId: string) {
 // ============================================================================
 // === LECTURAS PÚBLICAS / CLIENTE === (continuación)
 // ============================================================================
-
-// 🔥 Función para traer subcategorías de una categoría específica
-export async function fetchSubcategories(categoryId: string): Promise<{ id: string; name: string; categoryId: string }[]> {
-  const ref = collection(db, `categories/${categoryId}/subcategories`);
-  const snap = await getDocs(ref);
-  return snap.docs.map((doc) => {
-    const rawName = doc.data().name;
-    const name =
-      typeof rawName === "string"
-        ? rawName
-        : typeof rawName?.es === "string"
-        ? rawName.es
-        : typeof rawName?.en === "string"
-        ? rawName.en
-        : "";
-
-    return {
-      id: doc.id,
-      name,
-      categoryId,
-    };
-  });
-}
 
 // ============================================================================
 // === INTEGRACIONES EXTERNAS (CJ, ETC.) ===
@@ -269,118 +163,8 @@ export async function importProductFromCJ(cjProductId: string) {
 // === LECTURAS PÚBLICAS / CLIENTE === (continuación)
 // ============================================================================
 
-// Nueva implementación de fetchCategories que devuelve subcategorías embebidas
-export async function fetchCategories(): Promise<Category[]> {
-  const ref = collection(db, "categories");
-  const snap = await getDocs(ref);
-
-  const categories = await Promise.all(
-    snap.docs.map(async (doc) => {
-      const rawName = doc.data().name;
-      const name =
-        typeof rawName === "string"
-          ? rawName
-          : typeof rawName?.es === "string"
-          ? rawName.es
-          : typeof rawName?.en === "string"
-          ? rawName.en
-          : "";
-
-      const subRef = collection(db, `categories/${doc.id}/subcategories`);
-      const subSnap = await getDocs(subRef);
-      const subcategories = subSnap.docs.map((subDoc) => {
-        const raw = subDoc.data().name;
-        const subName =
-          typeof raw === "string"
-            ? raw
-            : typeof raw?.es === "string"
-            ? raw.es
-            : typeof raw?.en === "string"
-            ? raw.en
-            : "";
-        return {
-          id: subDoc.id,
-          name: subName,
-          categoryId: doc.id,
-          orden: subDoc.data().orden ?? 0,
-        };
-      });
-
-      return {
-        id: doc.id,
-        name,
-        categoryId: doc.id,
-        subcategories,
-        orden: doc.data().orden ?? 0,
-      };
-    })
-  );
-
-  // Ordenar por 'orden' ascendente
-  return categories.sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0));
-}
-
-// ============================================================================
-// === LECTURAS PÚBLICAS / CLIENTE === (continuación)
-// ============================================================================
-
 // 🔥 Función para guardar un pedido completo en Firebase
 // 🔥 Función para guardar un pedido completo en Firebase (compatible con reglas)
-export async function saveOrderToFirebase(order: {
-  cartItems: any[];
-  client: {
-    name: string;
-    email: string;
-    phone?: string;
-    address?: string;
-    country?: string;
-  };
-  totalAmount: number;
-  shippingCost?: number;
-  paymentIntentId: string;
-  paymentStatus: string;
-  paymentMethod: string;
-  date: string;
-  estado: "En proceso" | "Confirmado" | "Cancelado" | "Entregado";
-}) {
-  try {
-    const uid = await ensureAuthedUid();
-    const ordersRef = collection(db, "orders");
-    // Campos mínimos exigidos por reglas + el resto de tu payload
-    const payload = {
-      uid,
-      createdAt: Date.now(), // las reglas aceptan timestamp o number
-      items: order.cartItems || [],
-      shipping: {
-        cost: Number(order.shippingCost ?? 0),
-        address: order.client?.address ?? "",
-        country: order.client?.country ?? "",
-      },
-      total: Number(order.totalAmount ?? 0),
-
-      // Extras de tu app (se conservan)
-      client: order.client,
-      paymentIntentId: order.paymentIntentId,
-      paymentStatus: order.paymentStatus,
-      paymentMethod: order.paymentMethod,
-      date: order.date,
-      estado: order.estado,
-    };
-
-    await addDoc(ordersRef, payload);
-    if (import.meta?.env?.DEV) {
-      console.log("✅ Pedido guardado en Firebase:", payload);
-      console.log("🧾 Detalles de la orden:", JSON.stringify(payload, null, 2));
-    }
-
-    // Actualizar stock
-    await updateStockAfterOrder(order.cartItems);
-  } catch (error) {
-    console.error("❌ Error al guardar el pedido:", error);
-    throw error;
-  }
-}
-
 
 // Función para registrar cliente (con o sin usuario Firebase Auth)
 import type { Client } from "./data/types";
@@ -423,115 +207,6 @@ export const registerClient = async ({
     throw error;
   }
 };
-
-// 🔎 Mapper robusto: traduce cualquier forma de orden guardada en Firestore
-function mapOrderForAdmin(id: string, data: any) {
-  // createdAt puede ser Timestamp (toMillis), number o string (date ISO)
-  const createdMs =
-    (data?.createdAt && typeof data.createdAt?.toMillis === "function"
-      ? data.createdAt.toMillis()
-      : typeof data?.createdAt === "number"
-      ? data.createdAt
-      : data?.date
-      ? Date.parse(data.date)
-      : Date.now());
-
-  const clientRaw = data?.client || {};
-  const shippingInfo = data?.shipping || data?.shippingInfo || {};
-
-  const client = {
-    name: clientRaw.name || data?.name || "",
-    email: clientRaw.email || data?.email || "",
-    phone: clientRaw.phone || data?.phone || "",
-    address:
-      clientRaw.address ||
-      shippingInfo.address ||
-      clientRaw.address1 ||
-      "",
-    city: clientRaw.city || shippingInfo.city || "",
-    state: clientRaw.state || shippingInfo.state || "",
-    zip:
-      clientRaw.zip ||
-      shippingInfo.zip ||
-      shippingInfo.postalCode ||
-      "",
-    country: clientRaw.country || shippingInfo.country || "",
-  };
-
-  const items = data?.items || data?.cartItems || [];
-  const totalAmount = Number(data?.total ?? data?.totalAmount ?? 0);
-  const shippingCost = Number(shippingInfo?.cost ?? data?.shippingCost ?? 0);
-  const estado = data?.estado || data?.status || "Pendiente";
-
-  return {
-    id,
-    cartItems: items,
-    client,
-    totalAmount,
-    paymentIntentId: data?.paymentIntentId || "",
-    paymentStatus: data?.paymentStatus || "",
-    paymentMethod: data?.paymentMethod || "",
-    date: data?.date || new Date(createdMs).toISOString(),
-    estado,
-    createdAt: createdMs,
-    shippingCost,
-    clientEmail: client.email,
-  };
-}
-// 🔥 Función para obtener los pedidos reales desde Firebase
-export async function fetchOrdersFromFirebase() {
-  try {
-    const ordersRef = collection(db, "orders");
-    const snapshot = await getDocs(ordersRef);
-
-    const orders = snapshot.docs.map((d) => mapOrderForAdmin(d.id, d.data()));
-    return orders;
-  } catch (error) {
-    console.error("❌ Error al traer pedidos desde Firebase:", error);
-    return [];
-  }
-}
-
-// 🔥 Función para guardar el carrito en Firebase
-export async function saveCartToFirebase(uid: string, items: CartItem[]): Promise<void> {
-  try {
-    // always ensure auth and force the real uid for security-rules compatibility
-    const realUid = await ensureAuthedUid();
-    const cartRef = doc(db, "carts", realUid);
-    await setDoc(cartRef, { items });
-    if (import.meta?.env?.DEV) console.log("🛒 Carrito guardado en Firebase (uid):", realUid, items);
-  } catch (error) {
-    console.error("❌ Error al guardar carrito:", error);
-    throw error;
-  }
-}
-
-// 🔥 Función para obtener el carrito de Firebase por email
-export async function getCartFromFirebase(uid: string): Promise<CartItem[]> {
-  const realUid = await ensureAuthedUid();
-  const docRef = doc(db, "carts", realUid);
-  const docSnap = await getDoc(docRef);
-  return docSnap.exists() ? docSnap.data().items || [] : [];
-}
-
-
-// 🆕 Versión AUTO: usa el uid del usuario actual (anónimo o logueado)
-export async function saveCartAuto(items: CartItem[]): Promise<void> {
-  const { uid, ref } = await getCurrentCartRef();
-  await setDoc(ref, { items });
-  if (import.meta?.env?.DEV) console.log("🛒 [AUTO] Carrito guardado en Firebase (uid):", uid, items);
-}
-
-// 🆕 Versión AUTO: lee el carrito del usuario actual (anónimo o logueado)
-export async function loadCartAuto(): Promise<CartItem[]> {
-  const { uid, ref } = await getCurrentCartRef();
-  const snap = await getDoc(ref);
-  const items = snap.exists() ? (snap.data().items || []) : [];
-  if (import.meta?.env?.DEV) {
-    if (import.meta?.env?.DEV) console.log("🛒 [AUTO] Carrito cargado desde Firebase (uid):", uid, items);
-  }
-  return items;
-}
 
 
 // 🔥 Función para guardar un cliente en Firebase (sin registrar Auth)
@@ -656,97 +331,6 @@ export async function decrementVariantStock(productId: string, variantId: string
 }
 
 
-// 🔥 Actualiza el stock de productos después de un pedido
-async function updateStockAfterOrder(cartItems: CartItem[]) {
-  const dbFs = db;
-  const productUpdates = new Map<string, { variantId: string; quantity: number }[]>();
-
-  for (const item of cartItems) {
-    if (!item.id || !item.variantId || !item.quantity) continue;
-
-    if (!productUpdates.has(item.id)) {
-      productUpdates.set(item.id, []);
-    }
-
-    productUpdates.get(item.id)?.push({
-      variantId: item.variantId,
-      quantity: item.quantity,
-    });
-  }
-
-  for (const [productId, updates] of productUpdates.entries()) {
-    const productRef = doc(dbFs, "products", productId);
-    const productSnap = await getDoc(productRef);
-
-    if (!productSnap.exists()) continue;
-
-    const productData = productSnap.data() as Product;
-
-    let stockTotal = 0;
-    const updatedVariants = productData.variants?.map((variant) => {
-      const updatedOptions = variant.options.map((option) => {
-        const update = updates.find(
-          (u) => `${variant.label?.es || variant.label?.en}-${option.value}` === u.variantId
-        );
-        if (update && option.stock !== undefined) {
-          option.stock = Math.max(0, option.stock - update.quantity);
-        }
-        stockTotal += option.stock || 0;
-        return option;
-      });
-
-      return {
-        ...variant,
-        options: updatedOptions,
-      };
-    });
-
-    await updateDoc(productRef, {
-      variants: updatedVariants,
-      stockTotal,
-    });
-  }
-}
-// 🔥 Función para obtener todas las subcategorías embebidas en categorías
-export const fetchAllSubcategories = async (): Promise<
-  { id: string; name: string; categoryId: string }[]
-> => {
-  try {
-    const categoriesSnapshot = await getDocs(collection(db, "categories"));
-    const allSubcategories: { id: string; name: string; categoryId: string }[] = [];
-
-    for (const catDoc of categoriesSnapshot.docs) {
-      const categoryId = catDoc.id;
-      const subRef = collection(db, "categories", categoryId, "subcategories");
-      const subSnap = await getDocs(subRef);
-
-      subSnap.forEach((subDoc) => {
-        const rawName = subDoc.data().name;
-        const name =
-          typeof rawName === "string"
-            ? rawName
-            : typeof rawName?.es === "string"
-            ? rawName.es
-            : typeof rawName?.en === "string"
-            ? rawName.en
-            : "";
-
-        allSubcategories.push({
-          id: subDoc.id,
-          name,
-          categoryId,
-        });
-      });
-    }
-
-    if (import.meta?.env?.DEV) console.log("🧩 Subcategorías embebidas obtenidas:", allSubcategories);
-    return allSubcategories;
-  } catch (error) {
-    console.error("❌ Error al obtener subcategorías embebidas:", error);
-    return [];
-  }
-};
-
 // ============================================================================
 // === OPERACIONES ADMIN (CLIENTES / ADMIN USERS) === (continuación)
 // ============================================================================
@@ -764,26 +348,11 @@ export async function registerAdminUser({
   isSuperAdmin?: boolean;
 }): Promise<void> {
   try {
-    const auth = getAuth();
-    const dbFirestore = db;
-
-    // Crear en Firebase Auth
-    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-    const uid = userCredential.user.uid;
-
-    // Guardar en Firestore
-    const userDocRef = firestoreDoc(dbFirestore, "usuarios", email);
-    await setDoc(userDocRef, {
-      name,
-      email,
-      uid,
-      isSuperAdmin,
-      createdAt: new Date().toISOString(),
-    });
-
-    if (import.meta?.env?.DEV) console.log("✅ Usuario administrador creado:", email);
-  } catch (error: any) {
-    console.error("❌ Error al registrar usuario administrador:", error.message || error);
+    throw new Error(
+      "registerAdminUser está deshabilitada en el frontend. Usa el backend /api/admin/users para gestionar administradores."
+    );
+  } catch (error) {
+    console.error("❌ Intento de uso de registerAdminUser en frontend:", error);
     throw error;
   }
 }
@@ -856,19 +425,9 @@ export const discountStockByOrder = async (order: {
 export async function fetchAdminUsers(): Promise<
   { id: string; nombre: string; email: string; rol: string; activo: boolean }[]
 > {
-  const ref = collection(db, "adminUsers");
-  const snap = await getDocs(ref);
-
-  return snap.docs.map((doc) => {
-    const data = doc.data();
-    return {
-      id: doc.id,
-      nombre: data.nombre || "",
-      email: data.email || "",
-      rol: data.rol || "admin",
-      activo: data.activo ?? true,
-    };
-  });
+  throw new Error(
+    "fetchAdminUsers está deshabilitada en el frontend. Usa el backend /api/admin/users para obtener la lista de administradores."
+  );
 }
 
 // 🔐 Obtener un usuario administrador por email (para login)
@@ -879,69 +438,25 @@ export async function getAdminUserByEmail(email: string): Promise<{
   rol: string;
   activo: boolean;
 } | null> {
-  const key = normalizeEmail(email);
-  const ref = doc(db, "adminUsers", key);
-  const snap = await getDoc(ref);
-  if (!snap.exists()) return null;
-  const data = snap.data() as any;
-  return {
-    id: snap.id,
-    nombre: data.nombre || "",
-    email: data.email || key,
-    rol: data.rol || "admin",
-    activo: data.activo ?? true,
-  };
+  throw new Error(
+    "getAdminUserByEmail está deshabilitada en el frontend. Usa el backend /api/admin/users para resolver administradores por email."
+  );
 }
 // 🔐 Login de administrador: autentica con Auth y garantiza que exista su doc en adminUsers
 export async function signInAdmin(email: string, password: string): Promise<{
   uid: string;
   adminDocCreated: boolean;
 }> {
-  const authInst = getAuth(app);
-  const cred = await signInWithEmailAndPassword(authInst, email, password);
-  const uid = cred.user.uid;
-
-  const dbFs = db;
-  const key = normalizeEmail(email);
-  const adminRef = firestoreDoc(dbFs, "adminUsers", key);
-  const adminSnap = await firestoreGetDoc(adminRef);
-
-  let adminDocCreated = false;
-  if (!adminSnap.exists()) {
-    await setDoc(adminRef, {
-      nombre: "",
-      email: key,
-      rol: "admin",
-      activo: true,
-      uid,
-      createdAt: new Date().toISOString(),
-    });
-    adminDocCreated = true;
-  }
-
-  return { uid, adminDocCreated };
+  throw new Error(
+    "signInAdmin está deshabilitada en el frontend. Usa el flujo de autenticación estándar de Firebase Auth y el backend /api/admin/users para login de administradores."
+  );
 }
 
 // 🔐 Enviar email de reseteo de contraseña para admins
 export async function sendAdminPasswordReset(email: string): Promise<void> {
-  const authInst = getAuth(app);
-  await sendPasswordResetEmail(authInst, email);
-}
-// 🔥 Obtener pedidos por email (usado en perfil de cliente) - versión robusta
-export async function getOrdersByEmail(email: string): Promise<Order[]> {
-  try {
-    const q = query(
-      collection(db, "orders"),
-      orderBy("createdAt", "desc")
-    );
-    const snap = await getDocs(q);
-    return snap.docs
-      .map((doc) => mapOrderForAdmin(doc.id, doc.data()))
-      .filter((order) => order.clientEmail?.toLowerCase() === email.toLowerCase());
-  } catch (error) {
-    console.error("❌ Error al obtener pedidos por email:", error);
-    return [];
-  }
+  throw new Error(
+    "sendAdminPasswordReset está deshabilitada en el frontend. Usa el backend para enviar reseteos de contraseña de administradores."
+  );
 }
 // Utilidad: devuelve true si el usuario actual está autenticado
 export function isAuthed(): boolean {

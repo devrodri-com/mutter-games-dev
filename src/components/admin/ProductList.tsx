@@ -8,7 +8,7 @@ import { auth } from "../../firebase";
 import EditProductModal from "./EditProductModal";
 import ModalConfirm from "./ModalConfirm";
 import { normalizeProduct } from "@/utils/normalizeProduct";
-import { fetchCategories, fetchAllSubcategories } from "@/firebaseUtils";
+import { fetchCategories, fetchAllSubcategories } from "@/firebase/categories";
 
 async function updateProductAdminAPI(id: string, data: Partial<Product>) {
   const current = auth.currentUser;

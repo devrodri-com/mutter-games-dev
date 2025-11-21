@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { JSX } from "react/jsx-runtime";
 import { useTranslation } from "react-i18next";
-import { fetchCategories } from "../firebaseUtils";
 import { Category, Subcategory as BaseSubcategory } from "../data/types";
 import { ChevronDown } from "lucide-react";
 

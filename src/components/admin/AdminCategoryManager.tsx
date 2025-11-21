@@ -9,7 +9,7 @@ import {
   deleteCategory,
   createSubcategory,
   deleteSubcategory,
-} from "../../firebaseUtils";
+} from "@/firebase/categories";
 import { doc, setDoc } from "firebase/firestore";
 import { firebaseDB } from "@/firebase";
 import { useConfirm } from "@/components/ui/confirm";

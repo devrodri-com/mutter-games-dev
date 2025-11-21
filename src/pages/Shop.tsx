@@ -39,7 +39,7 @@ const useSearchParamsSafe = () => {
 };
 import { AnimatePresence } from "framer-motion";
 import { Rocket } from "lucide-react";
-import { fetchSubcategories, fetchCategories } from "../firebaseUtils";
+import { fetchSubcategories, fetchCategories } from "@/firebase/categories";
 import { fetchProducts } from "@/firebase/products";
 import ProductSkeleton from "../components/ProductSkeleton";
 import SidebarFilter from "../components/SidebarFilter";

@@ -22,7 +22,7 @@ import AuthChoice from "../components/AuthChoice";
 import Footer from "../components/Footer";
 import { db, auth } from "../firebaseUtils";
 
-import { addDoc, serverTimestamp, collection } from "firebase/firestore";
+import { serverTimestamp } from "firebase/firestore";
 
 import { useLanguage } from '../hooks/useLanguage';
 import CartNavbar from "../components/CartNavbar";
@@ -30,7 +30,9 @@ import { toast } from "react-hot-toast";
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { validateCartForm } from "../utils/formValidation";
-import { registerClient, saveOrderToFirebase, saveCartToFirebase, saveClientToFirebase, upsertClientFromCheckout } from "../firebaseUtils";
+import { registerClient, saveClientToFirebase, upsertClientFromCheckout } from "../firebaseUtils";
+import { saveOrderToFirebase } from "@/firebase/orders";
+import { saveCartToFirebase } from "@/firebase/cart";
 import { extractStateFromAddress, extractAddressComponents } from "@/utils/locationUtils";
 import { prepareInitialOrderData } from '../utils/orderUtils';
 import { calculateTotal, calculateCartBreakdown, getShippingInfoByDepartment } from '../utils/cartUtils';
@@ -228,12 +230,26 @@ const isValidEmail = (email: string): boolean => {
         total: totalNumber,
       };
 
-      // Guardar orden en Firestore antes de ir a Mercado Pago
-      const ref = await addDoc(collection(db, "orders"), orderPayload);
-      localStorage.setItem("lastOrderId", ref.id);
+      // Guardar orden en Firestore antes de ir a Mercado Pago, usando helper centralizado
+      const orderId = await saveOrderToFirebase({
+        items: orderPayload.items,
+        shipping: {
+          name: shippingInfo?.name || "",
+          email: shippingInfo?.email || "",
+          phone: shippingInfo?.phone || "",
+          address: shipping.address,
+          country: "UY",
+          cost: shipping.cost,
+        },
+        total: orderPayload.total,
+        createdAt: orderPayload.createdAt,
+      });
 
-      // Log para diagnosticar
-      console.log("🧾 Orden creada en Firestore:", { id: ref.id, ...orderPayload });
+      localStorage.setItem("lastOrderId", orderId);
+
+      if (import.meta.env.DEV) {
+        console.log("🧾 Orden creada en Firebase:", { id: orderId, ...orderPayload });
+      }
 
       // Si el usuario eligió registrarse, crear/actualizar la ficha de cliente
       try {
