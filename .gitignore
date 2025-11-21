@@ -13,6 +13,7 @@ dist/
 
 # Archivos sensibles
 .env*
+firebase-admin-key.json
 secrets/firebase-admin.json
 
 # Archivos del sistema
