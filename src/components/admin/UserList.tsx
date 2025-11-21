@@ -44,13 +44,15 @@ export default function UserList() {
   const [isSuperAdminFlag, setIsSuperAdminFlag] = useState(false);
   useEffect(() => {
     const checkRole = async () => {
-      if (!user?.id) return;
       try {
-        // lectura directa del doc adminUsers/{uid}
-        const snap = await getDoc(doc(firestore, "adminUsers", user.id));
-        const role = snap.exists() ? (snap.data() as any)?.rol || (snap.data() as any)?.role : null;
-        const activo = snap.exists() ? (snap.data() as any)?.activo !== false : false;
-        setIsSuperAdminFlag(Boolean(activo && (role === "superadmin")));
+        // Usamos los custom claims de Firebase Auth como fuente de verdad
+        const current = auth.currentUser;
+        if (!current) {
+          setIsSuperAdminFlag(false);
+          return;
+        }
+        const token = await current.getIdTokenResult();
+        setIsSuperAdminFlag(token.claims.superadmin === true);
       } catch (e) {
         console.warn("No se pudo verificar rol:", e);
         setIsSuperAdminFlag(false);

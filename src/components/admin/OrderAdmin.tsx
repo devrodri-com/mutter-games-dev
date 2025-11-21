@@ -133,15 +133,9 @@ export default function OrderAdmin() {
           return;
         }
 
-        const emailKey = (user.email || "").toLowerCase();
-        const adminByUidRef = doc(db, "adminUsers", user.uid);
-        const adminByEmailRef = emailKey ? doc(db, "adminUsers", emailKey) : null;
-        const [snapUid, snapEmail] = await Promise.all([
-          getDoc(adminByUidRef),
-          adminByEmailRef ? getDoc(adminByEmailRef) : Promise.resolve(null as any)
-        ]);
-        const esAdmin = (snapUid?.exists() && (snapUid.data() as any)?.activo !== false)
-          || (snapEmail?.exists() && (snapEmail!.data() as any)?.activo !== false);
+        // Determinar si es admin usando los custom claims de Firebase Auth
+        const token = await user.getIdTokenResult();
+        const esAdmin = token.claims.admin === true || token.claims.superadmin === true;
 
         // Construir query según permisos + filtro estado
         const baseCol = collection(db, "orders");

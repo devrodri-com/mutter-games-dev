@@ -107,6 +107,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    const authHeader = req.headers.authorization || '';
+    const tokenString = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+    if (!tokenString) {
+      return res.status(401).json({ error: 'Unauthorized: missing bearer token' });
+    }
+
+    let decodedToken: admin.auth.DecodedIdToken;
+    try {
+      decodedToken = await admin.auth().verifyIdToken(tokenString);
+    } catch {
+      return res.status(401).json({ error: 'Unauthorized: invalid token' });
+    }
+    const claims = decodedToken as { [key: string]: any };
+    const isAdmin = claims.admin === true || claims.superadmin === true;
+    if (!isAdmin) {
+      return res.status(403).json({ error: 'Forbidden: admin role required' });
+    }
+
     const payload =
       typeof req.body === 'string' ? (JSON.parse(req.body) as CreateProductPayload) : (req.body as CreateProductPayload);
 
@@ -114,8 +132,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (validationError) {
       return res.status(400).json({ error: validationError });
     }
-
-    // TODO: validar admin/superadmin via Firebase Auth custom claims
 
     const normalizedVariants: Variant[] = payload.variants.map((variant) => ({
       label: {

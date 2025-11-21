@@ -67,13 +67,13 @@ service cloud.firestore {
 
     // ---- adminUsers (para validar admin) ----
     match /adminUsers/{id} {
-      // cualquier usuario autenticado puede LEER (el panel chequea esto)
-      allow read: if isAuthed();
-      // puede escribir su propio doc si el id es su uid o su email
-      allow write: if isAuthed() && (
-        id == request.auth.uid ||
-        (request.auth.token.email != null && id == request.auth.token.email)
-      );
+      // lectura: solo admins y superadmins
+      allow read: if request.auth != null
+        && (request.auth.token.admin == true
+            || request.auth.token.superadmin == true);
+
+      // escritura: solo superadmin
+      allow write: if isSuperAdmin();
     }
 
     // ---- clients (para el panel “Clientes”) ----
