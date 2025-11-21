@@ -9,6 +9,21 @@ import { uploadImageToImageKit } from "../../utils/imagekitUtils";
 import TiptapEditor from "./TiptapEditor";
 import { TIPOS } from "../../constants/tipos";
 
+async function updateProductAdminAPI(id: string, data: Partial<Product>) {
+  const response = await fetch(`/api/admin/products/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.error || "Error actualizando producto");
+  }
+
+  return true;
+}
+
 interface Props {
   product: Product;
   onSave: (updatedProduct: Product) => void;

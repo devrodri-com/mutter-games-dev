@@ -14,6 +14,10 @@ export const uploadImageToImageKit = async (file: File): Promise<string | null> 
 
     if (!signatureRes.ok) {
       console.error("Error obteniendo firma:", signatureData);
+      if (import.meta.env.DEV) {
+        console.warn("⚠️ DEV: usando imagen placeholder porque falló la subida a ImageKit");
+        return "https://picsum.photos/600";
+      }
       return null;
     }
 
@@ -33,14 +37,22 @@ export const uploadImageToImageKit = async (file: File): Promise<string | null> 
 
     const data = await uploadRes.json();
 
-    if (uploadRes.ok) {
+    if (uploadRes.ok && data?.url) {
       return data.url;
-    } else {
-      console.error("Error al subir imagen a ImageKit:", data);
-      return null;
     }
+
+    console.error("Error al subir imagen a ImageKit:", data);
+    if (import.meta.env.DEV) {
+      console.warn("⚠️ DEV: usando imagen placeholder porque falló la subida a ImageKit");
+      return "https://picsum.photos/600";
+    }
+    return null;
   } catch (error) {
     console.error("Error de red al subir imagen:", error);
+    if (import.meta.env.DEV) {
+      console.warn("⚠️ DEV: usando imagen placeholder porque falló la subida a ImageKit");
+      return "https://picsum.photos/600";
+    }
     return null;
   }
 };

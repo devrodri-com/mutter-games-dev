@@ -9,6 +9,34 @@ import ModalConfirm from "./ModalConfirm";
 import { normalizeProduct } from "@/utils/normalizeProduct";
 import { fetchCategories, fetchAllSubcategories } from "@/firebaseUtils";
 
+async function updateProductAdminAPI(id: string, data: Partial<Product>) {
+  const response = await fetch(`/api/admin/products/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.error || "Error actualizando producto");
+  }
+
+  return true;
+}
+
+async function deleteProductAdminAPI(id: string) {
+  const response = await fetch(`/api/admin/products/${id}/delete`, {
+    method: "DELETE",
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error(error.error || "Error eliminando producto");
+  }
+
+  return true;
+}
+
 export default function ProductList() {
   const [products, setProducts] = useState<Product[]>([]);
   const [categoryFilter, setCategoryFilter] = useState("Todas");
