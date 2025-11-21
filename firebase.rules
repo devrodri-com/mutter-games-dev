@@ -1,0 +1,108 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---- helpers ----
+    function isAuthed() {
+      return request.auth != null;
+    }
+
+    // Usa tanto custom claims como la colección adminUsers (transición suave)
+    function isAdmin() {
+      return isAuthed() && (
+        request.auth.token.admin == true || // nuevo: claims
+        exists(/databases/$(database)/documents/adminUsers/$(request.auth.uid)) ||
+        (request.auth.token.email != null &&
+         exists(/databases/$(database)/documents/adminUsers/$(request.auth.token.email)))
+      );
+    }
+
+    function isSuperAdmin() {
+      return isAuthed() && request.auth.token.superadmin == true;
+    }
+
+    // ---- catálogo público ----
+    match /products/{id} {
+      allow read: if true;
+      // Crear, editar o borrar solo admins
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /categories/{id} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /categories/{id}/subcategories/{sid} {
+      allow read: if true;
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ---- carrito (doc id = UID) ----
+    match /carts/{cartId} {
+      allow read, write: if isAuthed() && request.auth.uid == cartId;
+    }
+
+    // ---- órdenes ----
+    match /orders/{orderId} {
+      // crear orden solo con payload válido y uid del usuario actual
+      allow create: if isAuthed()
+        && request.resource.data.keys().hasAll(['uid','createdAt','items','shipping','total'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.items.size() > 0
+        && (request.resource.data.createdAt is timestamp || request.resource.data.createdAt is number)
+        && (request.resource.data.total is number);
+
+      // leer: dueño o admin
+      allow read: if isAuthed() && (
+        resource.data.uid == request.auth.uid || isAdmin()
+      );
+
+      // actualizar: cerrado por ahora
+      allow update: if false;
+
+      // borrar: solo admin
+      allow delete: if isAdmin();
+    }
+
+    // ---- adminUsers (para validar admin) ----
+    match /adminUsers/{id} {
+      // cualquier usuario autenticado puede LEER (el panel chequea esto)
+      allow read: if isAuthed();
+      // puede escribir su propio doc si el id es su uid o su email
+      allow write: if isAuthed() && (
+        id == request.auth.uid ||
+        (request.auth.token.email != null && id == request.auth.token.email)
+      );
+    }
+
+    // ---- clients (para el panel “Clientes”) ----
+    match /clients/{id} {
+      // crear su ficha si el id es su UID o su EMAIL
+      allow create: if isAuthed() && (
+        id == request.auth.uid ||
+        (request.auth.token.email != null && id == request.auth.token.email)
+      );
+
+      // leer/actualizar: el dueño o cualquier admin
+      allow read, update: if isAuthed() && (
+        isAdmin() ||
+        id == request.auth.uid ||
+        (request.auth.token.email != null && id == request.auth.token.email)
+      );
+
+      // borrar: solo admin
+      allow delete: if isAdmin();
+    }
+
+    // ---- usuarios (legacy) ----
+    match /usuarios/{uid} {
+      allow read, write: if isAuthed() && request.auth.uid == uid;
+    }
+
+    // ---- bloqueo por defecto ----
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
