@@ -4,7 +4,7 @@ import { useParams, Link } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { Helmet } from "react-helmet-async";
 import ProductPageNavbar from "../components/ProductPageNavbar";
-import { fetchProductById, fetchProducts } from "../firebaseClientUtils";
+import { fetchProductBySlug, fetchProducts } from "@/firebase/products";
 import { useCart } from "../context/CartContext";
 import { Check, ChevronLeft, ArrowUp, CreditCard, Truck, Store, MessageSquare, Lock } from "lucide-react";
 import { FiMinus, FiPlus } from "react-icons/fi";
@@ -21,7 +21,7 @@ import { toast } from "react-hot-toast";
 
 export default function ProductPage() {
   const { slug } = useParams<{ slug: string }>();
-  const decodedId = decodeURIComponent(slug || "").toLowerCase();
+  const decodedSlug = decodeURIComponent(slug || "");
   console.log("🧠 DEBUG PARAMS — slug:", slug);
   const [product, setProduct] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -56,9 +56,9 @@ export default function ProductPage() {
         return;
       }
       try {
-        const productData = await fetchProductById(decodedId);
+        const productData = await fetchProductBySlug(decodedSlug);
         if (!productData) {
-          console.warn("❌ No se encontró el producto con slug:", decodedId);
+          console.warn("❌ No se encontró el producto con slug:", decodedSlug);
           setProduct(null);
           setLoading(false);
           return;

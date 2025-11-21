@@ -3,16 +3,26 @@
 import { useEffect, useState } from "react";
 import { Pencil, Trash2, Power } from "lucide-react";
 import { Product, Category, Subcategory } from "../../data/types";
-import { fetchProducts, deleteProduct, fetchProductById, updateProduct } from "../../firebaseUtils";
+import { fetchProducts, deleteProduct, fetchProductById, updateProduct } from "@/firebase/products";
+import { auth } from "../../firebase";
 import EditProductModal from "./EditProductModal";
 import ModalConfirm from "./ModalConfirm";
 import { normalizeProduct } from "@/utils/normalizeProduct";
 import { fetchCategories, fetchAllSubcategories } from "@/firebaseUtils";
 
 async function updateProductAdminAPI(id: string, data: Partial<Product>) {
+  const current = auth.currentUser;
+  if (!current) {
+    throw new Error("No hay usuario autenticado");
+  }
+  const idToken = await current.getIdToken();
+
   const response = await fetch(`/api/admin/products/${id}`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${idToken}`,
+    },
     body: JSON.stringify(data),
   });
 
@@ -25,8 +35,17 @@ async function updateProductAdminAPI(id: string, data: Partial<Product>) {
 }
 
 async function deleteProductAdminAPI(id: string) {
+  const current = auth.currentUser;
+  if (!current) {
+    throw new Error("No hay usuario autenticado");
+  }
+  const idToken = await current.getIdToken();
+
   const response = await fetch(`/api/admin/products/${id}/delete`, {
     method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${idToken}`,
+    },
   });
 
   if (!response.ok) {
@@ -50,7 +69,7 @@ export default function ProductList() {
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
-  console.log("🔍 subcategories cargadas:", subcategories);
+  if (import.meta.env.DEV) console.log("🔍 subcategories cargadas:", subcategories);
 
   useEffect(() => {
     const loadData = async () => {
@@ -67,7 +86,7 @@ export default function ProductList() {
         const productsData = await fetchProducts();
 
         // 🧠 Usamos las variables locales directamente (no el estado)
-        console.log("🧪 Paso previo a normalizeProduct – subcategories disponibles:", fetchedSubcategories);
+        if (import.meta.env.DEV) console.log("🧪 Paso previo a normalizeProduct – subcategories disponibles:", fetchedSubcategories);
 
         const normalizedProducts = productsData.map((p) => {
           try {
@@ -113,7 +132,11 @@ export default function ProductList() {
   const handleSaveProduct = async (updatedProduct: Product) => {
     try {
       if (updatedProduct.id) {
-        await updateProduct(updatedProduct.id, updatedProduct);
+        if (import.meta.env.DEV) {
+          await updateProduct(updatedProduct.id, updatedProduct);
+        } else {
+          await updateProductAdminAPI(updatedProduct.id, updatedProduct);
+        }
         const fresh = await fetchProductById(updatedProduct.id);
 
         // 🔁 Refrescamos subcategorías manualmente desde Firebase para asegurar consistencia
@@ -164,7 +187,11 @@ export default function ProductList() {
   const confirmDelete = async () => {
     if (confirmDeleteId) {
       try {
-        await deleteProduct(confirmDeleteId);
+        if (import.meta.env.DEV) {
+          await deleteProduct(confirmDeleteId);
+        } else {
+          await deleteProductAdminAPI(confirmDeleteId);
+        }
         const refreshedProducts = await fetchProducts();
         setProducts(refreshedProducts);
         setConfirmDeleteId(null);

@@ -25,12 +25,9 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import {
-  createProduct,
-  fetchSubcategories,
-  fetchCategories,
-} from "../../firebaseUtils";
-import { importProductFromCJ } from '../../firebaseUtils';
+import { fetchSubcategories, fetchCategories, importProductFromCJ } from "../../firebaseUtils";
+import { createProduct } from "@/firebase/products";
+import { auth } from "../../firebase";
 
 // --- UI helpers (solo estilos, sin lógica) ---
 const UI = {
@@ -159,9 +156,19 @@ const generateCleanSlug = (title: string): string => {
 };
 
 async function createProductAdminAPI(newProduct: Partial<Product>) {
+  const current = auth.currentUser;
+  if (!current) {
+    throw new Error("No hay usuario autenticado");
+  }
+
+  const idToken = await current.getIdToken();
+
   const response = await fetch("/api/admin/products", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${idToken}`,
+    },
     body: JSON.stringify(newProduct),
   });
 
@@ -571,9 +578,15 @@ useEffect(() => {
         ),
       };
 
-      console.log("🧪 DEBUG: createProduct =", createProduct.toString());
+      if (import.meta.env.DEV) {
+        console.log("🧪 DEBUG: createProduct =", createProduct.toString());
+      }
 
-      await createProduct(newProduct);
+      if (import.meta.env.DEV) {
+        await createProduct(newProduct);
+      } else {
+        await createProductAdminAPI(newProduct);
+      }
       setSuccessMessage("¡Producto creado correctamente!");
       setTimeout(() => {
         setSuccessMessage("");

@@ -1,6 +1,6 @@
 // src/utils.cartUtils.ts
 
-import { fetchProductBySlug } from "../firebaseUtils";
+import { fetchProductBySlug } from "@/firebase/products";
 
 import { db } from "../firebase"; // Asegurate de que este import exista en el archivo final
 import { collection, doc, setDoc } from "firebase/firestore"; // También al comienzo si aún no están

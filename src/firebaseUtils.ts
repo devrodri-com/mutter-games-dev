@@ -20,7 +20,7 @@ export const auth = getAuth(app);
 // 🔎 Debug info del proyecto Firebase
 import { getApp } from "firebase/app";
 const firebaseProjectInfo = getApp().options;
-console.log("🔥 Firebase Project Info:", firebaseProjectInfo);
+if (import.meta?.env?.DEV) console.log("🔥 Firebase Project Info:", firebaseProjectInfo);
 // Normaliza emails para usarlos como ID de documento
 const normalizeEmail = (e: string) => e.trim().toLowerCase();
 
@@ -63,255 +63,6 @@ async function getCurrentCartRef() {
 import { Product, Category, ClientWithId } from "./data/types";
 import type { Order } from "./data/types";
 import type { CartItem } from "./data/types";
-
-// ============================================================================
-// === LECTURAS PÚBLICAS / CLIENTE ===
-// ============================================================================
-// Funciones de lectura que pueden ser usadas por cualquier usuario autenticado
-// o incluso usuarios anónimos. No modifican datos críticos.
-
-// 🔥 Función para traer un producto específico por ID
-export async function fetchProductById(id: string): Promise<Product | null> {
-  try {
-    const ref = doc(db, "products", id);
-    const snap = await getDoc(ref);
-    if (!snap.exists()) return null;
-    const data = snap.data();
-    return mapProductData(snap.id, data);
-  } catch (error) {
-    console.error("Error fetching product by ID:", error);
-    return null;
-  }
-}
-
-// 🔥 Función para traer todos los productos
-export async function fetchProducts(): Promise<Product[]> {
-  const productsCollection = collection(db, "products");
-  const productsSnapshot = await getDocs(productsCollection);
-
-  const productsList = productsSnapshot.docs.map((doc) => {
-    const data = doc.data() as any;
-    // Defensive handling of title as string or { es, en }
-    const rawTitle = data.title;
-    const title = {
-      es:
-        typeof rawTitle === "object" && typeof rawTitle?.es === "string"
-          ? rawTitle.es
-          : typeof rawTitle === "string"
-          ? rawTitle
-          : typeof data.titleEs === "string"
-          ? data.titleEs
-          : "Producto",
-      en:
-        typeof rawTitle === "object" && typeof rawTitle?.en === "string"
-          ? rawTitle.en
-          : typeof data.titleEn === "string"
-          ? data.titleEn
-          : "",
-    };
-
-    return {
-      id: doc.id,
-      slug:
-        data.slug ||
-        `${doc.id}-${title.es.toLowerCase().replace(/\s+/g, "-")}`,
-      name: title.es || data.name || "Producto sin nombre",
-      title,
-      images: data.images || [],
-      priceUSD: data.priceUSD || 0,
-      category: data.category || { id: "", name: "" },
-      subcategory: data.subcategory || { id: "", name: "" },
-      tipo: data.tipo || "",
-      subtitle: data.subtitle || "",
-      description: data.description || "",
-      defaultDescriptionType: data.defaultDescriptionType || "none",
-      extraDescriptionTop: data.extraDescriptionTop || "",
-      extraDescriptionBottom: data.extraDescriptionBottom || "",
-      descriptionPosition: data.descriptionPosition || "bottom",
-      active: data.active ?? true,
-      customName: data.customName || "",
-      customNumber: data.customNumber || "",
-      allowCustomization: data.allowCustomization ?? false,
-      stockTotal: data.stockTotal ?? 0,
-      variants: Array.isArray(data.variants) ? data.variants : [],
-      orden: typeof data.orden === "number" ? data.orden : 0,
-    } as Product & { orden?: number };
-  }) as (Product & { orden?: number })[];
-
-  // ✅ Orden determinista: primero por 'orden' si existe, luego por título ES
-  productsList.sort((a, b) => {
-    const ao = typeof (a as any).orden === "number" ? (a as any).orden : 0;
-    const bo = typeof (b as any).orden === "number" ? (b as any).orden : 0;
-    if (ao !== bo) return ao - bo;
-    const an = (a.title?.es || a.name || "").toString();
-    const bn = (b.title?.es || b.name || "").toString();
-    return an.localeCompare(bn, "es");
-  });
-
-  console.log("🔥 DEBUG desde firebaseUtils – productos cargados (ordenados):", productsList);
-  // Quitar el campo auxiliar 'orden' en el tipo devuelto
-  return productsList.map(({ orden, ...rest }) => rest);
-}
-
-// 🔥 Función para traer un producto específico por Slug
-export async function fetchProductBySlug(productId: string): Promise<Product | null> {
-  try {
-    const productsCollection = collection(db, "products");
-    const productsSnapshot = await getDocs(productsCollection);
-
-    for (const productDoc of productsSnapshot.docs) {
-      const data = productDoc.data() as any;
-      const baseTitle =
-        typeof data.title === "string"
-          ? data.title
-          : data?.title?.es || data?.name || "producto";
-      const computedSlug = data.slug || `${productDoc.id}-${String(baseTitle).toLowerCase().replace(/\s+/g, "-")}`;
-      if (computedSlug === productId) {
-        return mapProductData(productDoc.id, data);
-      }
-    }
-
-    return null;
-  } catch (error) {
-    console.error("Error al obtener producto por Slug:", error);
-    return null;
-  }
-}
-
-function mapProductData(id: string, data: any): Product {
-  return {
-    id,
-    slug:
-      data.slug ||
-      `${id}-${(typeof data.title === "string" ? data.title : data.title?.es || "producto").toLowerCase().replace(/\s+/g, "-")}`,
-    name: data.name || (typeof data.title === "string" ? data.title : data.title?.es) || "Producto sin nombre",
-    title: {
-      es:
-        typeof data.title === "object" && typeof data.title?.es === "string"
-          ? data.title.es
-          : typeof data.title === "string"
-          ? data.title
-          : typeof data.titleEs === "string"
-          ? data.titleEs
-          : "Producto",
-      en:
-        typeof data.title === "object" && typeof data.title?.en === "string"
-          ? data.title.en
-          : typeof data.titleEn === "string"
-          ? data.titleEn
-          : "",
-    },
-    images: data.images || [],
-    priceUSD: data.priceUSD || 0,
-    category: data.category || { id: "", name: "" },
-    subcategory: data.subcategory || { id: "", name: "" },
-    tipo: data.tipo || "",
-    subtitle: data.subtitle || "",
-    description: data.description || "",
-    defaultDescriptionType: data.defaultDescriptionType || "none",
-    extraDescriptionTop: data.extraDescriptionTop || "",
-    extraDescriptionBottom: data.extraDescriptionBottom || "",
-    descriptionPosition: data.descriptionPosition || "bottom",
-    active: data.active ?? true,
-    // stock and sizes fields related to talles removed
-    customName: data.customName || "",
-    customNumber: data.customNumber || "",
-    allowCustomization: data.allowCustomization ?? false,
-    stockTotal: data.stockTotal ?? 0,
-    variants: Array.isArray(data.variants) ? data.variants : [],
-  };
-}
-
-// ============================================================================
-// === OPERACIONES ADMIN (PRODUCTOS/CATEGORÍAS) ===
-// ============================================================================
-// Funciones administrativas que modifican productos y categorías.
-// ⚠️ CRÍTICO: Estas operaciones deberían estar protegidas por validación de roles en el backend.
-
-export async function createProduct(product: Partial<Product>) {
-  try {
-    if (!product.slug || typeof product.slug !== "string" || product.slug.trim() === "") {
-      const rawTitle =
-        typeof product.title === "object"
-          ? product.title?.es || product.title?.en
-          : product.title;
-      const fallback = (rawTitle || "producto-generico")
-        .toLowerCase()
-        .replace(/\s+/g, "-");
-      const subcat =
-        typeof product.subcategory?.name === "string"
-          ? product.subcategory.name
-          : ((product.subcategory?.name as unknown) as { es?: string })?.es || "";
-      product.slug = `${fallback}-${subcat.toLowerCase().replace(/\s+/g, "-")}`;
-    }
-
-    const productsCollection = collection(db, "products");
-    const docRef = await addDoc(productsCollection, product);
-    console.log("✅ Producto creado con ID:", docRef.id, "| Slug:", product.slug);
-    return docRef.id;
-  } catch (error) {
-    console.error("❌ Error creando producto:", error);
-    throw error;
-  }
-}
-
-export async function updateProduct(productId: string, updatedData: Partial<Product>) {
-  try {
-    const productRef = doc(db, "products", productId);
-    if (updatedData.variants && Array.isArray(updatedData.variants)) {
-      updatedData.variants = updatedData.variants.map((variant) => ({
-        ...variant,
-        options: variant.options.map((option) => ({
-          ...option,
-          priceUSD: parseFloat(String(option.priceUSD || 0)),
-        })),
-      }));
-    }
-    // Sanea el campo subcategory antes de guardar, asegurando estructura { id, name: string, categoryId: string }
-    let updatedProduct = { ...updatedData };
-    if (
-      updatedData.subcategory &&
-      typeof updatedData.subcategory === "object"
-    ) {
-      const selectedSubcategory = updatedData.subcategory as any;
-
-      let subcategoryName = "";
-      if (typeof selectedSubcategory.name === "string") {
-        subcategoryName = selectedSubcategory.name;
-      } else if (typeof selectedSubcategory.name === "object") {
-        subcategoryName = selectedSubcategory.name.es || selectedSubcategory.name.en || "";
-      }
-
-      updatedProduct.subcategory = {
-        id: selectedSubcategory.id,
-        name: subcategoryName,
-        categoryId: selectedSubcategory.categoryId || "",
-      };
-    }
-
-    // 🔒 Eliminamos posibles restos de campos antiguos
-    await updateDoc(productRef, updatedProduct);
-    console.log("Producto actualizado:", productId);
-  } catch (error) {
-    console.error("Error actualizando producto:", error);
-    throw error;
-  }
-}
-
-export async function deleteProduct(productId: string) {
-  try {
-    const productRef = doc(db, "products", productId);
-    await deleteDoc(productRef);
-    console.log("Producto eliminado:", productId);
-  } catch (error) {
-    console.error("Error eliminando producto:", error);
-    throw error;
-  }
-}
-
-// ============================================================================
-// === LECTURAS PÚBLICAS / CLIENTE === (continuación)
-// ============================================================================
 
 export async function fetchCategoriesWithSubcategories(): Promise<
   {
@@ -424,7 +175,9 @@ export async function deleteClientFromFirebase(clientId: string) {
   try {
     const clientRef = doc(db, "clients", clientId);
     await deleteDoc(clientRef);
-    console.log("Cliente eliminado:", clientId);
+    if (import.meta?.env?.DEV) {
+      console.log("Cliente eliminado:", clientId);
+    }
   } catch (error) {
     console.error("Error eliminando cliente:", error);
     throw error;
@@ -502,7 +255,9 @@ export async function importProductFromCJ(cjProductId: string) {
 
     const productsCollection = collection(db, "products");
     const docRef = await addDoc(productsCollection, newProduct);
-    console.log("Producto importado desde CJ con ID:", docRef.id);
+    if (import.meta?.env?.DEV) {
+      console.log("Producto importado desde CJ con ID:", docRef.id);
+    }
     return docRef.id;
   } catch (error) {
     console.error("Error importando producto desde CJ:", error);
@@ -613,8 +368,10 @@ export async function saveOrderToFirebase(order: {
     };
 
     await addDoc(ordersRef, payload);
-    console.log("✅ Pedido guardado en Firebase:", payload);
-    console.log("🧾 Detalles de la orden:", JSON.stringify(payload, null, 2));
+    if (import.meta?.env?.DEV) {
+      console.log("✅ Pedido guardado en Firebase:", payload);
+      console.log("🧾 Detalles de la orden:", JSON.stringify(payload, null, 2));
+    }
 
     // Actualizar stock
     await updateStockAfterOrder(order.cartItems);
@@ -742,7 +499,7 @@ export async function saveCartToFirebase(uid: string, items: CartItem[]): Promis
     const realUid = await ensureAuthedUid();
     const cartRef = doc(db, "carts", realUid);
     await setDoc(cartRef, { items });
-    console.log("🛒 Carrito guardado en Firebase (uid):", realUid, items);
+    if (import.meta?.env?.DEV) console.log("🛒 Carrito guardado en Firebase (uid):", realUid, items);
   } catch (error) {
     console.error("❌ Error al guardar carrito:", error);
     throw error;
@@ -762,15 +519,17 @@ export async function getCartFromFirebase(uid: string): Promise<CartItem[]> {
 export async function saveCartAuto(items: CartItem[]): Promise<void> {
   const { uid, ref } = await getCurrentCartRef();
   await setDoc(ref, { items });
-  console.log("🛒 [AUTO] Carrito guardado en Firebase (uid):", uid, items);
+  if (import.meta?.env?.DEV) console.log("🛒 [AUTO] Carrito guardado en Firebase (uid):", uid, items);
 }
 
 // 🆕 Versión AUTO: lee el carrito del usuario actual (anónimo o logueado)
 export async function loadCartAuto(): Promise<CartItem[]> {
   const { uid, ref } = await getCurrentCartRef();
   const snap = await getDoc(ref);
-  const items = snap.exists() ? snap.data().items || [] : [];
-  console.log("🛒 [AUTO] Carrito cargado desde Firebase (uid):", uid, items);
+  const items = snap.exists() ? (snap.data().items || []) : [];
+  if (import.meta?.env?.DEV) {
+    if (import.meta?.env?.DEV) console.log("🛒 [AUTO] Carrito cargado desde Firebase (uid):", uid, items);
+  }
   return items;
 }
 
@@ -799,7 +558,7 @@ export async function saveClientToFirebase(client: Client): Promise<void> {
       { merge: true }
     );
 
-    console.log("✅ Cliente guardado/actualizado en Firebase:", id);
+    if (import.meta?.env?.DEV) console.log("✅ Cliente guardado/actualizado en Firebase:", id);
   } catch (error) {
     console.error("❌ Error al guardar cliente en Firebase:", error);
     throw error;
@@ -980,7 +739,7 @@ export const fetchAllSubcategories = async (): Promise<
       });
     }
 
-    console.log("🧩 Subcategorías embebidas obtenidas:", allSubcategories);
+    if (import.meta?.env?.DEV) console.log("🧩 Subcategorías embebidas obtenidas:", allSubcategories);
     return allSubcategories;
   } catch (error) {
     console.error("❌ Error al obtener subcategorías embebidas:", error);
@@ -1022,7 +781,7 @@ export async function registerAdminUser({
       createdAt: new Date().toISOString(),
     });
 
-    console.log("✅ Usuario administrador creado:", email);
+    if (import.meta?.env?.DEV) console.log("✅ Usuario administrador creado:", email);
   } catch (error: any) {
     console.error("❌ Error al registrar usuario administrador:", error.message || error);
     throw error;

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import ProductCard from "./ProductCard";
-import { fetchProducts } from "../firebaseUtils";
+import { fetchProducts } from "@/firebase/products";
 
 interface Props {
   excludeSlugs?: string[];

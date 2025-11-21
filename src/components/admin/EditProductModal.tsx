@@ -3,16 +3,27 @@
 // Versión funcional anterior de EditProductModal (restaurada)
 import React, { useState, useEffect, useRef } from "react";
 import { Product } from "../../data/types";
-import { updateProduct, fetchCategories } from "../../firebaseUtils";
+import { fetchCategories } from "../../firebaseUtils";
+import { updateProduct } from "@/firebase/products";
 import { generateSlug } from "../../utils/generateSlug";
 import { uploadImageToImageKit } from "../../utils/imagekitUtils";
+import { auth } from "../../firebase";
 import TiptapEditor from "./TiptapEditor";
 import { TIPOS } from "../../constants/tipos";
 
 async function updateProductAdminAPI(id: string, data: Partial<Product>) {
+  const current = auth.currentUser;
+  if (!current) {
+    throw new Error("No hay usuario autenticado");
+  }
+  const idToken = await current.getIdToken();
+
   const response = await fetch(`/api/admin/products/${id}`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${idToken}`,
+    },
     body: JSON.stringify(data),
   });
 
