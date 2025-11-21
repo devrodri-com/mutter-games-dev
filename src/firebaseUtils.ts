@@ -64,6 +64,12 @@ import { Product, Category, ClientWithId } from "./data/types";
 import type { Order } from "./data/types";
 import type { CartItem } from "./data/types";
 
+// ============================================================================
+// === LECTURAS PÚBLICAS / CLIENTE ===
+// ============================================================================
+// Funciones de lectura que pueden ser usadas por cualquier usuario autenticado
+// o incluso usuarios anónimos. No modifican datos críticos.
+
 // 🔥 Función para traer un producto específico por ID
 export async function fetchProductById(id: string): Promise<Product | null> {
   try {
@@ -216,7 +222,11 @@ function mapProductData(id: string, data: any): Product {
   };
 }
 
-// Las demás funciones (createProduct, updateProduct, etc.) se mantienen igual
+// ============================================================================
+// === OPERACIONES ADMIN (PRODUCTOS/CATEGORÍAS) ===
+// ============================================================================
+// Funciones administrativas que modifican productos y categorías.
+// ⚠️ CRÍTICO: Estas operaciones deberían estar protegidas por validación de roles en el backend.
 
 export async function createProduct(product: Partial<Product>) {
   try {
@@ -299,6 +309,9 @@ export async function deleteProduct(productId: string) {
   }
 }
 
+// ============================================================================
+// === LECTURAS PÚBLICAS / CLIENTE === (continuación)
+// ============================================================================
 
 export async function fetchCategoriesWithSubcategories(): Promise<
   {
@@ -329,6 +342,9 @@ export async function fetchCategoriesWithSubcategories(): Promise<
   return categories;
 }
 
+// ============================================================================
+// === OPERACIONES ADMIN (PRODUCTOS/CATEGORÍAS) === (continuación)
+// ============================================================================
 
 export async function createCategory(name: { es: string; en: string }) {
   try {
@@ -371,6 +387,9 @@ export async function deleteSubcategory(categoryId: string, subcategoryId: strin
   }
 }
 
+// ============================================================================
+// === LECTURAS PÚBLICAS / CLIENTE === (continuación)
+// ============================================================================
 
 export async function fetchClientsFromFirebase(): Promise<ClientWithId[]> {
   const clientsRef = collection(db, "clients");
@@ -395,6 +414,12 @@ export async function fetchClientsFromFirebase(): Promise<ClientWithId[]> {
   });
 }
 
+// ============================================================================
+// === OPERACIONES ADMIN (CLIENTES / ADMIN USERS) ===
+// ============================================================================
+// Funciones administrativas que gestionan clientes y usuarios administradores.
+// ⚠️ CRÍTICO: Estas operaciones deberían estar protegidas por validación de roles en el backend.
+
 export async function deleteClientFromFirebase(clientId: string) {
   try {
     const clientRef = doc(db, "clients", clientId);
@@ -405,6 +430,10 @@ export async function deleteClientFromFirebase(clientId: string) {
     throw error;
   }
 }
+
+// ============================================================================
+// === LECTURAS PÚBLICAS / CLIENTE === (continuación)
+// ============================================================================
 
 // 🔥 Función para traer subcategorías de una categoría específica
 export async function fetchSubcategories(categoryId: string): Promise<{ id: string; name: string; categoryId: string }[]> {
@@ -428,6 +457,12 @@ export async function fetchSubcategories(categoryId: string): Promise<{ id: stri
     };
   });
 }
+
+// ============================================================================
+// === INTEGRACIONES EXTERNAS (CJ, ETC.) ===
+// ============================================================================
+// Funciones que interactúan con servicios externos para importar o sincronizar datos.
+
 // 🔥 Función para importar un producto desde CJ Dropshipping por su ID
 export async function importProductFromCJ(cjProductId: string) {
   try {
@@ -474,6 +509,10 @@ export async function importProductFromCJ(cjProductId: string) {
     throw error;
   }
 }
+
+// ============================================================================
+// === LECTURAS PÚBLICAS / CLIENTE === (continuación)
+// ============================================================================
 
 // Nueva implementación de fetchCategories que devuelve subcategorías embebidas
 export async function fetchCategories(): Promise<Category[]> {
@@ -525,6 +564,10 @@ export async function fetchCategories(): Promise<Category[]> {
   // Ordenar por 'orden' ascendente
   return categories.sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0));
 }
+
+// ============================================================================
+// === LECTURAS PÚBLICAS / CLIENTE === (continuación)
+// ============================================================================
 
 // 🔥 Función para guardar un pedido completo en Firebase
 // 🔥 Función para guardar un pedido completo en Firebase (compatible con reglas)
@@ -944,6 +987,11 @@ export const fetchAllSubcategories = async (): Promise<
     return [];
   }
 };
+
+// ============================================================================
+// === OPERACIONES ADMIN (CLIENTES / ADMIN USERS) === (continuación)
+// ============================================================================
+
 // 🔥 Función para registrar un usuario administrador tanto en Auth como en Firestore
 export async function registerAdminUser({
   name,
@@ -1040,6 +1088,11 @@ export const discountStockByOrder = async (order: {
     });
   }
 };
+
+// ============================================================================
+// === OPERACIONES ADMIN (CLIENTES / ADMIN USERS) === (continuación)
+// ============================================================================
+
 // 🔐 Obtener todos los usuarios administradores
 export async function fetchAdminUsers(): Promise<
   { id: string; nombre: string; email: string; rol: string; activo: boolean }[]
