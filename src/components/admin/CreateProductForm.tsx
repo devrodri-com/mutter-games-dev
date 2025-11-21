@@ -158,6 +158,28 @@ const generateCleanSlug = (title: string): string => {
     .replace(/^-|-$/g, "");
 };
 
+async function createProductAdminAPI(newProduct: Partial<Product>) {
+  const response = await fetch("/api/admin/products", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(newProduct),
+  });
+
+  if (!response.ok) {
+    let errorMessage = "Error creando producto";
+    try {
+      const error = await response.json();
+      errorMessage = error?.error || errorMessage;
+    } catch {
+      // ignore JSON parse errors
+    }
+    throw new Error(errorMessage);
+  }
+
+  const { id } = await response.json();
+  return id;
+}
+
 // Componente para imagen arrastrable
 function SortableImageItem({ id, url, onRemove, onMoveLeft, onMoveRight }: {
   id: string;
