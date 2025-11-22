@@ -1,10 +1,8 @@
-  // src/context/AuthContext.tsx
-  
+// src/context/AuthContext.tsx
+
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
-import { getLoggedInUser, loginUser as utilsLoginUser, logoutUser as utilsLogoutUser } from "../utils/userUtils";
-import { getAdminUserByEmail } from "../firebaseUtils";
 import { User } from "../data/types";
-import { getAuth, onAuthStateChanged } from "firebase/auth";
+import { getAuth, onAuthStateChanged, getIdTokenResult } from "firebase/auth";
 
 interface AuthContextType {
   user: User | null;
@@ -16,51 +14,50 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  // Inicializar el estado directamente con lo que hay en localStorage
-  // esto evita el flash inicial de "no autenticado"
-  const storedUser = getLoggedInUser();
-  const [user, setUser] = useState<User | null>(
-    storedUser ? {
-      id: String(storedUser.id),
-      uid: String(storedUser.id),
-      name: storedUser.name,
-      email: storedUser.email,
-      password: "", // Ajusta esto según cómo manejes la contraseña
-    } : null
-  );
+  const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const auth = getAuth();
 
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser && firebaseUser.email) {
-        const adminUser = await getAdminUserByEmail(firebaseUser.email);
-        if (adminUser && adminUser.activo) {
-          setUser({
-            id: adminUser.id || firebaseUser.uid,
-            uid: firebaseUser.uid,
-            name: adminUser.nombre,
-            email: adminUser.email,
-            password: "",
-          });
-          localStorage.setItem("userEmail", adminUser.email);
-          utilsLoginUser({
-            id: adminUser.id || firebaseUser.uid,
-            name: adminUser.nombre,
-            email: adminUser.email,
-          });
-        } else {
-          utilsLogoutUser();
-          setUser(null);
-          localStorage.removeItem("userEmail");
-        }
-      } else {
-        utilsLogoutUser();
+      if (!firebaseUser) {
         setUser(null);
         localStorage.removeItem("userEmail");
+        setIsLoading(false);
+        return;
       }
-      setIsLoading(false);
+
+      try {
+        const tokenResult = await getIdTokenResult(firebaseUser);
+        const claims = tokenResult.claims;
+        const isAdmin = claims.admin === true || claims.superadmin === true;
+
+        if (!isAdmin) {
+          setUser(null);
+          localStorage.removeItem("userEmail");
+          setIsLoading(false);
+          return;
+        }
+
+        setUser({
+          id: firebaseUser.uid,
+          uid: firebaseUser.uid,
+          name: firebaseUser.displayName || firebaseUser.email || "",
+          email: firebaseUser.email || "",
+          password: "",
+        });
+
+        if (firebaseUser.email) {
+          localStorage.setItem("userEmail", firebaseUser.email);
+        }
+      } catch (err) {
+        console.error("Error resolving admin claims:", err);
+        setUser(null);
+        localStorage.removeItem("userEmail");
+      } finally {
+        setIsLoading(false);
+      }
     });
 
     return () => unsubscribe();
@@ -70,19 +67,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = (user: User) => {
     setUser({
       ...user,
-      uid: String(user.id),
-    });
-    utilsLoginUser({
-      id: String(user.id),
-      name: user.name,
-      email: user.email,
+      uid: user.uid || String(user.id),
     });
     localStorage.setItem("userEmail", user.email);
   };
 
   const logout = () => {
     setUser(null);
-    utilsLogoutUser();
     localStorage.removeItem("userEmail");
   };
 

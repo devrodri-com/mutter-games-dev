@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { useAuth } from "../../context/AuthContext";
-import { authenticateUser } from "../../utils/userUtils";
-import { AuthUser } from "../../data/types"; // Asegurate de tener este tipo definido
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { auth } from "../../firebaseConfig";
 
 interface LoginModalProps {
   onClose: () => void;
@@ -14,19 +14,29 @@ export default function LoginModal({ onClose }: LoginModalProps) {
   const [password, setPassword] = useState("");
   const { login } = useAuth();
 
-  const handleLogin = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const user = authenticateUser(email, password);
+    try {
+      const cred = await signInWithEmailAndPassword(auth, email, password);
+      const firebaseUser = cred.user;
 
-    if (user) {
+      if (!firebaseUser.email) {
+        alert("Usuario sin email válido.");
+        return;
+      }
+
+      // AuthContext se sincroniza por onAuthStateChanged, pero mantenemos login como refuerzo de estado local
       login({
-        id: String(user.id),
-        name: user.name,
-        email: user.email,
-        password: password,
+        id: firebaseUser.uid,
+        uid: firebaseUser.uid,
+        name: firebaseUser.displayName || firebaseUser.email,
+        email: firebaseUser.email,
+        password: "",
       });
+
       onClose();
-    } else {
+    } catch (error) {
+      console.error("Error en login de admin:", error);
       alert("Usuario o contraseña incorrectos");
     }
   };

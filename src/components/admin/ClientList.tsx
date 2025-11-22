@@ -1,8 +1,9 @@
 // src/components/admin/ClientList.tsx
 import { useState, useEffect } from "react";
-import { fetchClientsFromFirebase, deleteClientFromFirebase } from "../../firebaseUtils";
 import { useNavigate } from "react-router-dom";
 import { ClientWithId } from "../../data/types";
+import { auth } from "../../firebaseConfig";
+import { toast } from "react-hot-toast";
 
 interface Props {
   onSelectClient?: (id: string) => void;
@@ -17,10 +18,24 @@ export default function ClientList({ onSelectClient }: Props) {
   useEffect(() => {
     async function loadClients() {
       try {
-        const response = await fetchClientsFromFirebase(); // to be implemented
-        setClients(response);
+        const current = auth.currentUser;
+        if (!current) return;
+
+        const token = await current.getIdToken();
+        const res = await fetch("/api/admin/clients", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        if (!res.ok) {
+          const data = await res.json().catch(() => null);
+          throw new Error(data?.error || "Error al cargar clientes");
+        }
+
+        const data = await res.json();
+        setClients(data.clients || []);
       } catch (error) {
-        console.error("Error fetching clients from Firebase:", error);
+        console.error("Error fetching clients:", error);
+        toast.error("❌ No se pudieron cargar los clientes.");
       }
     }
     loadClients();
@@ -31,12 +46,29 @@ export default function ClientList({ onSelectClient }: Props) {
   );
 
   const handleDeleteClient = async (id: string) => {
-    // This function is no longer used for confirmation, but we keep it if needed.
     try {
-      await deleteClientFromFirebase(id);
+      const current = auth.currentUser;
+      if (!current) {
+        toast.error("Usuario no autenticado.");
+        return;
+      }
+
+      const token = await current.getIdToken();
+      const res = await fetch(`/api/admin/clients/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || "Error al eliminar cliente");
+      }
+
       setClients((prev) => prev.filter((c) => c.id !== id));
+      toast.success("Cliente eliminado.");
     } catch (error) {
       console.error("Error al eliminar cliente:", error);
+      toast.error("❌ No se pudo eliminar el cliente.");
     }
   };
 
@@ -108,8 +140,7 @@ export default function ClientList({ onSelectClient }: Props) {
             <div className="flex justify-center gap-4">
               <button
                 onClick={async () => {
-                  await deleteClientFromFirebase(clientToDelete.id);
-                  setClients((prev) => prev.filter((c) => c.id !== clientToDelete.id));
+                  await handleDeleteClient(clientToDelete.id);
                   setClientToDelete(null);
                 }}
                 className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 transition"
