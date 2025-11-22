@@ -2,8 +2,8 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ClientWithId } from "../../data/types";
-import { auth } from "../../firebaseConfig";
 import { toast } from "react-hot-toast";
+import { adminApiFetch } from "../../utils/adminApi";
 
 interface Props {
   onSelectClient?: (id: string) => void;
@@ -18,20 +18,7 @@ export default function ClientList({ onSelectClient }: Props) {
   useEffect(() => {
     async function loadClients() {
       try {
-        const current = auth.currentUser;
-        if (!current) return;
-
-        const token = await current.getIdToken();
-        const res = await fetch("/api/admin/clients", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-
-        if (!res.ok) {
-          const data = await res.json().catch(() => null);
-          throw new Error(data?.error || "Error al cargar clientes");
-        }
-
-        const data = await res.json();
+        const data = await adminApiFetch("/api/admin/clients");
         setClients(data.clients || []);
       } catch (error) {
         console.error("Error fetching clients:", error);
@@ -47,22 +34,9 @@ export default function ClientList({ onSelectClient }: Props) {
 
   const handleDeleteClient = async (id: string) => {
     try {
-      const current = auth.currentUser;
-      if (!current) {
-        toast.error("Usuario no autenticado.");
-        return;
-      }
-
-      const token = await current.getIdToken();
-      const res = await fetch(`/api/admin/clients/${id}`, {
+      await adminApiFetch(`/api/admin/clients/${id}`, {
         method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
       });
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        throw new Error(data?.error || "Error al eliminar cliente");
-      }
 
       setClients((prev) => prev.filter((c) => c.id !== id));
       toast.success("Cliente eliminado.");

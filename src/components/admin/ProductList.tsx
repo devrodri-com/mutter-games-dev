@@ -4,55 +4,24 @@ import { useEffect, useState } from "react";
 import { Pencil, Trash2, Power } from "lucide-react";
 import { Product, Category, Subcategory } from "../../data/types";
 import { fetchProducts, deleteProduct, fetchProductById, updateProduct } from "@/firebase/products";
-import { auth } from "../../firebase";
 import EditProductModal from "./EditProductModal";
 import ModalConfirm from "./ModalConfirm";
 import { normalizeProduct } from "@/utils/normalizeProduct";
 import { fetchCategories, fetchAllSubcategories } from "@/firebase/categories";
+import { adminApiFetch } from "../../utils/adminApi";
 
 async function updateProductAdminAPI(id: string, data: Partial<Product>) {
-  const current = auth.currentUser;
-  if (!current) {
-    throw new Error("No hay usuario autenticado");
-  }
-  const idToken = await current.getIdToken();
-
-  const response = await fetch(`/api/admin/products/${id}`, {
+  await adminApiFetch(`/api/admin/products/${id}`, {
     method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${idToken}`,
-    },
     body: JSON.stringify(data),
   });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(error.error || "Error actualizando producto");
-  }
-
   return true;
 }
 
 async function deleteProductAdminAPI(id: string) {
-  const current = auth.currentUser;
-  if (!current) {
-    throw new Error("No hay usuario autenticado");
-  }
-  const idToken = await current.getIdToken();
-
-  const response = await fetch(`/api/admin/products/${id}/delete`, {
+  await adminApiFetch(`/api/admin/products/${id}/delete`, {
     method: "DELETE",
-    headers: {
-      Authorization: `Bearer ${idToken}`,
-    },
   });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(error.error || "Error eliminando producto");
-  }
-
   return true;
 }
 

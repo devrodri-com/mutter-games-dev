@@ -28,7 +28,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { importProductFromCJ } from "../../firebaseUtils";
 import { fetchSubcategories, fetchCategories } from "@/firebase/categories";
 import { createProduct } from "@/firebase/products";
-import { auth } from "../../firebase";
+import { adminApiFetch } from "../../utils/adminApi";
 
 // --- UI helpers (solo estilos, sin lógica) ---
 const UI = {
@@ -157,34 +157,10 @@ const generateCleanSlug = (title: string): string => {
 };
 
 async function createProductAdminAPI(newProduct: Partial<Product>) {
-  const current = auth.currentUser;
-  if (!current) {
-    throw new Error("No hay usuario autenticado");
-  }
-
-  const idToken = await current.getIdToken();
-
-  const response = await fetch("/api/admin/products", {
+  const { id } = await adminApiFetch("/api/admin/products", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${idToken}`,
-    },
     body: JSON.stringify(newProduct),
   });
-
-  if (!response.ok) {
-    let errorMessage = "Error creando producto";
-    try {
-      const error = await response.json();
-      errorMessage = error?.error || errorMessage;
-    } catch {
-      // ignore JSON parse errors
-    }
-    throw new Error(errorMessage);
-  }
-
-  const { id } = await response.json();
   return id;
 }
 

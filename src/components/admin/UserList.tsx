@@ -1,10 +1,12 @@
 // src/components/admin/UserList.tsx
 
+
 import { useState, useEffect } from "react";
 import { auth } from "../../firebaseConfig";
 import { useAuth } from "../../context/AuthContext";
 import ModalConfirm from "./ModalConfirm";
 import { toast } from "react-hot-toast";
+import { adminApiFetch } from "../../utils/adminApi";
 
 export default function UserList() {
   const { user, isLoading } = useAuth();
@@ -46,25 +48,7 @@ export default function UserList() {
 
   const fetchUsers = async () => {
     try {
-      const current = auth.currentUser;
-      if (!current) {
-        console.warn("No hay usuario autenticado; no se pueden cargar administradores.");
-        return;
-      }
-
-      const token = await current.getIdToken();
-      const res = await fetch("/api/admin/users", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        throw new Error(data?.error || "Error al cargar administradores");
-      }
-
-      const data = await res.json();
+      const data = await adminApiFetch("/api/admin/users");
       const users = (data?.users || []) as any[];
 
       setUserList(
@@ -90,19 +74,8 @@ export default function UserList() {
       return;
     }
     try {
-      const current = auth.currentUser;
-      if (!current) {
-        toast.error("Usuario no autenticado.");
-        return;
-      }
-
-      const token = await current.getIdToken();
-      const res = await fetch("/api/admin/users", {
+      await adminApiFetch("/api/admin/users", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
         body: JSON.stringify({
           nombre: newUser.name,
           email: newUser.email.trim().toLowerCase(),
@@ -110,11 +83,6 @@ export default function UserList() {
           rol: "admin",
         }),
       });
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        throw new Error(data?.error || "Error al crear administrador");
-      }
 
       toast.success("✅ Administrador creado.");
       setNewUser({ name: "", email: "", password: "" });
@@ -133,25 +101,9 @@ export default function UserList() {
     }
     setIsDeleting(true);
     try {
-      const current = auth.currentUser;
-      if (!current) {
-        toast.error("Usuario no autenticado.");
-        setIsDeleting(false);
-        return;
-      }
-
-      const token = await current.getIdToken();
-      const res = await fetch(`/api/admin/users/${selectedUser.id}`, {
+      await adminApiFetch(`/api/admin/users/${selectedUser.id}`, {
         method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
       });
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        throw new Error(data?.error || "Error al eliminar usuario");
-      }
 
       toast.success("✅ Usuario eliminado.");
       setShowConfirmModal(false);
@@ -172,28 +124,12 @@ export default function UserList() {
   const handleSaveEdit = async () => {
     if (!editingUser) return;
     try {
-      const current = auth.currentUser;
-      if (!current) {
-        toast.error("Usuario no autenticado.");
-        return;
-      }
-
-      const token = await current.getIdToken();
-      const res = await fetch(`/api/admin/users/${editingUser.id}`, {
+      await adminApiFetch(`/api/admin/users/${editingUser.id}`, {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
         body: JSON.stringify({
           nombre: editedName,
         }),
       });
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        throw new Error(data?.error || "Error al actualizar administrador");
-      }
 
       setEditingUser(null);
       fetchUsers();
@@ -205,28 +141,12 @@ export default function UserList() {
 
   const handleToggleActivo = async (user: any) => {
     try {
-      const current = auth.currentUser;
-      if (!current) {
-        toast.error("Usuario no autenticado.");
-        return;
-      }
-
-      const token = await current.getIdToken();
-      const res = await fetch(`/api/admin/users/${user.id}`, {
+      await adminApiFetch(`/api/admin/users/${user.id}`, {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
         body: JSON.stringify({
           activo: !user.activo,
         }),
       });
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        throw new Error(data?.error || "Error al cambiar estado");
-      }
 
       fetchUsers();
     } catch (error) {

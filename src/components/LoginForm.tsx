@@ -1,7 +1,8 @@
 // src/components/LoginForm.tsx
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { signInAdmin, auth } from "../firebaseUtils";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { auth } from "../firebaseConfig";
 import { useAuth } from "../context/AuthContext";
 
 export default function LoginForm() {
@@ -13,15 +14,29 @@ export default function LoginForm() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const user = await signInAdmin(email, password);
-      const resolvedEmail = auth.currentUser?.email || email;
-      const resolvedName = resolvedEmail ? resolvedEmail.split("@")[0] : "admin";
-      login({ id: user.uid, email: resolvedEmail, name: resolvedName });
-      alert("Inicio de sesión exitoso");
+      const cred = await signInWithEmailAndPassword(auth, email, password);
+      const firebaseUser = cred.user;
+
+      if (!firebaseUser.email) {
+        alert("El usuario no tiene email válido.");
+        return;
+      }
+
+      // AuthContext se sincroniza por onAuthStateChanged, pero mantenemos login como refuerzo de estado local
+      login({
+        id: firebaseUser.uid,
+        uid: firebaseUser.uid,
+        name: firebaseUser.displayName || firebaseUser.email,
+        email: firebaseUser.email,
+        password: "",
+      });
+
       navigate("/admin", { replace: true });
     } catch (error: any) {
+      console.error("❌ Login error:", error?.code, error?.message);
+
       const code = error?.code || "auth/unknown";
-      console.error("❌ Login error:", code, error?.message);
+
       if (code === "auth/wrong-password" || code === "auth/invalid-credential") {
         alert("Contraseña incorrecta.");
       } else if (code === "auth/user-not-found") {
