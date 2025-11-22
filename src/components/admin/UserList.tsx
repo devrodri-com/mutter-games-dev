@@ -1,18 +1,10 @@
 // src/components/admin/UserList.tsx
 
 import { useState, useEffect } from "react";
-import EditUserModal from "./EditUserModal";
-import { fetchAdminUsers } from "./../../firebaseUtils";
-import { getFirestore, collection, getDocs, deleteDoc, doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
-import { getAuth as getAuthSecondary, createUserWithEmailAndPassword as createUserSecondary } from "firebase/auth";
 import { auth } from "../../firebaseConfig";
-import { getUsers, updateUser } from "../../utils/userUtils";
-import { AuthUser } from "../../data/types";
 import { useAuth } from "../../context/AuthContext";
-import ModalConfirm from './ModalConfirm';
-import { toast } from 'react-hot-toast';
-import { getApps, initializeApp, getApp } from "firebase/app";
-// Usamos una instancia secundaria de Firebase Auth para crear cuentas sin cerrar la sesión actual
+import ModalConfirm from "./ModalConfirm";
+import { toast } from "react-hot-toast";
 
 export default function UserList() {
   const { user, isLoading } = useAuth();
@@ -25,21 +17,12 @@ export default function UserList() {
 
   const [newUser, setNewUser] = useState({ name: "", email: "", password: "" });
   const [userList, setUserList] = useState<any[]>([]);
-  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
-
   const [editingUser, setEditingUser] = useState<any | null>(null);
   const [editedName, setEditedName] = useState("");
-  const [editedEmail, setEditedEmail] = useState("");
-  const [editPassword, setEditPassword] = useState("");
-
-  const [isEditModalOpen, setEditModalOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<any | null>(null);
-  const [users, setUsers] = useState<AuthUser[]>([]);
 
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-
-  const firestore = getFirestore();
 
   const [isSuperAdminFlag, setIsSuperAdminFlag] = useState(false);
   useEffect(() => {
@@ -61,46 +44,43 @@ export default function UserList() {
     checkRole();
   }, [user?.id]);
 
-  useEffect(() => {
-    const fetchUsers = async () => {
-      const userList = await getUsers();
-      setUsers(userList);
-    };
-    fetchUsers();
-  }, []);
-
-  const handleEditClick = (user: AuthUser) => {
-    setSelectedUser(user);
-    setEditModalOpen(true);
-  };
-
-  const handleSaveUser = async (updatedData: { name: string; email: string; password?: string }) => {
-    if (!selectedUser) return;
-    try {
-      await updateUser(selectedUser.id, updatedData);
-      const updatedUsers = await getUsers();
-      setUsers(updatedUsers);
-    } catch (error) {
-      console.error("Error actualizando usuario:", error);
-    }
-  };
-
   const fetchUsers = async () => {
     try {
-      const users = await fetchAdminUsers();
-      setUserList(users.map((u: any) => ({
-        ...u,
-        id: u.id || u.uid || u.email, // prefer UID
-      })));
+      const current = auth.currentUser;
+      if (!current) {
+        console.warn("No hay usuario autenticado; no se pueden cargar administradores.");
+        return;
+      }
+
+      const token = await current.getIdToken();
+      const res = await fetch("/api/admin/users", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || "Error al cargar administradores");
+      }
+
+      const data = await res.json();
+      const users = (data?.users || []) as any[];
+
+      setUserList(
+        users.map((u: any) => ({
+          ...u,
+          id: u.id || u.uid || u.email,
+        }))
+      );
     } catch (error) {
       console.error("Error al cargar usuarios admin:", error);
+      toast.error("❌ No se pudieron cargar los administradores.");
     }
   };
 
   useEffect(() => {
     fetchUsers();
-    const storedEmail = localStorage.getItem("userEmail");
-    setCurrentUserEmail(storedEmail);
   }, []);
 
   const handleAddUser = async () => {
@@ -110,31 +90,38 @@ export default function UserList() {
       return;
     }
     try {
-      // 1) Instancia secundaria para no cerrar la sesión actual
-      const apps = getApps();
-      const primary = getApp();
-      const secondary = apps.find(a => a.name === "secondary") || initializeApp(primary.options as any, "secondary");
-      const secondaryAuth = getAuthSecondary(secondary);
+      const current = auth.currentUser;
+      if (!current) {
+        toast.error("Usuario no autenticado.");
+        return;
+      }
 
-      // 2) Crear usuario en Auth SIN afectar la sesión actual
-      const cred = await createUserSecondary(secondaryAuth, newUser.email.trim(), newUser.password);
-      const newUid = cred.user.uid;
-
-      // 3) Crear doc en adminUsers con ID = UID (rol admin por defecto)
-      await setDoc(doc(firestore, "adminUsers", newUid), {
-        nombre: newUser.name,
-        email: newUser.email.trim().toLowerCase(),
-        rol: "admin",
-        activo: true,
-        creadoEn: serverTimestamp(),
+      const token = await current.getIdToken();
+      const res = await fetch("/api/admin/users", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          nombre: newUser.name,
+          email: newUser.email.trim().toLowerCase(),
+          password: newUser.password,
+          rol: "admin",
+        }),
       });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || "Error al crear administrador");
+      }
 
       toast.success("✅ Administrador creado.");
       setNewUser({ name: "", email: "", password: "" });
       fetchUsers();
     } catch (error: any) {
       console.error("Error al crear admin:", error);
-      toast.error("❌ No se pudo crear el usuario: " + (error?.code || error?.message || "error"));
+      toast.error("❌ No se pudo crear el usuario: " + (error?.message || "error"));
     }
   };
 
@@ -146,7 +133,26 @@ export default function UserList() {
     }
     setIsDeleting(true);
     try {
-      await deleteDoc(doc(firestore, "adminUsers", selectedUser.id));
+      const current = auth.currentUser;
+      if (!current) {
+        toast.error("Usuario no autenticado.");
+        setIsDeleting(false);
+        return;
+      }
+
+      const token = await current.getIdToken();
+      const res = await fetch(`/api/admin/users/${selectedUser.id}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || "Error al eliminar usuario");
+      }
+
       toast.success("✅ Usuario eliminado.");
       setShowConfirmModal(false);
       fetchUsers();
@@ -161,20 +167,34 @@ export default function UserList() {
   const handleEdit = (user: any) => {
     setEditingUser(user);
     setEditedName(user.nombre);
-    setEditedEmail(user.email);
-    setEditPassword("");
   };
 
   const handleSaveEdit = async () => {
     if (!editingUser) return;
     try {
-      const db = getFirestore();
-      const updatedUser = {
-        ...editingUser,
-        nombre: editedName,
-        ...(editPassword && { password: editPassword }),
-      };
-      await setDoc(doc(db, "adminUsers", editingUser.email), updatedUser);
+      const current = auth.currentUser;
+      if (!current) {
+        toast.error("Usuario no autenticado.");
+        return;
+      }
+
+      const token = await current.getIdToken();
+      const res = await fetch(`/api/admin/users/${editingUser.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          nombre: editedName,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || "Error al actualizar administrador");
+      }
+
       setEditingUser(null);
       fetchUsers();
     } catch (error) {
@@ -185,11 +205,29 @@ export default function UserList() {
 
   const handleToggleActivo = async (user: any) => {
     try {
-      const db = getFirestore();
-      await setDoc(doc(db, "adminUsers", user.email), {
-        ...user,
-        activo: !user.activo,
+      const current = auth.currentUser;
+      if (!current) {
+        toast.error("Usuario no autenticado.");
+        return;
+      }
+
+      const token = await current.getIdToken();
+      const res = await fetch(`/api/admin/users/${user.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          activo: !user.activo,
+        }),
       });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        throw new Error(data?.error || "Error al cambiar estado");
+      }
+
       fetchUsers();
     } catch (error) {
       alert("❌ Error al cambiar estado.");
@@ -311,31 +349,15 @@ export default function UserList() {
             onChange={(e) => setEditedName(e.target.value)}
             placeholder="Nombre"
           />
-          {/* <input
-            type="email"
-            className="border px-2 py-1 mr-2 rounded"
-            value={editedEmail}
-            onChange={(e) => setEditedEmail(e.target.value)}
-            placeholder="Email"
-          /> */}
           <button onClick={handleSaveEdit} className="bg-green-600 text-white px-3 py-1 rounded mr-2">Guardar</button>
           <button onClick={() => setEditingUser(null)} className="text-gray-500 underline">Cancelar</button>
         </div>
       )}
 
-      {isEditModalOpen && selectedUser && (
-        <EditUserModal
-          isOpen={isEditModalOpen}
-          onClose={() => setEditModalOpen(false)}
-          onSave={handleSaveUser}
-          initialData={{ name: selectedUser.name, email: selectedUser.email }}
-        />
-      )}
-
       {showConfirmModal && selectedUser && (
         <ModalConfirm
           title="¿Eliminar usuario?"
-          message={`¿Estás seguro de que querés eliminar a ${selectedUser?.name || selectedUser?.email || "este usuario"}?`}
+          message={`¿Estás seguro de que querés eliminar a ${selectedUser?.nombre || selectedUser?.email || "este usuario"}?`}
           onConfirm={handleDeleteUser}
           onCancel={() => setShowConfirmModal(false)}
           isLoading={isDeleting}

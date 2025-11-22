@@ -1,26 +1,7 @@
 // api/admin/products/[id]/delete.ts
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import * as admin from 'firebase-admin';
-
-if (!admin.apps.length) {
-  if (
-    !process.env.FIREBASE_PROJECT_ID ||
-    !process.env.FIREBASE_CLIENT_EMAIL ||
-    !process.env.FIREBASE_PRIVATE_KEY
-  ) {
-    throw new Error('Missing Firebase Admin environment variables');
-  }
-
-  admin.initializeApp({
-    credential: admin.credential.cert({
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-    }),
-  });
-}
-
-const db = admin.firestore();
+import { adminDb, adminAuth } from '../../../_lib/firebaseAdmin';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'DELETE') {
@@ -43,7 +24,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     let decodedToken: admin.auth.DecodedIdToken;
     try {
-      decodedToken = await admin.auth().verifyIdToken(tokenString);
+      decodedToken = await adminAuth.verifyIdToken(tokenString);
     } catch {
       return res.status(401).json({ error: 'Unauthorized: invalid token' });
     }
@@ -53,7 +34,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(403).json({ error: 'Forbidden: admin role required' });
     }
 
-    await db.collection('products').doc(productId).delete();
+    await adminDb.collection('products').doc(productId).delete();
     return res.status(200).json({ id: productId, deleted: true });
   } catch (error) {
     console.error('Error eliminando producto:', error);
@@ -61,4 +42,3 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({ error: message });
   }
 }
-
