@@ -21,18 +21,13 @@ const getClienteInfo = (pedido: Order) => {
 };
 
 import { useState, useEffect } from "react";
-import { CartItem } from "@/data/types";
-import { discountStockByOrder, auth } from "@/firebaseUtils";
+import { auth } from "@/firebaseUtils";
 import jsPDF from "jspdf";
 import QRCode from "qrcode";
 import {
   collection,
   getDocs,
-  setDoc,
   doc,
-  updateDoc,
-  Timestamp,
-  deleteDoc,
   query,
   where,
   orderBy,
@@ -97,10 +92,9 @@ export default function OrderAdmin() {
     const order = orders.find((o: OrderType) => o.id === orderId);
     if (!order) return;
 
-    // Actualizar en Firestore
-    // await updateOrderStatus(order.id, newStatus); // Si se requiere, reimplementa updateOrderStatus aquí
-    if (newStatus === "Confirmado" && order.status !== "Confirmado") {
-      await discountStockByOrder({ cartItems: order.items as CartItem[] });
+    // TODO: persistir estado via backend admin
+    if (import.meta.env.DEV) {
+      console.warn("[OrderAdmin] Modo solo lectura: no se actualiza en Firestore");
     }
 
     const updatedOrders: Order[] = orders.map((o) =>
@@ -218,18 +212,9 @@ export default function OrderAdmin() {
       order.id === id ? { ...order, status: newStatus } : order
     );
     setOrders(updatedOrders);
-    // Actualizar en Firestore
-    await updateDoc(doc(db, "orders", id.toString()), {
-      status: newStatus,
-    });
-    // Descontar stock si corresponde
-    if (order && newStatus === 'Confirmado' && order.status !== 'Confirmado') {
-      try {
-        await discountStockByOrder({ cartItems: order.items as any });
-        console.log('Stock actualizado con éxito');
-      } catch (err) {
-        console.error('Error al descontar stock:', err);
-      }
+    // TODO: persistir estado via backend admin
+    if (import.meta.env.DEV) {
+      console.warn("[OrderAdmin] Modo solo lectura: no se actualiza en Firestore");
     }
   };
 
@@ -442,7 +427,9 @@ export default function OrderAdmin() {
                     <button
                       onClick={() => {
                         if (window.confirm(`¿Estás seguro que deseas eliminar la orden ${pedido.id}?`)) {
-                          deleteDoc(doc(db, "orders", pedido.id.toString()));
+                          if (import.meta.env.DEV) {
+                            console.warn("[OrderAdmin] Modo solo lectura: no se elimina en Firestore");
+                          }
                           setOrders(orders.filter(o => o.id !== pedido.id));
                         }
                       }}

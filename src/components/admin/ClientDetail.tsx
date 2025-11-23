@@ -1,8 +1,9 @@
 // src/components/admin/ClientDetail.tsx
 import { useEffect, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
-import { doc, getDoc, updateDoc, collection, query, where, getDocs } from "firebase/firestore";
+import { doc, getDoc, collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "../../firebase";
+import { adminApiFetch } from "../../utils/adminApi";
 
 interface Props {
   clientId: string;
@@ -107,18 +108,20 @@ useEffect(() => {
   const handleSave = async () => {
     if (!client) return;
     try {
-      const clientRef = doc(db, "clients", client.id);
-      await updateDoc(clientRef, {
-        name: client.name,
-        email: client.email,
-        phone: client.phone,
-        address: client.address,
-        address2: client.address2,
-        city: client.city,
-        state: client.state,
-        zip: client.zip,
-        country: client.country,
-        ...(client.password ? { password: client.password } : {})
+      await adminApiFetch(`/api/admin/clients/${client.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          name: client.name,
+          email: client.email,
+          phone: client.phone,
+          address: client.address,
+          address2: client.address2,
+          city: client.city,
+          state: client.state,
+          zip: client.zip,
+          country: client.country,
+          ...(client.password ? { password: client.password } : {})
+        }),
       });
       setEditing(false);
       setClient({ ...client });

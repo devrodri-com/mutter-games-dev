@@ -18,7 +18,7 @@ async function updateProductAdminAPI(id: string, data: Partial<Product>) {
 }
 
 async function deleteProductAdminAPI(id: string) {
-  await adminApiFetch(`/api/admin/products/${id}/delete`, {
+  await adminApiFetch(`/api/admin/products/${id}`, {
     method: "DELETE",
   });
   return true;

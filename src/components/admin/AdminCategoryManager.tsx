@@ -2,16 +2,7 @@
 import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import {
-  fetchCategories,
-  fetchSubcategories,
-  createCategory,
-  deleteCategory,
-  createSubcategory,
-  deleteSubcategory,
-} from "@/firebase/categories";
-import { doc, setDoc } from "firebase/firestore";
-import { firebaseDB } from "@/firebase";
+import { adminApiFetch } from "../../utils/adminApi";
 import { useConfirm } from "@/components/ui/confirm";
 
 export default function AdminCategoryManager() {
@@ -33,9 +24,10 @@ export default function AdminCategoryManager() {
 
   const loadCategories = async () => {
     try {
-      const fetched = await fetchCategories();
+      const response = await adminApiFetch("/api/admin/categories");
+      const fetched = Array.isArray(response.categories) ? response.categories : response;
       setCategories(
-        fetched.map((l) => ({
+        fetched.map((l: any) => ({
           id: l.id,
           name: typeof l.name === "object" ? l.name : { es: l.name, en: l.name }
         }))
@@ -47,8 +39,16 @@ export default function AdminCategoryManager() {
 
   const loadSubcategories = async (categoryId: string) => {
     try {
-      const fetched = await fetchSubcategories(categoryId);
-      setSubcategories(fetched);
+      const response = await adminApiFetch(`/api/admin/subcategories?categoryId=${categoryId}`);
+      const fetched = Array.isArray(response.subcategories) ? response.subcategories : response;
+      setSubcategories(
+        Array.isArray(fetched) 
+          ? fetched.map((s: any) => ({
+              id: s.id,
+              name: typeof s.name === "string" ? s.name : s.name?.es || s.name?.en || ""
+            }))
+          : []
+      );
     } catch (err) {
       console.error("Error al cargar subcategorías:", err);
     }
@@ -58,7 +58,10 @@ export default function AdminCategoryManager() {
     if (!newCategory.es.trim()) return;
     try {
       setLoading(true);
-      await createCategory({ es: newCategory.es.trim(), en: newCategory.en.trim() });
+      await adminApiFetch("/api/admin/categories", {
+        method: "POST",
+        body: JSON.stringify({ name: { es: newCategory.es.trim(), en: newCategory.en.trim() } }),
+      });
       setNewCategory({ es: "", en: "" });
       await loadCategories();
     } catch (err) {
@@ -80,7 +83,9 @@ export default function AdminCategoryManager() {
     if (!confirmed) return;
     try {
       setLoading(true);
-      await deleteCategory(id);
+      await adminApiFetch(`/api/admin/categories/${id}`, {
+        method: "DELETE",
+      });
       setSelectedCategoryId("");
       setSubcategories([]);
       await loadCategories();
@@ -95,7 +100,13 @@ export default function AdminCategoryManager() {
     if (!newSubcategory.trim() || !selectedCategoryId) return;
     try {
       setLoading(true);
-      await createSubcategory(selectedCategoryId, newSubcategory.trim());
+      await adminApiFetch("/api/admin/subcategories", {
+        method: "POST",
+        body: JSON.stringify({ 
+          categoryId: selectedCategoryId, 
+          name: newSubcategory.trim() 
+        }),
+      });
       setNewSubcategory("");
       await loadSubcategories(selectedCategoryId);
     } catch (err) {
@@ -118,7 +129,9 @@ export default function AdminCategoryManager() {
     if (!confirmed) return;
     try {
       setLoading(true);
-      await deleteSubcategory(selectedCategoryId, subcategoryId);
+      await adminApiFetch(`/api/admin/subcategories/${subcategoryId}?categoryId=${selectedCategoryId}`, {
+        method: "DELETE",
+      });
       await loadSubcategories(selectedCategoryId);
     } catch (err) {
       console.error("Error eliminando subcategoría:", err);
@@ -169,8 +182,12 @@ export default function AdminCategoryManager() {
                       }
                       try {
                         setLoading(true);
-                        const docRef = doc(firebaseDB, "categories", category.id);
-                        await setDoc(docRef, { id: category.id, name: { es: editedCategoryName.trim(), en: editedCategoryName.trim() } });
+                        await adminApiFetch(`/api/admin/categories/${category.id}`, {
+                          method: "PATCH",
+                          body: JSON.stringify({ 
+                            name: { es: editedCategoryName.trim(), en: editedCategoryName.trim() } 
+                          }),
+                        });
                         await loadCategories();
                       } catch (err) {
                         console.error("Error actualizando nombre de categoría:", err);
