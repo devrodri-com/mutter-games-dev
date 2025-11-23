@@ -1,26 +1,25 @@
+// api/_lib/firebaseAdmin.ts
 
 import * as admin from 'firebase-admin';
 
-// Ensure we only initialize the Admin SDK once (required for Vercel serverless)
 if (!admin.apps.length) {
-  if (
-    !process.env.FIREBASE_PROJECT_ID ||
-    !process.env.FIREBASE_CLIENT_EMAIL ||
-    !process.env.FIREBASE_PRIVATE_KEY
-  ) {
-    throw new Error('Missing Firebase Admin environment variables');
+  const projectId = process.env.FIREBASE_PROJECT_ID;
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+  const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
+
+  if (!projectId || !clientEmail || !privateKey) {
+    throw new Error('Missing FIREBASE_* environment variables for firebase-admin');
   }
 
   admin.initializeApp({
     credential: admin.credential.cert({
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+      projectId,
+      clientEmail,
+      privateKey,
     }),
   });
 }
 
-// Centralized exports
 export const adminApp = admin.app();
 export const adminAuth = admin.auth();
 export const adminDb = admin.firestore();

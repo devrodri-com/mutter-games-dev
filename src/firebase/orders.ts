@@ -1,8 +1,9 @@
 // src/firebase/orders.ts
 
-import { collection, addDoc, getDocs, doc, getDoc, updateDoc, orderBy, query } from "firebase/firestore";
+import { collection, getDocs, doc, getDoc, updateDoc, orderBy, query } from "firebase/firestore";
 import type { CartItem, Order, Product } from "../data/types";
 import { db, ensureAuthedUid } from "../firebaseUtils";
+import { auth } from "../firebase";
 
 export async function saveOrderToFirebase(order: {
   cartItems?: any[];
@@ -34,7 +35,6 @@ export async function saveOrderToFirebase(order: {
 }) {
   try {
     const uid = await ensureAuthedUid();
-    const ordersRef = collection(db, "orders");
 
     const cartItems = Array.isArray(order.cartItems)
       ? order.cartItems
@@ -69,18 +69,42 @@ export async function saveOrderToFirebase(order: {
       estado: order.estado ?? "En proceso",
     };
 
-    const ref = await addDoc(ordersRef, payload);
+    const currentUser = auth.currentUser;
+
+    if (!currentUser) {
+      throw new Error("No hay usuario autenticado para crear la orden");
+    }
+
+    const token = await currentUser.getIdToken();
+
+    const response = await fetch("/api/orders", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({} as any));
+      console.error("❌ Error al crear la orden en el backend:", errorBody);
+      throw new Error(errorBody.error || "No se pudo crear la orden");
+    }
+
+    const data = await response.json();
 
     if (import.meta?.env?.DEV) {
-      console.log("✅ Pedido guardado en Firebase:", payload);
-      console.log("🧾 Detalles de la orden:", JSON.stringify(payload, null, 2));
+      console.log("✅ Pedido creado vía backend:", payload, data);
     }
+
+    const orderId = data.id as string;
 
     if (Array.isArray(cartItems) && cartItems.length > 0) {
       await updateStockAfterOrder(cartItems);
     }
 
-    return ref.id;
+    return orderId;
   } catch (error) {
     console.error("❌ Error al guardar el pedido:", error);
     throw error;
