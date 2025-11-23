@@ -1,6 +1,6 @@
 // src/firebase/orders.ts
 
-import { collection, getDocs, doc, getDoc, updateDoc, orderBy, query } from "firebase/firestore";
+import { collection, addDoc, getDocs, doc, getDoc, updateDoc, orderBy, query } from "firebase/firestore";
 import type { CartItem, Order, Product } from "../data/types";
 import { db, ensureAuthedUid } from "../firebaseUtils";
 import { auth } from "../firebase";
@@ -69,37 +69,53 @@ export async function saveOrderToFirebase(order: {
       estado: order.estado ?? "En proceso",
     };
 
-    const currentUser = auth.currentUser;
+    let orderId: string | null = null;
 
-    if (!currentUser) {
-      throw new Error("No hay usuario autenticado para crear la orden");
+    try {
+      const currentUser = auth.currentUser;
+
+      if (!currentUser) {
+        throw new Error("No hay usuario autenticado para crear la orden");
+      }
+
+      const token = await currentUser.getIdToken();
+
+      const response = await fetch("/api/orders", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => ({} as any));
+        console.error("❌ Error al crear la orden en el backend:", errorBody);
+        throw new Error(errorBody.error || "No se pudo crear la orden en el backend");
+      }
+
+      const data = await response.json();
+      orderId = data.id as string;
+
+      if (import.meta?.env?.DEV) {
+        console.log("✅ Pedido creado vía backend:", payload, data);
+      }
+    } catch (err) {
+      console.warn("⚠️ Falló la creación de la orden vía /api/orders, usando Firestore directo:", err);
+
+      // Fallback al flujo original en Firestore
+      const ordersRef = collection(db, "orders");
+      const ref = await addDoc(ordersRef, payload);
+
+      if (import.meta?.env?.DEV) {
+        console.log("✅ Pedido guardado directamente en Firestore (fallback):", payload);
+      }
+
+      orderId = ref.id;
     }
 
-    const token = await currentUser.getIdToken();
-
-    const response = await fetch("/api/orders", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(payload),
-    });
-
-    if (!response.ok) {
-      const errorBody = await response.json().catch(() => ({} as any));
-      console.error("❌ Error al crear la orden en el backend:", errorBody);
-      throw new Error(errorBody.error || "No se pudo crear la orden");
-    }
-
-    const data = await response.json();
-
-    if (import.meta?.env?.DEV) {
-      console.log("✅ Pedido creado vía backend:", payload, data);
-    }
-
-    const orderId = data.id as string;
-
+    // Mantener la actualización de stock igual
     if (Array.isArray(cartItems) && cartItems.length > 0) {
       await updateStockAfterOrder(cartItems);
     }
