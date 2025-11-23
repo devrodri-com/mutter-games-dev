@@ -11,10 +11,8 @@ import {
 } from "firebase/auth";
 
 const firebaseConfig = {
-  // En desarrollo local usamos la env, en build (staging/prod) forzamos la apiKey correcta del proyecto dev
-  apiKey: import.meta.env.DEV
-    ? import.meta.env.VITE_FIREBASE_API_KEY
-    : "AIzaSyAP_bTxW0HrzJsfq4Hh5-N966xiI6U2TDU",
+  // Siempre usamos la env; eliminamos la API key hardcodeada
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
   storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
