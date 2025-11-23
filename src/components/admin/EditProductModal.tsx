@@ -4,7 +4,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Product } from "../../data/types";
 import { fetchCategories } from "@/firebase/categories";
-import { updateProduct } from "@/firebase/products";
 import { generateSlug } from "../../utils/generateSlug";
 import { uploadImageToImageKit } from "../../utils/imagekitUtils";
 import { adminApiFetch } from "../../utils/adminApi";
@@ -318,7 +317,7 @@ export default function EditProductModal({
         description: description,
       };
 
-      await updateProduct(form.id, updated);
+      await updateProductAdminAPI(form.id, updated);
       onSave(updated);
     } catch (e: any) {
       setError(e.message || "Error al guardar");

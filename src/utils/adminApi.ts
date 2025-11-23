@@ -1,9 +1,10 @@
 // src/utils/adminApi.ts
+import { auth } from "../firebase";
 export async function adminApiFetch(path: string, options: RequestInit = {}) {
   const base = import.meta.env.VITE_ADMIN_API_URL;
   if (!base) throw new Error("Falta VITE_ADMIN_API_URL en .env.development.local");
 
-  const current = await import("../firebaseConfig").then((m) => m.auth.currentUser);
+  const current = auth.currentUser;
   if (!current) throw new Error("Usuario no autenticado");
 
   const token = await current.getIdToken();

@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { Pencil, Trash2, Power } from "lucide-react";
 import { Product, Category, Subcategory } from "../../data/types";
-import { fetchProducts, deleteProduct, fetchProductById, updateProduct } from "@/firebase/products";
 import EditProductModal from "./EditProductModal";
 import ModalConfirm from "./ModalConfirm";
 import { normalizeProduct } from "@/utils/normalizeProduct";
@@ -38,7 +37,6 @@ export default function ProductList() {
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
-  if (import.meta.env.DEV) console.log("🔍 subcategories cargadas:", subcategories);
 
   useEffect(() => {
     const loadData = async () => {
@@ -52,12 +50,10 @@ export default function ProductList() {
         setCategories(fetchedCategories);
         setSubcategories(fetchedSubcategories);
 
-        const productsData = await fetchProducts();
+        const response = await adminApiFetch("/api/admin/products");
+        const productsData = response.products || [];
 
-        // 🧠 Usamos las variables locales directamente (no el estado)
-        if (import.meta.env.DEV) console.log("🧪 Paso previo a normalizeProduct – subcategories disponibles:", fetchedSubcategories);
-
-        const normalizedProducts = productsData.map((p) => {
+        const normalizedProducts: (Product | null)[] = productsData.map((p: any) => {
           try {
             return normalizeProduct(p, fetchedCategories, fetchedSubcategories);
           } catch (e) {
@@ -66,7 +62,7 @@ export default function ProductList() {
           }
         });
 
-        setProducts(normalizedProducts.filter((p) => p !== null));
+        setProducts(normalizedProducts.filter((p): p is Product => p !== null));
       } catch (error) {
         console.error("Error al cargar productos:", error);
         setError("No se pudieron cargar los productos. Intenta nuevamente.");
@@ -80,7 +76,18 @@ export default function ProductList() {
 
   const handleEdit = async (id: string) => {
     try {
-      const raw = await fetchProductById(id);
+      // Intentar primero buscar en el estado local
+      const localProduct = products.find((p) => p.id === id);
+      if (localProduct) {
+        setEditingProduct(localProduct);
+        setIsModalOpen(true);
+        return;
+      }
+
+      // Si no está en el estado local, obtener desde el backend
+      const response = await adminApiFetch(`/api/admin/products/${id}`);
+      const raw = response.product || response;
+      
       if (raw) {
         // ⚠️ Cargamos categorías y subcategorías FRESCAS para que normalizeProduct tenga la data necesaria
         const freshCategories = await fetchCategories();
@@ -101,23 +108,24 @@ export default function ProductList() {
   const handleSaveProduct = async (updatedProduct: Product) => {
     try {
       if (updatedProduct.id) {
-        if (import.meta.env.DEV) {
-          await updateProduct(updatedProduct.id, updatedProduct);
-        } else {
-          await updateProductAdminAPI(updatedProduct.id, updatedProduct);
-        }
-        const fresh = await fetchProductById(updatedProduct.id);
-
-        // 🔁 Refrescamos subcategorías manualmente desde Firebase para asegurar consistencia
+        await updateProductAdminAPI(updatedProduct.id, updatedProduct);
+        
+        // 🔁 Refrescamos subcategorías manualmente para asegurar consistencia
         const freshSubcategories = await fetchAllSubcategories();
+
+        // Obtener el producto actualizado desde el backend
+        const freshResponse = await adminApiFetch(`/api/admin/products/${updatedProduct.id}`);
+        const fresh = freshResponse.product || freshResponse;
 
         if (fresh) {
           const normalized = normalizeProduct(fresh, categories, freshSubcategories);
           setEditingProduct(normalized);
         }
 
-        const refreshedProducts = await fetchProducts();
-        const normalizedRefreshed = refreshedProducts.map((p) => {
+        // Refrescar la lista completa de productos
+        const response = await adminApiFetch("/api/admin/products");
+        const refreshedProducts = response.products || [];
+        const normalizedRefreshed: (Product | null)[] = refreshedProducts.map((p: any) => {
           try {
             return normalizeProduct(p, categories, freshSubcategories);
           } catch (e) {
@@ -125,7 +133,7 @@ export default function ProductList() {
             return null;
           }
         });
-        setProducts(normalizedRefreshed.filter((p) => p !== null));
+        setProducts(normalizedRefreshed.filter((p): p is Product => p !== null));
         setIsModalOpen(false);
         setEditingProduct(null);
       }
@@ -139,9 +147,21 @@ export default function ProductList() {
     try {
       const product = products.find((p) => p.id === id);
       if (!product) return;
-      await updateProduct(id, { active: !product.active });
-      const refreshedProducts = await fetchProducts();
-      setProducts(refreshedProducts);
+      await updateProductAdminAPI(id, { active: !product.active });
+      
+      // Refrescar la lista completa de productos
+      const response = await adminApiFetch("/api/admin/products");
+      const refreshedProducts = response.products || [];
+      const freshSubcategories = await fetchAllSubcategories();
+      const normalizedRefreshed: (Product | null)[] = refreshedProducts.map((p: any) => {
+        try {
+          return normalizeProduct(p, categories, freshSubcategories);
+        } catch (e) {
+          console.warn("Error normalizando producto:", p, e);
+          return null;
+        }
+      });
+      setProducts(normalizedRefreshed.filter((p): p is Product => p !== null));
     } catch (error) {
       console.error("Error al actualizar estado:", error);
       setError("No se pudo actualizar el estado del producto.");
@@ -156,13 +176,21 @@ export default function ProductList() {
   const confirmDelete = async () => {
     if (confirmDeleteId) {
       try {
-        if (import.meta.env.DEV) {
-          await deleteProduct(confirmDeleteId);
-        } else {
-          await deleteProductAdminAPI(confirmDeleteId);
-        }
-        const refreshedProducts = await fetchProducts();
-        setProducts(refreshedProducts);
+        await deleteProductAdminAPI(confirmDeleteId);
+        
+        // Refrescar la lista completa de productos
+        const response = await adminApiFetch("/api/admin/products");
+        const refreshedProducts = response.products || [];
+        const freshSubcategories = await fetchAllSubcategories();
+        const normalizedRefreshed: (Product | null)[] = refreshedProducts.map((p: any) => {
+          try {
+            return normalizeProduct(p, categories, freshSubcategories);
+          } catch (e) {
+            console.warn("Error normalizando producto:", p, e);
+            return null;
+          }
+        });
+        setProducts(normalizedRefreshed.filter((p): p is Product => p !== null));
         setConfirmDeleteId(null);
         setConfirmDeleteName("");
       } catch (error) {

@@ -27,16 +27,6 @@ const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
 
-// Conectar a emuladores solo en desarrollo
-if (import.meta.env.DEV) {
-  try {
-    connectFirestoreEmulator(db, "localhost", 8080);
-    connectAuthEmulator(auth, "http://localhost:9099");
-  } catch {
-    // evitar error si ya están conectados en HMR
-  }
-}
-
 // Persistencia local + sesión anónima para invitados
 setPersistence(auth, browserLocalPersistence).catch(() => {});
 

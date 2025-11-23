@@ -27,7 +27,6 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { importProductFromCJ } from "../../firebaseUtils";
 import { fetchSubcategories, fetchCategories } from "@/firebase/categories";
-import { createProduct } from "@/firebase/products";
 import { adminApiFetch } from "../../utils/adminApi";
 
 // --- UI helpers (solo estilos, sin lógica) ---
@@ -555,15 +554,7 @@ useEffect(() => {
         ),
       };
 
-      if (import.meta.env.DEV) {
-        console.log("🧪 DEBUG: createProduct =", createProduct.toString());
-      }
-
-      if (import.meta.env.DEV) {
-        await createProduct(newProduct);
-      } else {
-        await createProductAdminAPI(newProduct);
-      }
+      await createProductAdminAPI(newProduct);
       setSuccessMessage("¡Producto creado correctamente!");
       setTimeout(() => {
         setSuccessMessage("");

@@ -21,10 +21,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const auth = getAuth();
 
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (!firebaseUser) {
-        setUser(null);
-        localStorage.removeItem("userEmail");
+      // En desarrollo, tratamos cualquier usuario autenticado como válido y omitimos verificación de claims
+      if (import.meta.env.DEV && firebaseUser) {
+        setUser({
+          id: firebaseUser.uid,
+          uid: firebaseUser.uid,
+          name: firebaseUser.displayName || firebaseUser.email || "",
+          email: firebaseUser.email || "",
+          password: "",
+        });
+
+        if (firebaseUser.email) {
+          localStorage.setItem("userEmail", firebaseUser.email);
+        }
+
         setIsLoading(false);
+        return;
+      }
+
+      if (!firebaseUser) {
+        // En el arranque, Firebase puede emitir null mientras resuelve la sesión.
+        // No forzamos logout aquí, solo marcamos que sigue cargando.
+        setUser(null);
+        setIsLoading(true);
         return;
       }
 
@@ -34,8 +53,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const isAdmin = claims.admin === true || claims.superadmin === true;
 
         if (!isAdmin) {
+          // Usuario autenticado pero sin claims de admin: bloqueamos acceso,
+          // pero no forzamos logout ni tocamos localStorage.
           setUser(null);
-          localStorage.removeItem("userEmail");
           setIsLoading(false);
           return;
         }
@@ -54,7 +74,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch (err) {
         console.error("Error resolving admin claims:", err);
         setUser(null);
-        localStorage.removeItem("userEmail");
       } finally {
         setIsLoading(false);
       }
