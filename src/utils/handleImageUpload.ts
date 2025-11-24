@@ -9,7 +9,7 @@ export const uploadImageToImageKit = async (file: File): Promise<string | null> 
 
   try {
     // 1. Obtener firma desde el backend
-    const signatureRes = await fetch("/api/imagekit-signature");
+    const signatureRes = await fetch(`${import.meta.env.VITE_ADMIN_API_URL}/api/imagekit-signature`);
     const signatureData = await signatureRes.json();
 
     if (!signatureRes.ok) {
