@@ -5,6 +5,9 @@ import { getAuth, signInAnonymously, onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc, setDoc, onSnapshot, serverTimestamp } from "firebase/firestore";
 import { CartItem } from "../data/types";
 
+const isIOS = typeof navigator !== "undefined" &&
+  /iP(hone|od|ad)/.test(navigator.userAgent);
+
 async function ensureUid(): Promise<string> {
   const auth = getAuth();
   // 1) Si ya hay usuario, devolver su UID
@@ -176,6 +179,12 @@ export async function listenToCartChanges(
   // Nota: ignoramos el uid provisto y usamos el UID autenticado para cumplir con rules (carts/{uid}).
   // Siempre usamos el UID autenticado (anónimo o logueado)
   const safeUid = await ensureUid();
+  
+  if (isIOS) {
+    console.warn("[Cart] Escucha en tiempo real desactivada en iOS (modo experimental).");
+    return () => {};
+  }
+  
   return onSnapshot(doc(db, "carts", safeUid), (docSnap) => {
     if (docSnap.exists()) {
       const raw = docSnap.data();
