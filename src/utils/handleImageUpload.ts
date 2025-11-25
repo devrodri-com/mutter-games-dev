@@ -1,5 +1,7 @@
 // src/utils/handleImageUpload.ts
 
+import { auth } from "../firebase";
+
 export const uploadImageToImageKit = async (file: File): Promise<string | null> => {
   const formData = new FormData();
   formData.append("file", file);
@@ -8,8 +10,28 @@ export const uploadImageToImageKit = async (file: File): Promise<string | null> 
   formData.append("useUniqueFileName", "true");
 
   try {
-    // 1. Obtener firma desde el backend
-    const signatureRes = await fetch(`${import.meta.env.VITE_ADMIN_API_URL}/api/imagekit-signature`);
+    // 1. Obtener token del admin actual
+    const current = auth.currentUser;
+    if (!current) {
+      console.error("No hay usuario autenticado para firmar imagen");
+      if (import.meta.env.DEV) {
+        console.warn("⚠️ DEV: usando imagen placeholder porque no hay auth");
+        return "https://picsum.photos/600";
+      }
+      return null;
+    }
+
+    const idToken = await current.getIdToken();
+
+    // 2. Obtener firma desde el backend admin, enviando Authorization
+    const signatureRes = await fetch(
+      `${import.meta.env.VITE_ADMIN_API_URL}/api/imagekit-signature`,
+      {
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+        },
+      }
+    );
     const signatureData = await signatureRes.json();
 
     if (!signatureRes.ok) {
