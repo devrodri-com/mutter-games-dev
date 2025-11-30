@@ -15,6 +15,7 @@ import Footer from "../components/Footer";
 import { useTranslation } from "react-i18next";
 import { HiExclamation, HiExclamationCircle } from "react-icons/hi";
 import { toast } from "react-hot-toast";
+import { isIOS } from "../utils/device";
 
 
 // Improved mobile toast for stock limit error
@@ -23,6 +24,10 @@ export default function ProductPage() {
   const { slug } = useParams<{ slug: string }>();
   const decodedSlug = decodeURIComponent(slug || "");
   console.log("🧠 DEBUG PARAMS — slug:", slug);
+  
+  // Detectar iOS para modo seguro
+  const isIOSDevice = isIOS();
+  
   const [product, setProduct] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [selectedOption, setSelectedOption] = useState<{ value: string; priceUSD: number; variantLabel?: string; variantId?: string; stock?: number } | null>(null);
@@ -37,7 +42,7 @@ export default function ProductPage() {
   const [isAdding, setIsAdding] = useState(false);
   const [showStickyCTA, setShowStickyCTA] = useState(true);
 
-  // keen-slider logic
+  // keen-slider logic (solo se usa en modo no iOS)
   const [sliderRef, slider] = useKeenSlider<HTMLDivElement>({
     initial: 0,
     slideChanged(s) {
@@ -212,6 +217,231 @@ export default function ProductPage() {
   const totalStock = typeof product.stockTotal === 'number' ? product.stockTotal : 0;
   const isOutOfStock = totalStock <= 0;
 
+  // Obtener primera imagen para modo iOS
+  const primaryImage = product.images?.[0] || "/seo-image.jpg";
+
+  // Render simplificado para iOS
+  if (isIOSDevice) {
+    return (
+      <div className="bg-gradient-to-b from-[#fafafa] to-white min-h-[100dvh] flex flex-col">
+        <div className="w-full overflow-x-hidden text-black relative z-10 flex-grow">
+          {/* NO Helmet ni JSON-LD en iOS */}
+          <ProductPageNavbar />
+
+          <div className="container mx-auto p-4 mt-20">
+            <div className="grid grid-cols-1 gap-6">
+              {/* Imagen principal simplificada (sin slider) */}
+              <div className="flex flex-col gap-4">
+                {primaryImage ? (
+                  <div className="relative">
+                    <img
+                      src={primaryImage}
+                      alt={product.title?.[lang] || product.title || "Producto"}
+                      className="object-contain max-h-[400px] w-full rounded-lg"
+                      draggable="false"
+                    />
+                  </div>
+                ) : (
+                  <div className="bg-gray-100 h-[450px] w-full rounded-lg flex flex-col items-center justify-center text-gray-400">
+                    <div className="text-4xl">📦</div>
+                    <p>No hay imagen</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Detalles producto */}
+              <div className="flex flex-col">
+                <div className="text-xs uppercase tracking-[0.12em] text-gray-500 font-semibold mb-2">
+                  {product.category?.name || "Categoría"}
+                </div>
+                <h1 className="text-3xl font-black tracking-tight leading-[1.05] mb-4">
+                  {product.title?.[lang]}
+                </h1>
+                <div className="mt-2 mb-6">
+                  {(() => {
+                    const precio = selectedOption?.priceUSD ?? product.variants?.[0]?.options?.[0]?.priceUSD ?? product.priceUSD;
+                    const entero = Math.floor(precio).toLocaleString("es-AR");
+                    const decimal = precio.toFixed(2).split(".")[1];
+                    const formattedPrice = `${entero},${decimal}`;
+                    return (
+                      <div className="flex items-start">
+                        <span className="text-4xl font-extrabold leading-none">
+                          ${formattedPrice.split(',')[0]}
+                        </span>
+                        <sup className="text-sm font-semibold ml-0.5 align-[0.1em]">
+                          {formattedPrice.split(',')[1]}
+                        </sup>
+                      </div>
+                    );
+                  })()}
+                </div>
+
+                {product.subtitle && <p className="text-gray-600 mb-4">{product.subtitle}</p>}
+
+                {/* Opciones de variante */}
+                {Array.isArray(product.variants) && product.variants.length > 0 && (
+                  <div className="mb-6">
+                    {product.variants.map((variant: any, vIndex: number) => (
+                      <div key={vIndex} className="mb-4">
+                        <h3 className="uppercase text-sm font-semibold text-gray-800 mb-1">
+                          {variant.label?.[lang] || "Opción"}
+                        </h3>
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          {variant.options.map((option: any, oIndex: number) => (
+                            <button
+                              key={oIndex}
+                              onClick={() => {
+                                setSelectedOption({
+                                  ...option,
+                                  variantLabel: variant.label?.[lang] || "Opción",
+                                  variantId: option.variantId || `${variant.label?.[lang] || "Opción"}-${option.value}`,
+                                });
+                              }}
+                              className={`px-4 py-2 rounded-md border ${
+                                selectedOption?.value === option.value
+                                  ? "bg-black text-white border-black"
+                                  : "bg-white text-black border-gray-300"
+                              } hover:shadow-md transition`}
+                            >
+                              {option.value}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Cantidad */}
+                <div className="flex flex-col space-y-2 mt-6">
+                  <label className="uppercase text-sm font-semibold text-gray-800">Cantidad</label>
+                  <div className="flex w-fit border border-gray-200 rounded-lg overflow-hidden">
+                    <button onClick={() => quantity > 1 && setQuantity(quantity - 1)} className="px-3 bg-white hover:bg-gray-50">
+                      <FiMinus />
+                    </button>
+                    <div className="px-4 py-2">{quantity}</div>
+                    <button onClick={() => setQuantity(quantity + 1)} className="px-3 bg-gray-100 hover:bg-gray-200">
+                      <FiPlus />
+                    </button>
+                  </div>
+                </div>
+
+                {selectedOption && typeof selectedOption.stock === 'number' && (
+                  <div className="mt-2 text-sm text-gray-600">
+                    {selectedOption.stock > 0 ? (
+                      <>🟢 En stock: {selectedOption.stock} unidad{selectedOption.stock > 1 ? 'es' : ''}</>
+                    ) : (
+                      <>🔴 Sin stock</>
+                    )}
+                  </div>
+                )}
+
+                <hr className="my-6 border-gray-100" />
+
+                {/* Botón agregar al carrito */}
+                <div id="buy-block" className="mt-6 mb-8">
+                  <button
+                    disabled={isOutOfStock || isAdding}
+                    onClick={() => {
+                      if (isOutOfStock) {
+                        setStockMessage('Sin stock disponible de esta opción');
+                        setShowToast(true);
+                        setTimeout(() => setShowToast(false), 2500);
+                        return;
+                      }
+
+                      if (Array.isArray(product.variants) && product.variants.length > 0 && !selectedOption) {
+                        setStockMessage('Debes seleccionar una opción antes de continuar.');
+                        setShowToast(true);
+                        setTimeout(() => setShowToast(false), 2500);
+                        return;
+                      }
+
+                      const availableStock = selectedOption?.stock ?? product.stockTotal ?? 0;
+                      const existingItem = items.find(
+                        (item) =>
+                          item.id === String(product.id) &&
+                          item.variantId === (selectedOption?.variantId || '')
+                      );
+                      const currentQuantityInCart = existingItem?.quantity || 0;
+                      const requestedTotal = currentQuantityInCart + quantity;
+
+                      if (requestedTotal > availableStock) {
+                        if (availableStock === 0) {
+                          setStockMessage('Sin stock disponible de esta opción');
+                        } else {
+                          setStockMessage(`Solo hay ${availableStock} unidades disponibles`);
+                        }
+                        setShowToast(true);
+                        setTimeout(() => setShowToast(false), 2500);
+                        return;
+                      }
+
+                      setIsAdding(true);
+                      const cartItem = {
+                        id: product.id,
+                        slug: product.slug,
+                        name: product.title,
+                        title: product.title,
+                        image: primaryImage,
+                        quantity: quantity,
+                        priceUSD: selectedOption?.priceUSD ?? product.priceUSD,
+                        price: selectedOption?.priceUSD ?? product.priceUSD,
+                        variantLabel: selectedOption?.variantLabel,
+                        variantId: selectedOption?.variantId,
+                        stock: selectedOption?.stock,
+                        color: '',
+                      };
+                      addToCart(cartItem);
+                      toast.success(lang === 'en' ? 'Added to cart' : 'Agregado al carrito');
+                      setTimeout(() => setIsAdding(false), 800);
+                    }}
+                    className={`w-full h-12 rounded-lg shadow hover:shadow-md tracking-wide transition flex items-center justify-center gap-2 border font-semibold ${
+                      isOutOfStock
+                        ? 'bg-gray-300 text-white cursor-not-allowed'
+                        : 'bg-black text-white border-black hover:bg-white hover:text-black'
+                    }${isAdding ? ' opacity-50 cursor-not-allowed' : ''}`}
+                  >
+                    {isOutOfStock ? (lang === 'en' ? 'OUT OF STOCK' : 'SIN STOCK') : (
+                      isAdding ? (
+                        <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+                        </svg>
+                      ) : (
+                        <>
+                          <Check size={18} /> {lang === 'en' ? 'Add to cart' : 'Agregar al carrito'}
+                        </>
+                      )
+                    )}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Descripción básica */}
+            {productDescription && (
+              <div
+                className="prose prose-blue prose-lg max-w-none mb-8 text-gray-800 mt-8 [&>p]:mb-4 [&>h2]:mt-8 [&>ul]:mb-4 [&>ul>li]:mb-2"
+                dangerouslySetInnerHTML={{ __html: productDescription }}
+              />
+            )}
+          </div>
+
+          {/* Toast notification */}
+          {showToast && (
+            <div className="fixed top-4 left-1/2 transform -translate-x-1/2 bg-red-500 bg-opacity-90 text-white text-sm px-4 py-2 rounded shadow-md max-w-[90%] z-50 flex items-center gap-2">
+              <HiExclamationCircle className="w-4 h-4" />
+              {stockMessage}
+            </div>
+          )}
+        </div>
+        <Footer variant="light" />
+      </div>
+    );
+  }
+
+  // Render completo para dispositivos no iOS
   return (
     <div className="bg-gradient-to-b from-[#fafafa] to-white min-h-[100dvh] flex flex-col">
       <div className="w-full overflow-x-hidden text-black relative z-10 flex-grow">
