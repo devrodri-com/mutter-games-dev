@@ -1,12 +1,11 @@
 // src/pages/Shop.tsx
 
-import React, { useState, useEffect, Suspense, useRef } from "react";
+import React, { Suspense } from "react";
 import { useTranslation } from "react-i18next";
-import { useMemo } from "react";
 import { Helmet } from "react-helmet-async";
 import ProductCard from "../components/ProductCard";
 import ShopNavbar from "../components/ShopNavbar";
-import { Product, Subcategory, Category as BaseCategory } from "../data/types";
+import { Product, Category as BaseCategory } from "../data/types";
 import type { Category } from "../data/types";
 
 import { FiFilter } from "react-icons/fi";
@@ -19,32 +18,14 @@ import { ArrowUp } from "lucide-react";
 import { Listbox } from "@headlessui/react";
 import { ChevronDownIcon, CheckIcon } from "@heroicons/react/20/solid";
 import { Fragment } from "react";
-import { Link, useLocation, useNavigate, useSearchParams as useSearchParamsBase } from "react-router-dom";
-// Wrapper para evitar escrituras redundantes en iOS y compararlas con la URL actual
-const useSearchParamsSafe = () => {
-  const [sp, setSP] = useSearchParamsBase();
-  const isIOS = typeof navigator !== 'undefined' && /iP(hone|ad|od)/i.test(navigator.userAgent);
-  const safeSet = React.useCallback(
-    (p: URLSearchParams | Record<string, string>, opts?: { replace?: boolean }) => {
-      if (isIOS) return; // no escribir querystring en iOS
-      const nextQS =
-        p instanceof URLSearchParams ? p.toString() : new URLSearchParams(p).toString();
-      const currentQS = (location.search || "").replace(/^\?/, "");
-      if (nextQS === currentQS) return; // evitar no-ops redundantes
-      setSP(p as any, opts);
-    },
-    [setSP]
-  );
-  return [sp, safeSet] as const;
-};
+import { Link } from "react-router-dom";
 import { AnimatePresence } from "framer-motion";
 import { Rocket } from "lucide-react";
-import { fetchSubcategories, fetchCategories } from "@/firebase/categories";
-import { fetchProducts } from "@/firebase/products";
 import ProductSkeleton from "../components/ProductSkeleton";
 import SidebarFilter from "../components/SidebarFilter";
 import MobileFilterDrawer from "../components/MobileFilterDrawer";
 import Footer from "../components/Footer";
+import { useShopProducts } from "../hooks/useShopProducts";
 
 // Define un tipo para productos locales
 type LocalProduct = Product & {
@@ -62,44 +43,64 @@ type LocalProduct = Product & {
 };
 
 export default function Shop() {
-  // --- i18n arriba de cualquier useMemo/useEffect que dependa de i18n.language ---
-  const { t, i18n } = useTranslation();
-  const [products, setProducts] = useState<LocalProduct[]>([]); // Estado para almacenar productos
-  const [loading, setLoading] = useState(true);
+  const { t } = useTranslation();
 
-  const location = useLocation();
-  const navigate = useNavigate();
-  const [urlSearchParams, setSearchParams] = useSearchParamsSafe();
-  // Detectar iOS para evitar loops de WebKit al escribir querystring
-  const isIOS = typeof navigator !== 'undefined' && /iP(hone|ad|od)/i.test(navigator.userAgent);
+  // Usar hook para toda la lógica de estado y datos
+  const {
+    // Estado de paginación
+    hasMore,
+    isInitialLoad,
+    isLoadingPage,
+    loading,
 
-  const [searchTerm, setSearchTerm] = useState("");
-  const [showScrollTop, setShowScrollTop] = useState(false);
+    // Filtros
+    searchTerm,
+    setSearchTerm,
+    selectedCategory,
+    setSelectedCategory,
+    selectedSubcategory,
+    setSelectedSubcategory,
+    selectedType,
+    setSelectedType,
 
-  // Estado de ordenamiento
-  const [sortOption, setSortOption] = useState("");
+    // Orden
+    sortOption,
+    setSortOption,
+    selectedOrderMobile,
+    showOrderMenuMobile,
+    setShowOrderMenuMobile,
+    handleOrderChangeMobile,
 
-  // Estado de ordenamiento exclusivo para mobile
-  const [selectedOrderMobile, setSelectedOrderMobile] = useState("");
-  const [showOrderMenuMobile, setShowOrderMenuMobile] = useState(false);
-  const handleOrderChangeMobile = (order: string) => {
-    setSelectedOrderMobile(order);
-    // Sincroniza con sortOption para persistir en URL
-    if (order === "asc") setSortOption("priceAsc");
-    else if (order === "desc") setSortOption("priceDesc");
-    else if (order === "az" || order === "za") setSortOption(order);
-    else setSortOption("");
-    setShowOrderMenuMobile(false);
-  };
+    // Productos procesados
+    sortedProducts,
+    sortedProductsMobile,
+    productsToDisplay,
+    availableTypes,
 
-  // Determinar si es Mobile View (simple heurística)
-  const [isMobileView, setIsMobileView] = useState(false);
-  useEffect(() => {
-    const checkMobile = () => setIsMobileView(window.innerWidth < 768);
-    checkMobile();
-    window.addEventListener("resize", checkMobile);
-    return () => window.removeEventListener("resize", checkMobile);
-  }, []);
+    // Categorías
+    categories,
+    handleCategoryClick,
+    handleSubcategoryClick,
+
+    // Funciones
+    loadMore,
+
+    // UI state
+    isMobileView,
+    showScrollTop,
+    setShowScrollTop,
+    isFilterOpen,
+    setIsFilterOpen,
+    showMobileFilter,
+    setShowMobileFilter,
+
+    // Legacy/helpers
+    filterParam,
+    isIOS,
+    scrollToTop,
+    handleFilterByType,
+    setSearchParams,
+  } = useShopProducts();
 
   // Para el nuevo Listbox de mobile
   const sortOptions = [
@@ -116,328 +117,21 @@ export default function Shop() {
 
   const handleOpenFilters = () => setIsFilterOpen(true);
 
-  // --- Sincronización con query string (soporte legado de `filter` para banner/heading) ---
-  const filterParamRaw = urlSearchParams.get("filter") || "";
-  const filterParam = filterParamRaw ? filterParamRaw.toUpperCase() : "";
-
-  // Escuchar evento mobileSearch para actualizar searchTerm (sin afectar lógica desktop)
-  useEffect(() => {
-    const handleMobileSearch = (e: Event) => {
-      const value = (e as CustomEvent).detail.toLowerCase();
-      setSearchTerm(value);
-    };
-    window.addEventListener("mobileSearch", handleMobileSearch);
-    return () => window.removeEventListener("mobileSearch", handleMobileSearch);
-  }, []);
-
-  // Estado para almacenar subcategorías
-  const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
-  // Estado para almacenar categorías (nuevo)
-  const [categories, setCategories] = useState<Category[]>([]);
-  // Estado para categoría y subcategoría seleccionadas (nuevo)
-  const [selectedCategory, setSelectedCategory] = useState<string>("");
-  const [selectedSubcategory, setSelectedSubcategory] = useState<string>("");
-  // Estado para controlar visibilidad del drawer de filtros (desktop/sidebar)
-  const [isFilterOpen, setIsFilterOpen] = useState(false);
-  // Estado para mostrar SidebarFilter en mobile (nuevo)
-  const [showMobileFilter, setShowMobileFilter] = useState(false);
-  // Estado para filtrar por tipo
-  // NUEVO: Estado para filtro por tipo de producto (botones custom)
-  const [selectedType, setSelectedType] = useState("Todos");
-
-  // 🔧 1. Definir availableTypes arriba del return principal (fuera de JSX), justo donde definís los filtros:
-  const availableTypes = Array.from(new Set(products.map((p) => p.tipo).filter(Boolean))) as string[];
-
-  // NUEVO: Handler para filtro por tipo
-  const handleFilterByType = (tipo: string) => {
-    setSelectedType(tipo);
-  };
-
-  // 🔥 Cargar productos de Firebase al montar
-  useEffect(() => {
-    const loadProducts = async () => {
-      try {
-        const fetchedProducts = await fetchProducts();
-        // Filtrar solo productos activos y asegurar que todos tengan el campo tipo
-        const footballProducts = fetchedProducts
-          .filter((product: Product) => product.active !== false)
-          .map((product: Product) => ({
-            ...product,
-            tipo: (product as any).tipo || "",
-            priceUSD: Number((product as any).priceUSD) || 0,
-          }));
-
-        setProducts(footballProducts);
-        setLoading(false);
-
-        console.log(`[Shop] Productos de fútbol cargados: ${footballProducts.length}`);
-      } catch (error) {
-        console.error("[Shop] Error al cargar productos:", error);
-        setProducts([]);
-        setLoading(false);
-      }
-    };
-
-    loadProducts();
-  }, []);
-
-  // 🔥 Cargar categorías y subcategorías (normalizando nombre por idioma)
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        const rawCategories: any[] = await fetchCategories();
-
-        // Elegí el idioma a mostrar (fallback a "es")
-        const lang = ["es", "en"].includes(i18n.language) ? i18n.language : "es";
-
-        // Aseguramos shape: { id, name: string, subcategories: { id, name: string }[], order?: number }
-        const normalized = rawCategories.map((cat: any) => {
-          const catName =
-            typeof cat.name === "string"
-              ? cat.name
-              : cat?.name?.[lang] ?? cat?.name?.es ?? cat?.name?.en ?? "";
-
-          const subs = (cat.subcategories || []).map((s: any) => ({
-            ...s,
-            name:
-              typeof s.name === "string"
-                ? s.name
-                : s?.name?.[lang] ?? s?.name?.es ?? s?.name?.en ?? "",
-          }));
-
-          return {
-            id: cat.id,
-            name: catName,
-            subcategories: subs,
-            order: cat.order ?? 0,
-          };
-        });
-
-        // Orden opcional por "order"
-        normalized.sort((a: any, b: any) => (a.order || 0) - (b.order || 0));
-
-        setCategories(normalized);
-        setSubcategories(normalized.flatMap((c: any) => c.subcategories));
-
-        console.log("[Shop] Categorías cargadas:", normalized);
-      } catch (error) {
-        console.error("[Shop] Error al cargar categorías y subcategorías:", error);
-        setCategories([]);
-      }
-    };
-
-    loadData();
-  }, [i18n.language]);
-
-  // Handlers para sidebar de categorías (nuevo)
-  const handleCategoryClick = (categoryName: string) => {
-    if (categoryName === "") {
-      setSelectedCategory("");
-      setSelectedSubcategory("");
-      return;
-    }
-    const category = categories.find((cat) => cat.name === categoryName);
-    if (category) {
-      setSelectedCategory(category.id);
-      setSelectedSubcategory("");
-    }
-  };
-
-  const handleSubcategoryClick = (subcategoryName: string) => {
-    if (subcategoryName === "") {
-      setSelectedSubcategory("");
-      return;
-    }
-    for (const category of categories) {
-      const sub = category.subcategories?.find((s: any) => s.name === subcategoryName);
-      if (sub) {
-        setSelectedCategory(category.id);
-        setSelectedSubcategory(sub.id);
-        break;
-      }
-    }
-  };
-
-  useEffect(() => {
-    const handleScroll = () => {
-      setShowScrollTop(window.scrollY > 300);
-    };
-    window.addEventListener("scroll", handleScroll);
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
-
-  const scrollToTop = () => {
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
-
-  // ✅ Lectura inicial desde la URL (al montar)
-  useEffect(() => {
-    const q = urlSearchParams.get("q") || "";
-    const cat = urlSearchParams.get("cat") || "";
-    const sub = urlSearchParams.get("sub") || "";
-    const type = urlSearchParams.get("type") || "";
-    const sort = urlSearchParams.get("sort") || "";
-
-    setSearchTerm(q);
-    setSelectedCategory(cat);
-    setSelectedSubcategory(sub);
-    setSelectedType(type || "Todos");
-    setSortOption(sort);
-
-    // Sincroniza el selector mobile de orden
-    if (sort === "priceAsc") setSelectedOrderMobile("asc");
-    else if (sort === "priceDesc") setSelectedOrderMobile("desc");
-    else if (sort === "az" || sort === "za") setSelectedOrderMobile(sort);
-    else setSelectedOrderMobile("");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // ✅ Escritura a la URL al cambiar búsqueda/filtros/orden (evitar loop en iOS/WebKit)
-  const lastQSRef = useRef<string>("");
-  useEffect(() => {
-    // En iOS no modificamos la URL para evitar recargas/loops
-    if (isIOS) return;
-
-    const params = new URLSearchParams();
-    // Conserva "filter" legado sólo si ya estaba presente
-    if (filterParamRaw) params.set("filter", filterParamRaw);
-    if (searchTerm) params.set("q", searchTerm);
-    if (selectedCategory) params.set("cat", selectedCategory);
-    if (selectedSubcategory) params.set("sub", selectedSubcategory);
-    if (selectedType && selectedType !== "Todos") params.set("type", selectedType);
-    if (sortOption) params.set("sort", sortOption);
-
-    const next = params.toString();
-    const current = (location.search || "").replace(/^\?/, "");
-
-    // Evitar reemplazos redundantes
-    if (next !== current && next !== lastQSRef.current) {
-      setSearchParams(params, { replace: true });
-      lastQSRef.current = next;
-    }
-  }, [
-    isIOS,
-    searchTerm,
-    selectedCategory,
-    selectedSubcategory,
-    selectedType,
-    sortOption,
-    filterParamRaw,
-    location.search,
-    setSearchParams,
-  ]);
-
-  // Nuevo filtrado de productos usando useMemo
-  const filteredProducts = useMemo(() => {
-    const selectedTipo = selectedType;
-    // Normalizador para tildes/mayúsculas
-    const normalizeTexto = (text: string) => text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-
-    const filtered = products.filter((product) => {
-      const categoryMatch = selectedCategory ? product.category?.id === selectedCategory : true;
-      const subcategoryMatch = selectedSubcategory ? product.subcategory?.id === selectedSubcategory : true;
-      const tipoMatch =
-        selectedTipo === "Todos"
-          ? true
-          : selectedTipo
-          ? Array.isArray(product.tipo)
-            ? (product.tipo as string[]).some((t) => normalizeTexto(t) === normalizeTexto(selectedTipo))
-            : normalizeTexto((product.tipo as string) || "") === normalizeTexto(selectedTipo)
-          : true;
-
-      const searchMatch = searchTerm
-        ? product.title?.[i18n.language as "en" | "es"]?.toLowerCase().includes(searchTerm.toLowerCase())
-        : true;
-
-      return categoryMatch && subcategoryMatch && tipoMatch && searchMatch;
-    });
-
-    return filtered;
-  }, [products, selectedCategory, selectedSubcategory, selectedType, searchTerm, sortOption, i18n.language]);
-
-  // --- Ordenamiento de productos (usando precio de variantes si priceUSD principal es 0) ---
-  type Language = "en" | "es";
-  const lang = i18n.language as Language;
-
-  const getPrice = (p: LocalProduct) => {
-    if (Array.isArray(p.variants) && p.variants.length > 0) {
-      const firstVariant = p.variants[0];
-      if (Array.isArray(firstVariant.options) && firstVariant.options.length > 0) {
-        return firstVariant.options[0].priceUSD ?? 0;
-      }
-    }
-    return p.price ?? 0;
-  };
-
-  const sortedProducts = useMemo(() => {
-    const sorted = [...filteredProducts].sort((a, b) => {
-      if (sortOption === "price-asc" || sortOption === "priceAsc") return getPrice(a) - getPrice(b);
-      if (sortOption === "price-desc" || sortOption === "priceDesc") return getPrice(b) - getPrice(a);
-      if (sortOption === "az") {
-        return (a.title?.[lang] || "").localeCompare(b.title?.[lang] || "");
-      }
-      if (sortOption === "za") {
-        return (b.title?.[lang] || "").localeCompare(a.title?.[lang] || "");
-      }
-      return 0;
-    });
-    if (!import.meta.env.PROD) {
-      console.log("🔍 Orden actual y precios:");
-      sorted.forEach((p) => {
-        console.log(`→ ${p.title?.es} | price: ${getPrice(p)}`);
-      });
-    }
-    return sorted;
-  }, [filteredProducts, sortOption, i18n.language]);
-
-  // --- Ordenamiento MOBILE por selectedOrderMobile ---
-  const sortedProductsMobile = useMemo(() => {
-    let sorted = [...filteredProducts];
-    switch (selectedOrderMobile) {
-      case "az":
-        sorted.sort((a, b) => a.title?.[lang]?.localeCompare(b.title?.[lang] ?? "") ?? 0);
-        break;
-      case "za":
-        sorted.sort((a, b) => b.title?.[lang]?.localeCompare(a.title?.[lang] ?? "") ?? 0);
-        break;
-      case "asc":
-        sorted.sort((a, b) => getPrice(a) - getPrice(b));
-        break;
-      case "desc":
-        sorted.sort((a, b) => getPrice(b) - getPrice(a));
-        break;
-      default:
-        break;
-    }
-    return sorted;
-  }, [filteredProducts, selectedOrderMobile, i18n.language]);
-
-  const productsToDisplay = sortedProducts;
-
   // Banner dinámico según filtro (normalizando a mayúsculas)
   const normalizedFilter = filterParam.toUpperCase();
-  const bannerImage =
-    {
-      NBA: "/images/banner-nba.jpg",
-      FUTBOL: "/images/futbol-banner.jpg",
-      TODO: "/images/banner-general.jpg",
-    }[normalizedFilter] || "/images/banner-general.jpg";
 
-  if (loading) {
+  // Mostrar skeletons solo en carga inicial
+  if (isInitialLoad && loading) {
     return (
       <section className="bg-[#f9f9f9] text-black min-h-screen flex flex-col">
-        <div className="relative w-full h-64 sm:h-96 overflow-hidden">
-          <div className="w-full h-full bg-gray-200 animate-pulse" />
-        </div>
-
-        <div className="max-w-7xl mx-auto p-6">
+        <ShopNavbar />
+        <div className="max-w-7xl mx-auto p-6 pt-[90px] md:pt-[110px]">
           <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-6 sm:gap-8 mt-6">
-            {Array.from({ length: 8 }).map((_, index) => (
+            {Array.from({ length: 24 }).map((_, index) => (
               <ProductSkeleton key={index} />
             ))}
           </div>
         </div>
-        {/* Footer intentionally removed from loading state to prevent duplication */}
       </section>
     );
   }
@@ -748,9 +442,20 @@ export default function Shop() {
               ))}
             >
               {(isMobileView ? sortedProductsMobile : sortedProducts).length > 0 ? (
-                (isMobileView ? sortedProductsMobile : sortedProducts).map((product: LocalProduct) => (
-                  <ProductCard key={product.slug ?? product.id} product={product} />
-                ))
+                <>
+                  {(isMobileView ? sortedProductsMobile : sortedProducts).map((product: LocalProduct) => (
+                    <ProductCard key={product.slug ?? product.id} product={product} />
+                  ))}
+                  
+                  {/* Skeletons mientras carga más */}
+                  {isLoadingPage && (
+                    <>
+                      {Array.from({ length: 8 }).map((_, index) => (
+                        <ProductSkeleton key={`loading-${index}`} />
+                      ))}
+                    </>
+                  )}
+                </>
               ) : (
                 <div className="col-span-full py-16 min-h-[300px] text-center space-y-4">
                   <p className="text-gray-500 font-medium max-w-xl mx-auto text-center">
@@ -774,6 +479,19 @@ export default function Shop() {
               )}
             </Suspense>
           </div>
+
+          {/* Botón "Cargar más" */}
+          {!isInitialLoad && hasMore && !isLoadingPage && (isMobileView ? sortedProductsMobile : sortedProducts).length > 0 && (
+            <div className="flex justify-center mt-8 mb-8">
+              <button
+                onClick={loadMore}
+                disabled={isLoadingPage}
+                className="px-6 py-3 bg-black text-white rounded-lg font-semibold hover:bg-gray-800 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isLoadingPage ? "Cargando..." : "Cargar más productos"}
+              </button>
+            </div>
+          )}
         </main>
       </div>
 
