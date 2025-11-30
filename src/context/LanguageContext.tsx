@@ -1,6 +1,7 @@
 // src/context/LanguageContext.tsx
 
 import React, { createContext, useState, useEffect } from 'react';
+import { getItem, setItem } from '../utils/safeStorage';
 
 type Language = 'es' | 'en';
 
@@ -18,12 +19,12 @@ export const LanguageProvider = ({ children }: { children: React.ReactNode }) =>
   const [language, setLanguageState] = useState<Language>('es');
 
   useEffect(() => {
-    const storedLang = localStorage.getItem('language') as Language;
+    const storedLang = getItem('language') as Language;
     if (storedLang) setLanguageState(storedLang);
   }, []);
 
   const setLanguage = (lang: Language) => {
-    localStorage.setItem('language', lang);
+    setItem('language', lang);
     setLanguageState(lang);
   };
 

@@ -3,6 +3,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { User } from "../data/types";
 import { getAuth, onAuthStateChanged, getIdTokenResult } from "firebase/auth";
+import { setItem, removeItem } from "../utils/safeStorage";
 
 interface AuthContextType {
   user: User | null;
@@ -32,7 +33,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
 
         if (firebaseUser.email) {
-          localStorage.setItem("userEmail", firebaseUser.email);
+          setItem("userEmail", firebaseUser.email);
         }
 
         setIsLoading(false);
@@ -69,7 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
 
         if (firebaseUser.email) {
-          localStorage.setItem("userEmail", firebaseUser.email);
+          setItem("userEmail", firebaseUser.email);
         }
       } catch (err) {
         console.error("Error resolving admin claims:", err);
@@ -88,12 +89,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ...user,
       uid: user.uid || String(user.id),
     });
-    localStorage.setItem("userEmail", user.email);
+    setItem("userEmail", user.email);
   };
 
   const logout = () => {
     setUser(null);
-    localStorage.removeItem("userEmail");
+    removeItem("userEmail");
   };
 
   return (

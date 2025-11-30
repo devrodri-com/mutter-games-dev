@@ -2,6 +2,8 @@
 // Creamos una función utilitaria para guardar pedidos en localStorage
 
 // src/utils/saveOrder.ts
+import { getItem, setItem, safeParse } from "../safeStorage";
+
 export type OrderStatus = "En Proceso" | "Cancelado" | "Confirmado" | "Entregado";
 
 export interface OrderData {
@@ -15,8 +17,7 @@ export interface OrderData {
 }
 
 export function saveOrderToLocalStorage(newOrder: OrderData) {
-  const current = localStorage.getItem("orders");
-  const parsed: OrderData[] = current ? JSON.parse(current) : [];
+  const parsed: OrderData[] = safeParse<OrderData[]>("orders", []);
   parsed.push(newOrder);
-  localStorage.setItem("orders", JSON.stringify(parsed));
+  setItem("orders", JSON.stringify(parsed));
 }

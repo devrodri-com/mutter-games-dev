@@ -28,6 +28,7 @@ import CartNavbar from "../components/CartNavbar";
 import { toast } from "react-hot-toast";
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
+import { setItem } from "../utils/safeStorage";
 import { validateCartForm } from "../utils/formValidation";
 import { registerClient, saveClientToFirebase, upsertClientFromCheckout } from "../firebaseUtils";
 import { saveOrderToFirebase } from "@/firebase/orders";
@@ -237,7 +238,7 @@ const isValidEmail = (email: string): boolean => {
         createdAt: orderPayload.createdAt,
       });
 
-      localStorage.setItem("lastOrderId", orderId);
+      setItem("lastOrderId", orderId);
 
       if (import.meta.env.DEV) {
         console.log("🧾 Orden creada en Firebase:", { id: orderId, ...orderPayload });

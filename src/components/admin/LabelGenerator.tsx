@@ -1,6 +1,7 @@
 // src/components/admin/LabelGenerator.tsx
 import { useState, useEffect } from "react";
 import jsPDF from "jspdf";
+import { safeParse } from "../../utils/safeStorage";
 
 interface Order {
   id: number;
@@ -17,7 +18,7 @@ export default function LabelGenerator() {
   const [orders, setOrders] = useState<Order[]>([]);
 
   useEffect(() => {
-    const pedidos = JSON.parse(localStorage.getItem("pedidos") || "[]");
+    const pedidos = safeParse<any[]>("pedidos", []);
 
     const parsed: Order[] = pedidos.map((pedido: any) => ({
       id: pedido.id,
