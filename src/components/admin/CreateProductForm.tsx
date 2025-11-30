@@ -1,13 +1,10 @@
 // src/components/admin/CreateProductForm.tsx
 
-import React, { useState, useEffect, useRef } from "react";
-import { handleImageUpload } from "../../utils/handleImageUpload";
+import React from "react";
+import { useNavigate } from "react-router-dom";
 import { TIPOS } from "../../constants/tipos";
 import ImageUploader from "./ImageUploader";
 import TiptapEditor from "./TiptapEditor";
-import { useForm, Controller, SubmitHandler } from "react-hook-form";
-import { useNavigate, useParams } from "react-router-dom";
-import { Product } from "../../data/types";
 import {
   DndContext,
   closestCenter,
@@ -15,19 +12,15 @@ import {
   PointerSensor,
   useSensor,
   useSensors,
-  DragEndEvent,
 } from "@dnd-kit/core";
 import {
   SortableContext,
-  arrayMove,
   sortableKeyboardCoordinates,
   useSortable,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { importProductFromCJ } from "../../firebaseUtils";
-import { fetchSubcategories, fetchCategories } from "@/firebase/categories";
-import { adminApiFetch } from "../../utils/adminApi";
+import { useProductForm } from "../../hooks/useProductForm";
 
 // --- UI helpers (solo estilos, sin lógica) ---
 const UI = {
@@ -130,38 +123,6 @@ function CustomSelect({
 }
 
 
-// Interfaz para nuestro formulario
-interface FormData {
-  title: string;
-  cjProductId: string;
-  defaultDescriptionType: "none" | "camiseta";
-  extraDescriptionTop: string;
-  extraDescriptionBottom: string;
-  descriptionPosition: "top" | "bottom";
-  active: boolean;
-  customizable: boolean;
-}
-
-
-// Función para generar un slug limpio (sin timestamp ni random)
-const generateCleanSlug = (title: string): string => {
-  return title
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9\s-]/g, "")
-    .replace(/\s+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
-};
-
-async function createProductAdminAPI(newProduct: Partial<Product>) {
-  const { id } = await adminApiFetch("/api/admin/products", {
-    method: "POST",
-    body: JSON.stringify(newProduct),
-  });
-  return id;
-}
 
 // Componente para imagen arrastrable
 function SortableImageItem({ id, url, onRemove, onMoveLeft, onMoveRight }: {
@@ -201,73 +162,33 @@ function SortableImageItem({ id, url, onRemove, onMoveLeft, onMoveRight }: {
 
 // 🔥 ACA recién empieza el componente:
 export default function CreateProductForm() {
-  const { id } = useParams();
   const navigate = useNavigate();
 
-  const [formData, setFormData] = useState({
-    name: "",
-    title: "",
-    category: "",
-    subcategory: "",
-    tipo: "", // Nuevo campo para distinguir si es Juego, Consola, Accesorio o Merch
-    priceUSD: 0,
-    images: [],
-    active: true,
-    customizable: true,
-    sku: "",
-    stockTotal: 0,
-    description: "", // <--- Aseguramos que description esté presente
+  // Usar el hook para toda la lógica
+  const form = useProductForm({
+    mode: "create",
+    onSuccess: () => {
+      setTimeout(() => {
+        navigate("/admin/productos");
+      }, 2000);
+    },
   });
 
-  // Estados para campos en inglés
-  const [titleEn, setTitleEn] = useState("");
-
-  const [cjProductId, setCjProductId] = useState('');
-
-  // Estado para mensaje de éxito visual
-  const [successMessage, setSuccessMessage] = useState("");
-
-  // Estados principales
-const [loading, setLoading] = useState(false);
-const [error, setError] = useState("");
-const [images, setImages] = useState<string[]>([]);
-type Category = {
-  id: string;
-  name: string | { es?: string; en?: string };
-};
-
-const [categories, setCategories] = useState<{ id: string; name: string | { es?: string; en?: string } }[]>([]);
-const [subcategories, setSubcategories] = useState<{ id: string; name: string | { es?: string; en?: string }; categoryId: string }[]>([]);
-const [uploadingImages, setUploadingImages] = useState(false);
-const fileInputRef = useRef<HTMLInputElement>(null);
-const [selectedCategory, setSelectedCategory] = useState("");
-const [selectedSubcategory, setSelectedSubcategory] = useState("");
-// Extensiones locales para permitir name multilingüe en category y subcategory
-type MultilingualName = string | { es?: string; en?: string };
-
-interface LocalCategory {
-  id: string;
-  name: MultilingualName;
-}
-
-interface LocalSubcategory {
-  id: string;
-  name: MultilingualName;
-}
-
-interface LocalProduct extends Omit<Product, "category" | "subcategory"> {
-  category: LocalCategory;
-  subcategory: LocalSubcategory;
-}
-
-const [product, setProduct] = useState<Partial<LocalProduct>>({});
-const [customizable, setCustomizable] = useState(true);
-
-  // Simular idioma activo (en producción vendrá del contexto)
-  const language = "es"; // o "en"
+  // Configuración de sensores para drag and drop
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 5,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   // Options for headless selects
-  const categoryOptions: Option[] = categories.map((cat) => ({
+  const language = "es";
+  const categoryOptions: Option[] = form.categories.map((cat) => ({
     value: cat.id,
     label:
       typeof cat.name === "string"
@@ -275,8 +196,8 @@ const [customizable, setCustomizable] = useState(true);
         : (cat.name?.[language] || (cat.name as any)?.es || ""),
   }));
 
-  const subcategoryOptions: Option[] = subcategories
-    .filter((sub) => sub.categoryId === selectedCategory)
+  const subcategoryOptions: Option[] = form.subcategories
+    .filter((sub) => sub.categoryId === form.selectedCategory)
     .map((sub) => ({
       value: sub.id,
       label:
@@ -287,315 +208,30 @@ const [customizable, setCustomizable] = useState(true);
 
   const tipoOptions: Option[] = TIPOS.map((t) => ({ value: t, label: t }));
 
-useEffect(() => {
-  const loadAllData = async () => {
-    try {
-      const fetchedCategories = await fetchCategories();
-      setCategories(fetchedCategories);
-
-      // Nuevo: cargar subcategorías según la categoría seleccionada
-      if (selectedCategory) {
-        const fetchedSubcategories = await fetchSubcategories(selectedCategory);
-        setSubcategories(
-          fetchedSubcategories.map((sub) => ({
-            ...sub,
-            categoryId: selectedCategory,
-          }))
-        );
-      }
-
-    } catch (error) {
-      console.error("[CreateProductForm] Error cargando categorías:", error);
-    }
-  };
-
-  loadAllData();
-}, []);
-
-// Nuevo useEffect: escuchar cambios en selectedCategory y cargar subcategorías dinámicamente
-useEffect(() => {
-  const loadSubcategories = async () => {
-    if (!selectedCategory) return;
-    try {
-      const fetched = await fetchSubcategories(selectedCategory);
-      setSubcategories(
-        fetched.map((sub) => ({
-          ...sub,
-          categoryId: selectedCategory,
-        }))
-      );
-    } catch (error) {
-      console.error("Error cargando subcategorías dinámicamente:", error);
-    }
-  };
-  loadSubcategories();
-}, [selectedCategory]);
-
-// 🔥 Mantener formData sincronizado con las selecciones
-useEffect(() => {
-  setFormData((prev) => ({
-    ...prev,
-    category: selectedCategory,
-  }));
-}, [selectedCategory]);
-
-useEffect(() => {
-  setSelectedSubcategory("");
-}, [selectedCategory]);
-
-useEffect(() => {
-  setFormData((prev) => ({
-    ...prev,
-    subcategory: selectedSubcategory,
-  }));
-}, [selectedSubcategory]);
-
-// 🧹 Luego sigue tu código normal
-  // Configuración mejorada de sensores para drag and drop
-  // --- Variantes del producto con soporte multilenguaje y precios por opción ---
-  const [variants, setVariants] = useState<
-  {
-    label: { es: string; en: string };
-    options: { value: string; priceUSD: number; stock: number }[];
-  }[]
->([]);
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 5, // puedes ajustar esta distancia si quieres
-      },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
-  );
-  
-  
-  const {
-    register,
-    handleSubmit,
-    setValue,
-    watch,
-    control,
-    formState: { errors },
-  } = useForm<FormData>({
-    defaultValues: {
-      title: "",
-      cjProductId: "",
-      defaultDescriptionType: "none", // 🔥 Nuevo
-      extraDescriptionTop: "",        // 🔥 Nuevo
-      extraDescriptionBottom: "",     // 🔥 Nuevo
-      descriptionPosition: "bottom",
-      active: true,
-      customizable: true,
-    },
-  });
-
-  // Observar cambios en el equipo seleccionado para actualizar la liga automáticamente
-
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    
-    if (over && active.id !== over.id) {
-      setImages((items) => {
-        const oldIndex = items.findIndex((item) => item === active.id);
-        const newIndex = items.findIndex((item) => item === over.id);
-        
-        return arrayMove(items, oldIndex, newIndex);
-      });
-    }
-  };
-
-
-  // La función de carga de imágenes ahora se maneja a través de handleUpload (ver abajo en el componente ImageUploader)
-
-  // Nueva función para manejar la subida de imágenes (más simple)
-  // Siempre sobrescribe la lista de imágenes, nunca concatena
-  const handleImagesUpload = (uploadedImages: string[]) => {
-    setImages(uploadedImages);
-  };
-
-  const handleRemoveImage = (index: number) => {
-    // Sobrescribe la lista en vez de concatenar
-    setImages((prev) => prev.filter((_, i) => i !== index));
-  };
-  
+  // Helper para mover imagen (left/right)
   const handleMoveImage = (index: number, direction: "left" | "right") => {
     if (
       (direction === "left" && index === 0) ||
-      (direction === "right" && index === images.length - 1)
+      (direction === "right" && index === form.images.length - 1)
     ) {
       return;
     }
-    const newImages = [...images];
     const newIndex = direction === "left" ? index - 1 : index + 1;
-    [newImages[index], newImages[newIndex]] = [newImages[newIndex], newImages[index]];
-    // Sobrescribe la lista
-    setImages(newImages);
-  };
-
-  const onSubmit: SubmitHandler<FormData> = async (data) => {
-    if (images.length === 0) {
-      setError("Debes subir al menos una imagen");
-      return;
-    }
-
-    if (!selectedCategory || !selectedSubcategory) {
-      setError("Debes seleccionar categoría y subcategoría");
-      return;
-    }
-
-    // Validar que el campo tipo sea un string no vacío y válido
-    if (typeof formData.tipo !== "string" || !formData.tipo.trim()) {
-      setError("Debes seleccionar un tipo de producto");
-      return;
-    }
-    if (!TIPOS.includes(formData.tipo)) {
-      setError("El tipo de producto seleccionado no es válido");
-      return;
-    }
-
-    // --- Validación de variantes ---
-    if (variants.length === 0) {
-      setError("Debes agregar al menos una variante");
-      return;
-    }
-
-    const hasInvalidVariant = variants.some(variant =>
-      !variant.label.es.trim() ||
-      variant.options.length === 0 ||
-      variant.options.some(opt => !opt.value.trim() || opt.priceUSD < 0 || opt.stock < 0)
-    );
-
-    if (hasInvalidVariant) {
-      setError("Verifica que todas las variantes tengan nombre, opciones con valor, precio y stock válido");
-      return;
-    }
-    // --- Fin validación variantes ---
-
-    setLoading(true);
-    setError("");
-
-    try {
-      const title = data.title.trim();
-      // Nueva lógica para subcategorySlug y subcategoryName
-      const subcategoryRaw = product?.subcategory?.name || "";
-      const subcategorySlug = typeof subcategoryRaw === "string"
-        ? subcategoryRaw
-        : subcategoryRaw?.es || subcategoryRaw?.en || "";
-      const subcategoryName = subcategorySlug;
-      const slug = `${generateCleanSlug(title)}-${subcategorySlug.toLowerCase().replace(/\s+/g, "-")}`;
-
-      // Verificación de duplicidad de slug (ver comentarios anteriores para implementación)
-
-      const categoryRawName = categories.find((cat) => cat.id === selectedCategory)?.name || "";
-      const categoryName = typeof categoryRawName === "string" ? categoryRawName : (categoryRawName[language] || categoryRawName.es || "");
-      const subcategoryRawName = subcategories.find((sub) => sub.id === selectedSubcategory)?.name || "";
-      // ✅ Ya no se redeclara subcategoryName aquí
-      // Guardar los campos title, titleEn, description como string
-
-    // --- SUBIDA DE IMÁGENES ---
-    // Si las imágenes ya son URLs, puedes omitir, pero si son archivos, debes subirlas.
-    // Aquí asumimos que images es un array de archivos o URLs locales a subir.
-    // Si images ya son URLs definitivas, puedes dejar imageUrls = images.
-    // Si images son archivos, usa handleImageUpload.
-    let imageUrls: string[] = [];
-    // Detectar si images son File objects o URLs
-    if (images.length > 0 && typeof images[0] !== "string") {
-      // images son archivos, subirlas
-      for (const image of images as unknown as File[]) {
-        const url = await handleImageUpload(image);
-        if (url) {
-          imageUrls.push(url);
-        }
-      }
-    } else {
-      // images ya son URLs
-      imageUrls = images;
-    }
-    // --- FIN SUBIDA DE IMÁGENES ---
-
-      const newProduct: Partial<Product> = {
-        title: {
-          es: data.title.trim(),
-          en: titleEn.trim(),
-        },
-        description: formData.description,
-        slug: slug,
-        category: { id: selectedCategory, name: categoryName },
-        subcategory: selectedSubcategory
-          ? {
-              id: selectedSubcategory,
-              name: subcategoryName,
-              categoryId: selectedCategory,
-            }
-          : { id: "", name: "", categoryId: selectedCategory },
-        tipo: formData.tipo,
-        defaultDescriptionType: data.defaultDescriptionType || "none",
-        extraDescriptionTop: data.extraDescriptionTop || "",
-        extraDescriptionBottom: data.extraDescriptionBottom || "",
-        descriptionPosition: data.descriptionPosition || "bottom",
-        active: data.active,
-        images: imageUrls,
-        allowCustomization: data.customizable,
-        customName: "",
-        customNumber: "",
-        // 💲 Agregar priceUSD como el menor precio de todas las variantes
-        priceUSD: Math.min(...variants.flatMap(v => v.options.map(opt => opt.priceUSD))),
-        variants: variants.map((variant) => ({
-          ...variant,
-          title: variant.label,
-        })),
-        sku: formData.sku || "",
-        stockTotal: variants.reduce(
-          (total, variant) =>
-            total + variant.options.reduce((sum, opt) => sum + (opt.stock || 0), 0),
-          0
-        ),
-      };
-
-      await createProductAdminAPI(newProduct);
-      setSuccessMessage("¡Producto creado correctamente!");
-      setTimeout(() => {
-        setSuccessMessage("");
-        navigate("/admin/productos");
-      }, 2000);
-    } catch (error) {
-      console.error("[CreateProductForm] Error al crear producto:", error);
-      setError("Error al crear el producto. Intente nuevamente.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleFormValidation = async (data: any) => {
-  
-    if (!selectedCategory) {
-      alert("Por favor selecciona una categoría");
-      return;
-    }
-  
-    if (!selectedSubcategory) {
-      alert("Por favor selecciona una subcategoría");
-      return;
-    }
-  
-    // ✅ Si pasa validaciones
-    handleSubmit(data);
+    form.handleImageReorder(index, newIndex);
   };
 
   return (
     <>
-      {successMessage && (
-  <div className="bg-green-50 border border-green-200 text-green-800 p-4 rounded-lg mb-4">
-    {successMessage}
-  </div>
-)}
-<form onSubmit={handleSubmit(onSubmit)} className="space-y-6 max-w-4xl mx-auto pb-[calc(env(safe-area-inset-bottom)+88px)] md:pb-10">
+      {form.successMessage && (
+        <div className="bg-green-50 border border-green-200 text-green-800 p-4 rounded-lg mb-4">
+          {form.successMessage}
+        </div>
+      )}
+      <form onSubmit={form.handleSubmit} className="space-y-6 max-w-4xl mx-auto pb-[calc(env(safe-area-inset-bottom)+88px)] md:pb-10">
 
         {/* Error general */}
-        {error && (
-          <div className="bg-red-50 text-red-700 p-4 rounded-lg border border-red-200">{error}</div>
+        {form.error && (
+          <div className="bg-red-50 text-red-700 p-4 rounded-lg border border-red-200">{form.error}</div>
         )}
 
 
@@ -603,35 +239,33 @@ useEffect(() => {
 <div className={UI.section}>
   <h3 className={UI.sectionTitle}>Información básica</h3>
   <div className="grid grid-cols-1 gap-4">
-    <div>
-      <label htmlFor="title" className={UI.label}>
-        Título del producto <span className="text-red-500">*</span>
-      </label>
-      <input
-        id="title"
-        type="text"
-        {...register("title", { required: "El título es obligatorio" })}
-        className={UI.input}
-        placeholder="Ej: Omega 3 Ultra"
-      />
-      {errors.title && (
-        <span className="text-red-500 text-sm">{errors.title.message}</span>
-      )}
-    </div>
-
-    <div>
-      <label className={UI.label}>
-        Descripción <span className="text-red-500">*</span>
-      </label>
-      <div className="rounded-lg border border-gray-200 bg-white p-2 shadow-sm">
-        <TiptapEditor
-          content={formData.description}
-          onChange={(value) =>
-            setFormData((prev) => ({ ...prev, description: value }))
-          }
+      <div>
+        <label htmlFor="title" className={UI.label}>
+          Título del producto <span className="text-red-500">*</span>
+        </label>
+        <input
+          id="title"
+          type="text"
+          {...form.register("title", { required: "El título es obligatorio" })}
+          className={UI.input}
+          placeholder="Ej: Omega 3 Ultra"
         />
+        {form.errors.title && (
+          <span className="text-red-500 text-sm">{form.errors.title.message}</span>
+        )}
       </div>
-    </div>
+
+      <div>
+        <label className={UI.label}>
+          Descripción <span className="text-red-500">*</span>
+        </label>
+        <div className="rounded-lg border border-gray-200 bg-white p-2 shadow-sm">
+          <TiptapEditor
+            content={form.description}
+            onChange={form.setDescription}
+          />
+        </div>
+      </div>
   </div>
 </div>
 
@@ -644,12 +278,8 @@ useEffect(() => {
     <div className="md:col-span-1">
       <label className={UI.label}>Categoría</label>
       <CustomSelect
-        value={selectedCategory}
-        onChange={(value) => {
-          setSelectedCategory(value);
-          const categoryName = categories.find((cat) => cat.id === value)?.name || "";
-          setProduct((prev) => ({ ...prev, category: { id: value, name: categoryName } }));
-        }}
+        value={form.selectedCategory}
+        onChange={form.setSelectedCategory}
         options={categoryOptions}
         placeholder="Categoría"
       />
@@ -659,15 +289,11 @@ useEffect(() => {
     <div className="md:col-span-1">
       <label className={UI.label}>Subcategoría</label>
       <CustomSelect
-        value={selectedSubcategory}
-        onChange={(value) => {
-          setSelectedSubcategory(value);
-          const subcategoryName = subcategories.find((sub) => sub.id === value)?.name || "";
-          setProduct((prev) => ({ ...prev, subcategory: { id: value, name: subcategoryName } }));
-        }}
+        value={form.selectedSubcategory}
+        onChange={form.setSelectedSubcategory}
         options={subcategoryOptions}
         placeholder="Subcategoría"
-        disabled={!selectedCategory}
+        disabled={!form.selectedCategory}
       />
     </div>
 
@@ -677,10 +303,8 @@ useEffect(() => {
         Tipo <span className="text-red-500">*</span>
       </label>
       <CustomSelect
-        value={formData.tipo || ""}
-        onChange={(value) =>
-          setFormData((prev) => ({ ...prev, tipo: value }))
-        }
+        value={form.formData.tipo || ""}
+        onChange={(value) => form.setFormField("tipo", value)}
         options={tipoOptions}
         placeholder="Seleccionar tipo"
       />
@@ -699,7 +323,7 @@ useEffect(() => {
     <label className="flex items-center gap-2">
       <input
         type="checkbox"
-        {...register("active")}
+        {...form.register("active")}
         className="text-[#FF2D55] rounded focus:ring-[#FF2D55] h-5 w-5"
       />
       <span>Producto activo (visible para clientes)</span>
@@ -710,11 +334,7 @@ useEffect(() => {
       <input
         type="number"
         readOnly
-        value={variants.reduce(
-          (total, variant) =>
-            total + variant.options.reduce((sum, opt) => sum + (opt.stock || 0), 0),
-          0
-        )}
+        value={form.calculatedStockTotal}
         className="block w-full rounded-lg border-gray-200 bg-gray-100 shadow-sm focus:outline-none cursor-not-allowed p-2.5"
       />
     </div>
@@ -729,24 +349,24 @@ useEffect(() => {
     <label className={UI.label}>
       Imágenes <span className="text-red-500">*</span>
     </label>
-    <ImageUploader onChange={handleImagesUpload} images={images} />
+    <ImageUploader onChange={form.handleImagesUpload} images={form.images} />
   </div>
 
-  {images.length > 0 ? (
+  {form.images.length > 0 ? (
     <div className="mt-4">
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
-        onDragEnd={handleDragEnd}
+        onDragEnd={form.handleDragEnd}
       >
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-          <SortableContext items={images} strategy={verticalListSortingStrategy}>
-            {images.map((url, index) => (
+          <SortableContext items={form.images} strategy={verticalListSortingStrategy}>
+            {form.images.map((url, index) => (
               <SortableImageItem
                 key={url}
                 id={url}
                 url={url}
-                onRemove={() => handleRemoveImage(index)}
+                onRemove={() => form.handleImageRemove(index)}
                 onMoveLeft={() => handleMoveImage(index, "left")}
                 onMoveRight={() => handleMoveImage(index, "right")}
               />
@@ -766,7 +386,7 @@ useEffect(() => {
 <div className={UI.section}>
   <h3 className={UI.sectionTitle}>Variantes del producto</h3>
 
-  {variants.map((variant, vIndex) => (
+  {form.variants.map((variant, vIndex) => (
     <div key={vIndex} className="mb-4 border border-gray-200 p-4 rounded-lg bg-gray-50">
       <div className="mb-3">
         <label className="block text-xs font-medium text-gray-600 mb-1">Nombre de la variante</label>
@@ -776,9 +396,11 @@ useEffect(() => {
           placeholder="Ej: Tamaño"
           value={variant.label.es}
           onChange={(e) => {
-            const updated = [...variants];
-            updated[vIndex].label.es = e.target.value;
-            setVariants(updated);
+            form.handleVariantChange(vIndex, "label", {
+              ...variant.label,
+              es: e.target.value,
+              en: e.target.value,
+            });
           }}
         />
       </div>
@@ -793,9 +415,7 @@ useEffect(() => {
               placeholder="Ej: Joystick Original"
               value={option.value}
               onChange={(e) => {
-                const updated = [...variants];
-                updated[vIndex].options[oIndex].value = e.target.value;
-                setVariants(updated);
+                form.handleOptionChange(vIndex, oIndex, "value", e.target.value);
               }}
             />
           </div>
@@ -808,9 +428,7 @@ useEffect(() => {
               className={UI.input}
               value={option.priceUSD}
               onChange={(e) => {
-                const updated = [...variants];
-                updated[vIndex].options[oIndex].priceUSD = parseFloat(e.target.value || "0");
-                setVariants(updated);
+                form.handleOptionChange(vIndex, oIndex, "priceUSD", parseFloat(e.target.value || "0"));
               }}
             />
           </div>
@@ -822,9 +440,7 @@ useEffect(() => {
               className={UI.input}
               value={option.stock || 0}
               onChange={(e) => {
-                const updated = [...variants];
-                updated[vIndex].options[oIndex].stock = parseInt(e.target.value || "0");
-                setVariants(updated);
+                form.handleOptionChange(vIndex, oIndex, "stock", parseInt(e.target.value || "0"));
               }}
             />
           </div>
@@ -834,9 +450,7 @@ useEffect(() => {
               type="button"
               className="text-red-600 text-xs mt-1"
               onClick={() => {
-                const updated = [...variants];
-                updated[vIndex].options.splice(oIndex, 1);
-                setVariants(updated);
+                form.handleOptionRemove(vIndex, oIndex);
               }}
             >
               Eliminar esta opción
@@ -850,9 +464,7 @@ useEffect(() => {
           type="button"
           className="text-[#FF2D55] text-sm"
           onClick={() => {
-            const updated = [...variants];
-            updated[vIndex].options.push({ value: "", priceUSD: 0, stock: 0 });
-            setVariants(updated);
+            form.handleOptionAdd(vIndex);
           }}
         >
           + Agregar opción
@@ -862,9 +474,7 @@ useEffect(() => {
           type="button"
           className="text-red-600 text-sm"
           onClick={() => {
-            const updated = [...variants];
-            updated.splice(vIndex, 1);
-            setVariants(updated);
+            form.handleVariantRemove(vIndex);
           }}
         >
           🗑️ Eliminar variante
@@ -876,12 +486,7 @@ useEffect(() => {
   <button
     type="button"
     className="text-[#FF2D55] mt-2"
-    onClick={() => {
-      setVariants([
-        ...variants,
-        { label: { es: "", en: "" }, options: [{ value: "", priceUSD: 0, stock: 0 }] },
-      ]);
-    }}
+    onClick={form.handleVariantAdd}
   >
     + Agregar variante
   </button>
@@ -890,14 +495,14 @@ useEffect(() => {
         <div className="pt-4 hidden md:block">
           <button
             type="submit"
-            disabled={loading || uploadingImages}
+            disabled={form.loading || form.uploadingImages}
             className={`w-full py-3 px-4 rounded-md font-medium transition-colors ${
-              loading || uploadingImages
+              form.loading || form.uploadingImages
                 ? "bg-gray-400 text-white cursor-not-allowed"
                 : "bg-[#FF2D55] hover:bg-[#CC1E44] text-white"
             }`}
           >
-            {loading ? (
+            {form.loading ? (
               <div className="flex items-center justify-center">
                 <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
@@ -922,14 +527,14 @@ useEffect(() => {
             </button>
             <button
               type="submit"
-              disabled={loading || uploadingImages}
+              disabled={form.loading || form.uploadingImages}
               className={`flex-1 h-12 rounded-md font-medium ${
-                loading || uploadingImages
+                form.loading || form.uploadingImages
                   ? "bg-gray-400 text-white"
                   : "bg-[#FF2D55] text-white hover:bg-[#CC1E44] shadow-sm"
               }`}
             >
-              {loading ? "Guardando..." : "Guardar"}
+              {form.loading ? "Guardando..." : "Guardar"}
             </button>
           </div>
         </div>
