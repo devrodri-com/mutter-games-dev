@@ -26,3 +26,9 @@ secrets/firebase-admin.json
 firebase-debug.log
 firestore-debug.log
 *.log
+
+# Ignore legacy backend code and nested node_modules
+backend/
+api/
+functions/node_modules/
+node_modules/
