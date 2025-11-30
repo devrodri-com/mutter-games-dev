@@ -1,5 +1,5 @@
 // src/firebase/products.ts
-import { collection, getDocs, doc, getDoc, addDoc, updateDoc, deleteDoc, query, where } from "firebase/firestore";
+import { collection, getDocs, doc, getDoc, addDoc, updateDoc, deleteDoc, query, where, limit, startAfter, QueryDocumentSnapshot } from "firebase/firestore";
 import { Product } from "../data/types";
 import { db } from "../firebaseUtils";
 
@@ -46,6 +46,133 @@ function mapProductData(id: string, data: any): Product {
     stockTotal: data.stockTotal ?? 0,
     variants: Array.isArray(data.variants) ? data.variants : [],
   };
+}
+
+// Interfaz para opciones de paginación
+export interface FetchProductsPageOptions {
+  limit: number;
+  cursor?: QueryDocumentSnapshot | null;
+  filters?: {
+    categoryId?: string;
+    subcategoryId?: string;
+  };
+}
+
+// Resultado de la paginación
+export interface FetchProductsPageResult {
+  products: Product[];
+  lastDoc: QueryDocumentSnapshot | null;
+  hasMore: boolean;
+}
+
+/**
+ * Carga productos paginados desde Firestore
+ * 
+ * Filtros en Firestore (solo where de igualdad, sin orderBy):
+ * - active == true (siempre aplicado)
+ * - category.id (opcional)
+ * - subcategory.id (opcional)
+ * 
+ * El ordenamiento se hace en memoria en el cliente.
+ * Esto evita la necesidad de índices compuestos en Firestore.
+ */
+export async function fetchProductsPage(options: FetchProductsPageOptions): Promise<FetchProductsPageResult> {
+  try {
+    const { limit: pageLimit, cursor, filters = {} } = options;
+    const productsCollection = collection(db, "products");
+
+    // Construir query base
+    let q = query(productsCollection);
+
+    // Filtro: siempre activos
+    q = query(q, where("active", "==", true));
+
+    // Filtros opcionales
+    if (filters.categoryId) {
+      q = query(q, where("category.id", "==", filters.categoryId));
+    }
+    if (filters.subcategoryId) {
+      q = query(q, where("subcategory.id", "==", filters.subcategoryId));
+    }
+
+    // Paginación: limit y cursor (sin orderBy para evitar índices compuestos)
+    q = query(q, limit(pageLimit + 1)); // +1 para detectar si hay más páginas
+    if (cursor) {
+      q = query(q, startAfter(cursor));
+    }
+
+    // Ejecutar query
+    const snapshot = await getDocs(q);
+    const docs = snapshot.docs;
+
+    // Detectar si hay más páginas
+    const hasMore = docs.length > pageLimit;
+    const productsToReturn = hasMore ? docs.slice(0, pageLimit) : docs;
+
+    // Mapear productos
+    const productsList = productsToReturn.map((docSnap) => {
+      const data = docSnap.data() as any;
+      const rawTitle = data.title;
+      const title = {
+        es:
+          typeof rawTitle === "object" && typeof rawTitle?.es === "string"
+            ? rawTitle.es
+            : typeof rawTitle === "string"
+            ? rawTitle
+            : typeof data.titleEs === "string"
+            ? data.titleEs
+            : "Producto",
+        en:
+          typeof rawTitle === "object" && typeof rawTitle?.en === "string"
+            ? rawTitle.en
+            : typeof rawTitle === "string"
+            ? rawTitle
+            : typeof data.titleEn === "string"
+            ? data.titleEn
+            : "",
+      };
+
+      return {
+        id: docSnap.id,
+        slug: data.slug || `${docSnap.id}-${title.es.toLowerCase().replace(/\s+/g, "-")}`,
+        name: title.es || data.name || "Producto sin nombre",
+        title,
+        images: data.images || [],
+        priceUSD: data.priceUSD || 0,
+        category: data.category || { id: "", name: "" },
+        subcategory: data.subcategory || { id: "", name: "" },
+        tipo: data.tipo || "",
+        subtitle: data.subtitle || "",
+        description: data.description || "",
+        defaultDescriptionType: data.defaultDescriptionType || "none",
+        extraDescriptionTop: data.extraDescriptionTop || "",
+        extraDescriptionBottom: data.extraDescriptionBottom || "",
+        descriptionPosition: data.descriptionPosition || "bottom",
+        active: data.active ?? true,
+        customName: data.customName || "",
+        customNumber: data.customNumber || "",
+        allowCustomization: data.allowCustomization ?? false,
+        stockTotal: data.stockTotal ?? 0,
+        variants: Array.isArray(data.variants) ? data.variants : [],
+      } as Product;
+    });
+
+    // Obtener último documento para cursor
+    const lastDoc = productsToReturn.length > 0 ? productsToReturn[productsToReturn.length - 1] : null;
+
+    if (import.meta?.env?.DEV) {
+      console.log(`[fetchProductsPage] Cargados ${productsList.length} productos, hasMore: ${hasMore}`);
+    }
+
+    return {
+      products: productsList,
+      lastDoc,
+      hasMore,
+    };
+  } catch (error: any) {
+    console.error("[fetchProductsPage] Error:", error);
+    throw error;
+  }
 }
 
 export async function fetchProductById(id: string): Promise<Product | null> {
