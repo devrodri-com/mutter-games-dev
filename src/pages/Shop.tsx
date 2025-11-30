@@ -52,6 +52,7 @@ export default function Shop() {
     isInitialLoad,
     isLoadingPage,
     loading,
+    isSearchMode,
 
     // Filtros
     searchTerm,
@@ -480,8 +481,8 @@ export default function Shop() {
             </Suspense>
           </div>
 
-          {/* Botón "Cargar más" */}
-          {!isInitialLoad && hasMore && !isLoadingPage && (isMobileView ? sortedProductsMobile : sortedProducts).length > 0 && (
+          {/* Botón "Cargar más" (oculto en modo búsqueda global) */}
+          {!isSearchMode && !isInitialLoad && hasMore && !isLoadingPage && (isMobileView ? sortedProductsMobile : sortedProducts).length > 0 && (
             <div className="flex justify-center mt-8 mb-8">
               <button
                 onClick={loadMore}

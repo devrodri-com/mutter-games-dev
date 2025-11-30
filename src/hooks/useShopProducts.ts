@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useSearchParams as useSearchParamsBase } from "react-router-dom";
 import { fetchCategories } from "@/firebase/categories";
-import { fetchProductsPage, type FetchProductsPageOptions } from "@/firebase/products";
+import { fetchProductsPage, fetchProducts, type FetchProductsPageOptions } from "@/firebase/products";
 import type { QueryDocumentSnapshot } from "firebase/firestore";
 import { Product, Category, Subcategory } from "../data/types";
 
@@ -54,6 +54,11 @@ export function useShopProducts() {
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const [isLoadingPage, setIsLoadingPage] = useState(false);
   const [loading, setLoading] = useState(true); // legacy
+
+  // Estado para modo búsqueda global
+  const [allProducts, setAllProducts] = useState<LocalProduct[]>([]);
+  const [isLoadingAllProducts, setIsLoadingAllProducts] = useState(false);
+  const prevSearchTermRef = useRef<string>("");
 
   // Filtros
   const [searchTerm, setSearchTerm] = useState("");
@@ -236,8 +241,49 @@ export function useShopProducts() {
     }
   };
 
-  // Cargar primera página al montar o cuando cambian filtros/orden
+  // Cargar todos los productos cuando searchTerm pasa de vacío a no vacío (modo búsqueda global)
   useEffect(() => {
+    const wasEmpty = prevSearchTermRef.current === "";
+    const isEmpty = searchTerm === "";
+    const justBecameNonEmpty = wasEmpty && !isEmpty;
+
+    // Si searchTerm pasa de vacío a no vacío, cargar todos los productos
+    if (justBecameNonEmpty) {
+      setIsLoadingAllProducts(true);
+      fetchProducts()
+        .then((products) => {
+          const mappedProducts = products.map((product: Product) => ({
+            ...product,
+            tipo: (product as any).tipo || "",
+            priceUSD: Number((product as any).priceUSD) || 0,
+          }));
+          setAllProducts(mappedProducts);
+          setIsLoadingAllProducts(false);
+
+          if (import.meta.env.DEV) {
+            console.log(`[useShopProducts] Modo búsqueda: cargados ${mappedProducts.length} productos globales`);
+          }
+        })
+        .catch((error) => {
+          console.error("[useShopProducts] Error al cargar productos globales:", error);
+          setAllProducts([]);
+          setIsLoadingAllProducts(false);
+        });
+    }
+
+    // Si searchTerm vuelve a vacío, limpiar productos globales
+    if (isEmpty && !wasEmpty) {
+      setAllProducts([]);
+    }
+
+    prevSearchTermRef.current = searchTerm;
+  }, [searchTerm]);
+
+  // Cargar primera página al montar o cuando cambian filtros/orden (solo si no hay búsqueda)
+  useEffect(() => {
+    // Si hay búsqueda activa, no cargar páginas paginadas
+    if (searchTerm) return;
+
     // Resetear paginación cuando cambian filtros o orden
     setPaginatedProducts([]);
     setLastDoc(null);
@@ -246,7 +292,7 @@ export function useShopProducts() {
 
     loadFirstPage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCategory, selectedSubcategory, sortOption]);
+  }, [selectedCategory, selectedSubcategory, sortOption, searchTerm]);
 
   // Lectura inicial desde la URL (al montar)
   useEffect(() => {
@@ -267,6 +313,9 @@ export function useShopProducts() {
     else if (sort === "priceDesc") setSelectedOrderMobile("desc");
     else if (sort === "az" || sort === "za") setSelectedOrderMobile(sort);
     else setSelectedOrderMobile("");
+
+    // Si hay searchTerm en la URL, inicializar prevSearchTermRef para que el efecto de búsqueda se dispare
+    prevSearchTermRef.current = "";
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -348,14 +397,36 @@ export function useShopProducts() {
     setSelectedType(tipo);
   };
 
-  // Filtrado en memoria: searchTerm y tipo (sobre productos paginados)
+  // Determinar si estamos en modo búsqueda global
+  const isSearchMode = searchTerm.trim() !== "";
+
+  // Filtrado en memoria: aplicar todos los filtros según el modo
   const filteredProducts = useMemo(() => {
     const selectedTipo = selectedType;
     // Normalizador para tildes/mayúsculas
     const normalizeTexto = (text: string) => text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
-    // Filtrar sobre productos paginados (category y subcategory ya están filtrados en Firestore)
-    const filtered = paginatedProducts.filter((product) => {
+    // Seleccionar fuente de productos según el modo
+    const sourceProducts = isSearchMode ? allProducts : paginatedProducts;
+
+    // Filtrar productos
+    const filtered = sourceProducts.filter((product) => {
+      // En modo búsqueda, aplicar TODOS los filtros en memoria
+      // En modo paginado, category y subcategory ya están filtrados en Firestore
+      if (isSearchMode) {
+        // Filtro por categoría (en memoria)
+        const categoryMatch = selectedCategory
+          ? product.category?.id === selectedCategory
+          : true;
+
+        // Filtro por subcategoría (en memoria)
+        const subcategoryMatch = selectedSubcategory
+          ? product.subcategory?.id === selectedSubcategory
+          : true;
+
+        if (!categoryMatch || !subcategoryMatch) return false;
+      }
+
       // Filtro por tipo (en memoria)
       const tipoMatch =
         selectedTipo === "Todos"
@@ -375,7 +446,16 @@ export function useShopProducts() {
     });
 
     return filtered;
-  }, [paginatedProducts, selectedType, searchTerm, i18n.language]);
+  }, [
+    isSearchMode,
+    allProducts,
+    paginatedProducts,
+    selectedCategory,
+    selectedSubcategory,
+    selectedType,
+    searchTerm,
+    i18n.language,
+  ]);
 
   // Helper para obtener precio
   const getPrice = (p: LocalProduct) => {
@@ -463,8 +543,10 @@ export function useShopProducts() {
 
   const productsToDisplay = sortedProducts;
 
-  // Available types
-  const availableTypes = Array.from(new Set(paginatedProducts.map((p) => p.tipo).filter(Boolean))) as string[];
+  // Available types: usar productos globales en modo búsqueda, paginados en modo normal
+  const availableTypes = Array.from(
+    new Set((isSearchMode ? allProducts : paginatedProducts).map((p) => p.tipo).filter(Boolean))
+  ) as string[];
 
   return {
     // Estado de paginación
@@ -473,6 +555,8 @@ export function useShopProducts() {
     isInitialLoad,
     isLoadingPage,
     loading,
+    isSearchMode, // Flag para saber si estamos en modo búsqueda global
+    isLoadingAllProducts, // Estado de carga de productos globales
 
     // Filtros
     searchTerm,
