@@ -13,8 +13,6 @@ import ProductPage from "./pages/ProductPage";
 // import FootballPage from "./pages/FootballPage";
 import CartPage from "./pages/CartPage";
 import SuccessPage from "./pages/SuccessPage";
-// import FailurePage from "./pages/FailurePage";
-// import PendingPage from "./pages/PendingPage";
 import AdminPanel from "./pages/AdminPanel";
 import AboutPage from "./pages/AboutPage";
 import LoginForm from "./components/LoginForm";
