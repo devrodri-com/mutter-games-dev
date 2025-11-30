@@ -2,16 +2,17 @@
 
 import { doc, setDoc, getDoc } from "firebase/firestore";
 import type { CartItem } from "../data/types";
-import { db, ensureAuthedUid } from "../firebaseUtils";
+import { db } from "../firebaseUtils";
+import { ensureAuthReady } from "../firebase";
 
 async function getCurrentCartRef() {
-  const uid = await ensureAuthedUid();
+  const uid = await ensureAuthReady();
   return { uid, ref: doc(db, "carts", uid) };
 }
 
 export async function saveCartToFirebase(uid: string, items: CartItem[]): Promise<void> {
   try {
-    const realUid = await ensureAuthedUid();
+    const realUid = await ensureAuthReady();
     const cartRef = doc(db, "carts", realUid);
     await setDoc(cartRef, { items });
     if (import.meta?.env?.DEV) console.log("🛒 Carrito guardado en Firebase (uid):", realUid, items);
@@ -22,7 +23,7 @@ export async function saveCartToFirebase(uid: string, items: CartItem[]): Promis
 }
 
 export async function getCartFromFirebase(uid: string): Promise<CartItem[]> {
-  const realUid = await ensureAuthedUid();
+  const realUid = await ensureAuthReady();
   const docRef = doc(db, "carts", realUid);
   const docSnap = await getDoc(docRef);
   return docSnap.exists() ? docSnap.data().items || [] : [];

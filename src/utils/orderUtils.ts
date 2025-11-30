@@ -1,8 +1,6 @@
 // src/utils/orderUtils.ts
 // ✅ orderUtils.ts abierto correctamente
-import { db } from "../firebase";
-import { authReady } from "../firebase";
-import { getAuth, signInAnonymously } from "firebase/auth";
+import { db, ensureAuthReady } from "../firebase";
 import { collection, addDoc, Timestamp } from "firebase/firestore";
 import { Order, CartItem } from "@/data/types";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
@@ -19,27 +17,12 @@ interface ShippingInfo {
   telefono: string;
 }
 
-// Asegura que exista un usuario (anónimo o logueado) y devuelve su UID
-async function ensureAnonUid(): Promise<string> {
-  const auth = getAuth();
-  if (!auth.currentUser) {
-    await signInAnonymously(auth);
-  }
-  if (!auth.currentUser) {
-    throw new Error("No se pudo obtener un UID de usuario");
-  }
-  return auth.currentUser.uid;
-}
-
 
 // Función para crear la orden
 export async function createOrder(orderData: Order): Promise<string> {
   try {
-    // Esperar el UID del usuario (anónimo o logueado)
-    let uid = await authReady as unknown as string | undefined;
-    if (!uid) {
-      uid = await ensureAnonUid();
-    }
+    // Obtener el UID del usuario (anónimo o logueado) usando la función centralizada
+    const uid = await ensureAuthReady();
 
     // Armar payload compatible con las reglas de Firestore
     const payload = {

@@ -1,24 +1,14 @@
 // src/context/CartContext.tsx
 
 import { createContext, useContext, useState, useEffect, useRef, ReactNode } from "react";
-import { getAuth, onAuthStateChanged, signInAnonymously } from "firebase/auth";
+import { onAuthStateChanged } from "firebase/auth";
+import { auth, ensureAuthReady } from "../firebase";
 // import { useAuth } from "./AuthContext";
 import { loadCartFromFirebase as loadCartFromFirebaseUtils, saveCartToFirebase, loadCartFromFirebaseAndSync } from "../utils/cartFirebase";
 import { enrichCartItems } from "../utils/cartUtils";
 import { CartItem } from "../data/types";
 import { isSameItem, mergeCartItems } from "../utils/cartUtils";
 import { safeParse, setItem, getItem } from "../utils/safeStorage";
-// import { auth } from "../firebaseUtils"; // make sure this is imported
-
-async function ensureAuthUID(): Promise<string> {
-  const authInstance = getAuth();
-  if (authInstance.currentUser?.uid) {
-    return authInstance.currentUser.uid;
-  }
-  const cred = await signInAnonymously(authInstance);
-  setItem("anonymousUID", cred.user.uid);
-  return cred.user.uid;
-}
 
 // --- ShippingInfo type for createPreference and other uses ---
 export interface ShippingInfo {
@@ -75,19 +65,24 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const [currentUid, setCurrentUid] = useState<string | null>(null);
 
-  // Asegura sesión anónima y guarda el UID actual (anónimo o logueado)
+  // Escucha cambios de autenticación y actualiza currentUid
+  // La autenticación anónima se maneja centralmente en firebase.ts
   useEffect(() => {
-    const authInstance = getAuth();
-    const unsub = onAuthStateChanged(authInstance, async (fbUser) => {
+    const unsub = onAuthStateChanged(auth, (fbUser) => {
       if (fbUser) {
+        if (import.meta.env.DEV) console.log("[CartContext] UID actualizado:", fbUser.uid);
         setCurrentUid(fbUser.uid);
       } else {
-        try {
-          const cred = await signInAnonymously(authInstance);
-          setCurrentUid(cred.user.uid);
-        } catch (e) {
-          console.error("No se pudo iniciar sesión anónima:", e);
-        }
+        // Si no hay usuario, delegar en ensureAuthReady() sin crear listeners adicionales
+        // firebase.ts manejará el signInAnonymously automáticamente
+        ensureAuthReady()
+          .then((uid) => {
+            if (import.meta.env.DEV) console.log("[CartContext] UID obtenido vía ensureAuthReady:", uid);
+            setCurrentUid(uid);
+          })
+          .catch((e) => {
+            console.error("[CartContext] No se pudo obtener UID:", e);
+          });
       }
     });
     return () => unsub();

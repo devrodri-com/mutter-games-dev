@@ -1,43 +1,10 @@
 //src/utils/cartFirebase.ts
-import { db } from "../firebase"; // Asegurate de tener esta exportación desde tu config
-import { getAuth, signInAnonymously, onAuthStateChanged } from "firebase/auth";
+import { db, ensureAuthReady } from "../firebase";
 import { doc, getDoc, setDoc, onSnapshot, serverTimestamp } from "firebase/firestore";
 import { CartItem } from "../data/types";
 
 const isIOS = typeof navigator !== "undefined" &&
   /iP(hone|od|ad)/.test(navigator.userAgent);
-
-async function ensureUid(): Promise<string> {
-  const auth = getAuth();
-  // 1) Si ya hay usuario, devolver su UID
-  if (auth.currentUser?.uid) {
-    return auth.currentUser.uid;
-  }
-  // 2) Intentar login anónimo si no hay usuario
-  try {
-    await signInAnonymously(auth);
-  } catch (e: any) {
-    // Si Anónimo no está habilitado, log explícito para detectar el origen
-    console.error("❌ No se pudo hacer signInAnonymously. ¿Habilitaste 'Anonymous' en Firebase Auth?", e?.code || e);
-    throw e;
-  }
-  // 3) Esperar a que Auth propague el usuario
-  const uid = await new Promise<string>((resolve, reject) => {
-    const off = onAuthStateChanged(
-      auth,
-      (user) => {
-        if (user?.uid) {
-          off();
-          resolve(user.uid);
-        }
-      },
-      (err) => {
-        reject(err);
-      }
-    );
-  });
-  return uid;
-}
 
 export async function saveCartToFirebase(
   uid: string,
@@ -45,7 +12,7 @@ export async function saveCartToFirebase(
   options?: { allowEmptyWrite?: boolean }
 ) {
   // Usamos siempre el UID autenticado para cumplir con las rules
-  const safeUid = await ensureUid();
+  const safeUid = await ensureAuthReady();
   console.log("🆔 [saveCart] usando uid:", safeUid);
   try {
     console.log("🔥 Data que se intenta guardar en Firebase:", items);
@@ -126,7 +93,7 @@ export async function saveCartToFirebase(
 }
 
 export async function clearCartInFirebase(): Promise<void> {
-  const safeUid = await ensureUid();
+  const safeUid = await ensureAuthReady();
   const cartRef = doc(db, "carts", safeUid);
   await setDoc(cartRef, { cartItems: [], updatedAt: serverTimestamp() }, { merge: true });
   console.log("🧹 clearCartInFirebase(): carrito limpiado explícitamente en Firebase.");
@@ -134,7 +101,7 @@ export async function clearCartInFirebase(): Promise<void> {
 
 export async function loadCartFromFirebase(uid: string): Promise<CartItem[]> {
   // Nota: ignoramos el uid provisto y usamos el UID autenticado para cumplir con rules (carts/{uid}).
-  const safeUid = await ensureUid();
+  const safeUid = await ensureAuthReady();
   console.log("🆔 [loadCart] usando uid:", safeUid);
   try {
     const docSnap = await getDoc(doc(db, "carts", safeUid));
@@ -177,7 +144,7 @@ export async function listenToCartChanges(
 ): Promise<(() => void) | undefined> {
   // Nota: ignoramos el uid provisto y usamos el UID autenticado para cumplir con rules (carts/{uid}).
   // Siempre usamos el UID autenticado (anónimo o logueado)
-  const safeUid = await ensureUid();
+  const safeUid = await ensureAuthReady();
   if (isIOS) {
     console.warn("[Cart] Escucha en tiempo real desactivada en iOS (modo experimental).");
     return undefined;
@@ -217,7 +184,7 @@ export async function loadCartFromFirebaseAndSync(
   callback: (items: CartItem[]) => void
 ): Promise<CartItem[]> {
   // Nota: ignoramos el uid provisto y usamos el UID autenticado para cumplir con rules (carts/{uid}).
-  const safeUid = await ensureUid();
+  const safeUid = await ensureAuthReady();
   const initialItems = await loadCartFromFirebase(safeUid);
   listenToCartChanges(safeUid, callback); // mantener escucha activa
   return initialItems;

@@ -29,34 +29,62 @@ const auth = getAuth(app);
 setPersistence(auth, browserLocalPersistence).catch(() => {});
 
 let _authResolved = false;
+let _signingIn = false; // Flag para evitar múltiples llamadas concurrentes a signInAnonymously
 let _resolveAuthReady: ((uid: string) => void) | null = null;
 export const authReady: Promise<string> = new Promise((res) => {
   _resolveAuthReady = res;
 });
 
+// Listener único centralizado para autenticación anónima
 onAuthStateChanged(auth, (user) => {
+  if (import.meta.env.DEV) {
+    console.log("[firebase] onAuthStateChanged:", user?.uid || "null");
+  }
+
   if (!user) {
-    // Si no hay usuario, creamos uno anónimo
-    signInAnonymously(auth).catch((err) => {
-      if (import.meta.env.DEV) console.error("Anonymous sign-in failed", err);
-    });
+    // Si no hay usuario y no estamos ya intentando hacer login, creamos uno anónimo
+    if (!_signingIn) {
+      _signingIn = true;
+      signInAnonymously(auth)
+        .then(() => {
+          if (import.meta.env.DEV) console.log("[firebase] signInAnonymously iniciado");
+        })
+        .catch((err) => {
+          _signingIn = false;
+          if (import.meta.env.DEV) console.error("[firebase] Anonymous sign-in failed", err);
+        });
+    }
     return; // esperamos el próximo callback con el user
   }
 
+  // Si hay usuario, resetear el flag
+  _signingIn = false;
+
+  // Resolver la promesa si aún no se resolvió
   if (!_authResolved && _resolveAuthReady) {
+    if (import.meta.env.DEV) console.log("[firebase] authReady resuelto con uid:", user.uid);
     _resolveAuthReady(user.uid);
     _resolveAuthReady = null;
     _authResolved = true;
   }
 });
 
-// Utilidad para cuando quieras el UID ya listo
+// Utilidad centralizada para obtener UID autenticado (anónimo o logueado)
 export const ensureAuthReady = async (): Promise<string> => {
-  if (auth.currentUser?.uid) return auth.currentUser.uid;
-  return authReady; // espera a que se resuelva
+  // Si ya hay usuario, devolver inmediatamente
+  if (auth.currentUser?.uid) {
+    if (import.meta.env.DEV) console.log("[firebase] ensureAuthReady: usando uid existente:", auth.currentUser.uid);
+    return auth.currentUser.uid;
+  }
+  // Si no, esperar a que se resuelva la promesa
+  if (import.meta.env.DEV) console.log("[firebase] ensureAuthReady: esperando authReady...");
+  return authReady;
 };
 
-export const getCurrentUid = (): string | null => auth.currentUser?.uid ?? null;
+// Función async para obtener UID actual (usa ensureAuthReady para garantizar autenticación)
+export const getCurrentUid = async (): Promise<string> => {
+  return ensureAuthReady();
+};
 
 export { db, auth };
 export const firebaseDB = db;

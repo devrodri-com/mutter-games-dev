@@ -2,8 +2,8 @@
 
 import { collection, addDoc, getDocs, doc, getDoc, updateDoc, orderBy, query } from "firebase/firestore";
 import type { CartItem, Order, Product } from "../data/types";
-import { db, ensureAuthedUid } from "../firebaseUtils";
-import { auth } from "../firebase";
+import { db } from "../firebaseUtils";
+import { auth, ensureAuthReady } from "../firebase";
 
 export async function saveOrderToFirebase(order: {
   cartItems?: any[];
@@ -34,7 +34,7 @@ export async function saveOrderToFirebase(order: {
   total?: number;
 }) {
   try {
-    const uid = await ensureAuthedUid();
+    const uid = await ensureAuthReady();
 
     const cartItems = Array.isArray(order.cartItems)
       ? order.cartItems
