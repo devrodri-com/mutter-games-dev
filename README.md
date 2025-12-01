@@ -1,86 +1,86 @@
 # MUTTER GAMES – Frontend (Vite + React + Firebase)
 
-Este repositorio contiene **el frontend oficial de Mutter Games**, completamente refactorizado y endurecido (hardening) para lograr un sistema **profesional, seguro, auditable y escalable**.
+This repository contains **the official frontend of Mutter Games**, completely refactored and hardened to achieve a **professional, secure, auditable, and scalable** system.
 
-Incluye:
-- Tienda pública (shop)
-- Carrito + checkout con Mercado Pago
-- Panel administrativo seguro (admin)
-- Integración con backend Admin vía API (Vercel)
+Includes:
+- Public shop
+- Cart + checkout with Mercado Pago
+- Secure admin panel
+- Integration with Admin backend via API (Vercel)
 - Firebase Auth, Firestore, Storage
-- Test suite completa (Vitest + Firestore Rules Testing + Playwright E2E)
+- Complete test suite (Vitest + Firestore Rules Testing + Playwright E2E)
 
 ---
 
-## 📦 Arquitectura General
+## 📦 General Architecture
 
 ### Frontend
 - **React + Typescript + Vite**
 - **Firebase Client SDK (Auth, Firestore, Storage)**
-- **Backend Admin vía API segura** (no Firestore directo)
-- **Estados globales**: AuthContext, CartContext
-- **UI** con Tailwind + componentes modulares
-- **Rutas**: React Router
+- **Secure Admin backend via API** (no direct Firestore access)
+- **Global states**: AuthContext, CartContext
+- **UI** with Tailwind + modular components
+- **Routing**: React Router
 
-### Backend Admin (proyecto separado)
-- Repositorio: `mutter-games-admin-api`
-- Hospedado en Vercel
+### Admin Backend (separate project)
+- Repository: `mutter-games-admin-api`
+- Hosted on Vercel
 - Firebase Admin SDK
-- Autenticación estricta con `verifyIdToken`
-- Endpoints protegidos por roles admin/superadmin
-- CRUD de:
-  - Productos
-  - Categorías / subcategorías
-  - Usuarios admin
-  - Clientes
-  - Órdenes (lectura)
+- Strict authentication with `verifyIdToken`
+- Endpoints protected by admin/superadmin roles
+- CRUD for:
+  - Products
+  - Categories / subcategories
+  - Admin users
+  - Clients
+  - Orders (read-only)
 
 ---
 
-## 🔐 Seguridad
+## 🔐 Security
 
 ### Firestore (DEV/PROD)
-- Catálogo público → lectura pública, escritura solo backend
-- AdminUsers → lectura restringida, escritura solo backend
-- Carts → lectura/escritura solo del dueño
-- Orders → escritura solo backend, lectura dueño/admin
-- Clients → dueño y admin
-- Bloqueo total por defecto (`allow read, write: if false`)
+- Public catalog → public read, backend-only write
+- AdminUsers → restricted read, backend-only write
+- Carts → read/write only by owner
+- Orders → backend-only write, read by owner/admin
+- Clients → owner and admin access
+- Default full lock (`allow read, write: if false`)
 
-### Backend Admin
-- Capa unificada:
+### Admin Backend
+- Unified layer:
   - `verifyAdmin`
   - `permissions`
   - `withAdmin`
-- Protección por:
-  - Token JWT Firebase
+- Protection via:
+  - Firebase JWT token
   - Custom Claims (admin / superadmin)
-  - Roles estrictos por endpoint
-- CORS correctamente configurado
+  - Strict role-based endpoint access
+- Properly configured CORS
 
 ---
 
 ## 🛠️ Scripts
 
-### Desarrollo
+### Development
 ```
 npm run dev
 ```
 
-### Tests Unitarios / Integración (Vitest)
+### Unit / Integration Tests (Vitest)
 ```
 npm run test
 npm run test:watch
 npm run test:ui
 ```
 
-### Tests de Reglas de Firestore
+### Firestore Rules Tests
 ```
 firebase emulators:start --only firestore   # Terminal 1
 npm run test                                 # Terminal 2
 ```
 
-### Tests E2E (Playwright)
+### E2E Tests (Playwright)
 ```
 npm run test:e2e
 npm run test:e2e:ui
@@ -89,12 +89,12 @@ npm run test:e2e:codegen
 
 ---
 
-## 🧪 Suite de Tests
+## 🧪 Test Suite
 
-### Vitest (Unitarios e Integración)
+### Vitest (Unit and Integration)
 - `adminApiFetch.test.ts`
 - `cartUtils.test.ts`
-- Helpers y funciones puras
+- Helpers and pure functions
 
 ### Firestore Rules Testing (DEV)
 - `rules/orders.test.ts`
@@ -102,16 +102,16 @@ npm run test:e2e:codegen
 - `rules/products.test.ts`
 
 ### Playwright (E2E)
-- `shop.spec.ts` → visitar home + abrir producto
-- `cart.spec.ts` → pendiente por flujo UI
-(esto NO afecta producción)
+- `shop.spec.ts` → visit home + open product
+- `cart.spec.ts` → pending UI flow
+(this DOES NOT affect production)
 
 ---
 
-## 🌐 Variables de Entorno
+## 🌐 Environment Variables
 
-### Desarrollo (`.env.development.local`)
-Debe contener:
+### Development (`.env.development.local`)
+Must contain:
 ```
 VITE_FIREBASE_API_KEY=...
 VITE_FIREBASE_AUTH_DOMAIN=...
@@ -123,7 +123,7 @@ VITE_FIREBASE_APP_ID=...
 VITE_ADMIN_API_URL=https://mutter-games-admin-api.vercel.app
 ```
 
-### Producción (Vercel → proyecto frontend)
+### Production (Vercel → frontend project)
 ```
 VITE_FIREBASE_PROJECT_ID=mutter-games
 VITE_ADMIN_API_URL=https://mutter-games-admin-api-prod.vercel.app
@@ -131,19 +131,19 @@ VITE_ADMIN_API_URL=https://mutter-games-admin-api-prod.vercel.app
 
 ---
 
-## 📁 Estructura del Proyecto (Frontend)
+## 📁 Project Structure (Frontend)
 
 ```
 src/
-  api/ (solo helpers)
+  api/ (helpers only)
   components/
     admin/
     shop/
     ui/
   context/
-  firebase/          ← SDK client (solo lectura)
+  firebase/          ← client SDK (read-only)
   utils/
-    adminApi.ts      ← comunicación con backend admin
+    adminApi.ts      ← communication with admin backend
     cartUtils.ts
   pages/
     Shop.tsx
@@ -158,49 +158,49 @@ tests/
 
 ---
 
-## 🚀 Deploy
+## 🚀 Deployment
 
-### Producción
-1. Crear rama `prod-hardening-preview`
-2. Ajustar variables de entorno en Vercel (PROD)
-3. Verificar preview:
-   - Login admin
-   - CRUD productos
-   - Carrito + checkout
-4. Merge a `main`
-5. Vercel deploy automático
-
----
-
-## 🤝 Backend Admin (Proyecto aparte)
-
-Este frontend se conecta exclusivamente al backend seguro:
-- Repositorio: `mutter-games-admin-api`
-- Ubicación: Vercel
-- Código completamente aislado del front
+### Production
+1. Create branch `prod-hardening-preview`
+2. Adjust environment variables in Vercel (PROD)
+3. Verify preview:
+   - Admin login
+   - Product CRUD
+   - Cart + checkout
+4. Merge to `main`
+5. Automatic Vercel deploy
 
 ---
 
-## 🧾 Créditos y Autoría
+## 🤝 Admin Backend (Separate Project)
 
-Desarrollado por **Rodrigo (LoLo / Rodri)**  
-Arquitectura, seguridad, escalabilidad, DX y hardening. 
-Test suite, backend admin, refactor, migraciones y auditorías, consolidadas en 2025.
-
----
-
-## 📌 Estado actual
-
-- Frontend DEV estable
-- Backend Admin DEV / PROD funcionando
-- Rules Firestore testadas
-- Suite de tests pasando ✔
-- E2E básicos listos
-- Preparado para producción segura
+This frontend connects exclusively to the secure backend:
+- Repository: `mutter-games-admin-api`
+- Location: Vercel
+- Completely isolated code from frontend
 
 ---
 
-## 📞 Contacto
+## 🧾 Credits and Authorship
 
-Para soporte o consultoría:  
+Developed by **Rodrigo (LoLo / Rodri)**  
+Architecture, security, scalability, DX, and hardening.  
+Test suite, admin backend, refactors, migrations, and audits, consolidated in 2025.
+
+---
+
+## 📌 Current Status
+
+- Stable frontend DEV
+- Admin backend DEV / PROD working
+- Firestore rules tested
+- Test suite passing ✔
+- Basic E2E ready
+- Prepared for secure production
+
+---
+
+## 📞 Contact
+
+For support or consulting:  
 **https://devrodri.com**  
