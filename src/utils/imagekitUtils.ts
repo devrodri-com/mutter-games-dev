@@ -6,7 +6,7 @@ if (!ADMIN_API_URL) {
   throw new Error("Falta VITE_ADMIN_API_URL en el entorno para ImageKit");
 }
 
-const IMAGEKIT_AUTH_URL = `${ADMIN_API_URL}/api/admin/imagekit-auth`;
+const IMAGEKIT_AUTH_URL = `${ADMIN_API_URL}/api/imagekit-signature`;
 
 export async function uploadImageToImageKit(file: File): Promise<string | null> {
   try {
