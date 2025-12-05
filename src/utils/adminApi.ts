@@ -36,3 +36,7 @@ export async function adminApiFetch(path: string, options: RequestInit = {}) {
 
   return res.json();
 }
+
+// NOTA: runSortKeyMigrationOnce() fue eliminado - era una herramienta temporal de depuración.
+// Si en el futuro se necesita una migración, implementarla como una acción de administrador real
+// con manejo de errores adecuado y retroalimentación al usuario, no como una función aislada en consola.

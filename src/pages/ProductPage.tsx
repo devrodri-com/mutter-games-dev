@@ -16,10 +16,16 @@ import { useTranslation } from "react-i18next";
 import { HiExclamation, HiExclamationCircle } from "react-icons/hi";
 import { toast } from "react-hot-toast";
 
+// ============================================================================
+// === COMPONENTE PRINCIPAL: PRODUCT PAGE =====================================
+// ============================================================================
 
 // Improved mobile toast for stock limit error
 
 export default function ProductPage() {
+  // ------------------------------------------------------------------------
+  // ESTADO LOCAL: PRODUCTO, VARIANTE, CANTIDAD, UI Y RELACIONADOS
+  // ------------------------------------------------------------------------
   const { slug } = useParams<{ slug: string }>();
   const decodedSlug = decodeURIComponent(slug || "");
   console.log("🧠 DEBUG PARAMS — slug:", slug);
@@ -37,6 +43,9 @@ export default function ProductPage() {
   const [isAdding, setIsAdding] = useState(false);
   const [showStickyCTA, setShowStickyCTA] = useState(true);
 
+  // ------------------------------------------------------------------------
+  // SLIDER PRINCIPAL DE IMÁGENES (KEEN-SLIDER)
+  // ------------------------------------------------------------------------
   // keen-slider logic
   const [sliderRef, slider] = useKeenSlider<HTMLDivElement>({
     initial: 0,
@@ -48,6 +57,9 @@ export default function ProductPage() {
   const { i18n, t } = useTranslation();
   const lang = i18n.language.startsWith("en") ? "en" : "es";
 
+  // ------------------------------------------------------------------------
+  // EFECTO: CARGA DEL PRODUCTO POR SLUG DESDE FIREBASE
+  // ------------------------------------------------------------------------
   useEffect(() => {
     async function loadProduct() {
       if (!slug) {
@@ -96,6 +108,9 @@ export default function ProductPage() {
     loadProduct();
   }, [slug]);
 
+  // ------------------------------------------------------------------------
+  // EFECTO: CARGA DE PRODUCTOS RELACIONADOS (MISMA CATEGORÍA)
+  // ------------------------------------------------------------------------
   useEffect(() => {
     async function loadRelated() {
       if (!product || !product.category?.name) return;
@@ -112,6 +127,9 @@ export default function ProductPage() {
     loadRelated();
   }, [product]);
 
+  // ------------------------------------------------------------------------
+  // EFECTO: BOTÓN SCROLL TO TOP SEGÚN POSICIÓN DE SCROLL
+  // ------------------------------------------------------------------------
   useEffect(() => {
     const handleScroll = () => setShowScrollTop(window.scrollY > 500);
     window.addEventListener("scroll", handleScroll);
@@ -179,6 +197,9 @@ export default function ProductPage() {
     scrollToTop();
     setTimeout(() => setIsAdding(false), 800);
   };
+  // ------------------------------------------------------------------------
+  // EFECTO: CONTROL DE STICKY CTA (MOBILE) SEGÚN VISIBILIDAD DEL BLOQUE DE COMPRA
+  // ------------------------------------------------------------------------
   useEffect(() => {
     const target = document.getElementById('buy-block');
     if (!target) return;
@@ -194,6 +215,9 @@ export default function ProductPage() {
     return () => observer.disconnect();
   }, [product, selectedOption]);
 
+  // ------------------------------------------------------------------------
+  // ESTADOS DE CARGA Y PRODUCTO NO ENCONTRADO
+  // ------------------------------------------------------------------------
   if (loading) return <div className="p-10">Cargando producto...</div>;
   if (!product) return (
     <div className="p-10 text-center">
@@ -215,6 +239,9 @@ export default function ProductPage() {
   return (
     <div className="bg-gradient-to-b from-[#fafafa] to-white min-h-[100dvh] flex flex-col">
       <div className="w-full overflow-x-hidden text-black relative z-10 flex-grow">
+     {/* ================================================================== */}
+     {/* === SEO / METADATOS DEL PRODUCTO (HELMET + JSON-LD) ============ */}
+     {/* ================================================================== */}
         <Helmet>
           <title>{`${product.title?.[lang] || product.title} | Mutter Games`}</title>
           <meta
@@ -271,11 +298,17 @@ export default function ProductPage() {
           })}</script>
         </Helmet>
 
-        {/* Top-level floating controls */}
+        {/* Barra de navegación superior específica de ProductPage */}
         <ProductPageNavbar />
 
+    {/* ================================================================== */}
+    {/* === LAYOUT PRINCIPAL: GALERÍA + DETALLES DEL PRODUCTO ========== */}
+    {/* ================================================================== */}
         <div className="container mx-auto p-4 mt-20">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
+    {/* ---------------------------------------------------------------- */}
+    {/* COLUMNA IZQUIERDA: GALERÍA DE IMÁGENES ======================== */}
+    {/* ---------------------------------------------------------------- */}
           <div className="flex flex-col gap-4">
             {product.images?.length ? (
               <>
@@ -334,8 +367,13 @@ export default function ProductPage() {
             )}
           </div>
 
+    {/* ---------------------------------------------------------------- */}
+    {/* COLUMNA DERECHA: DETALLES, VARIANTES Y COMPRA ================= */}
+    {/* ---------------------------------------------------------------- */}
           {/* Detalles producto */}
           <div className="flex flex-col">
+            {/* Categoría + título principal del producto */}
+            {/* Eyebrow categoría */}
             {/* Eyebrow categoría */}
             <div className="text-xs uppercase tracking-[0.12em] text-gray-500 font-semibold mb-2">
               {product.category?.name || "Categoría"}
@@ -343,6 +381,7 @@ export default function ProductPage() {
             <h1 className="text-4xl md:text-5xl font-black tracking-tight leading-[1.05] mb-4">
               {product.title?.[lang]}
             </h1>
+            {/* Precio principal (formateado) */}
             <div className="mt-2 sm:mt-4 mb-6">
               {(() => {
                 const precio = selectedOption?.priceUSD ?? product.variants?.[0]?.options?.[0]?.priceUSD ?? product.priceUSD;
@@ -362,6 +401,7 @@ export default function ProductPage() {
                 );
               })()}
             </div>
+            {/* Badge y confianza: MercadoLibre / Mercado Pago */}
             <div className="mb-4">
               <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white px-3 py-3">
                 <div className="flex items-center gap-3">
@@ -387,10 +427,12 @@ export default function ProductPage() {
                 </a>
               </div>
             </div>
+            {/* Subtítulo opcional del producto */}
             {product.subtitle && <p className="text-gray-600 mb-4">{product.subtitle}</p>}
 
             {/* Cápsulas */}
             <div className="flex flex-col space-y-2 mt-6">
+              {/* Selección de variantes (talles/ediciones/etc.) */}
               {/* Opciones de variante multilenguaje y precio */}
               {Array.isArray(product.variants) && product.variants.length > 0 && (
                 <div className="mb-6">
@@ -426,6 +468,7 @@ export default function ProductPage() {
               )}
             </div>
 
+            {/* Selector de cantidad */}
             {/* Cantidad */}
             <div className="flex flex-col space-y-2 mt-6">
               <label className="uppercase text-sm font-semibold text-gray-800">Cantidad</label>
@@ -440,6 +483,7 @@ export default function ProductPage() {
               </div>
             </div>
 
+            {/* Mensaje de stock disponible por variante */}
             {selectedOption && typeof selectedOption.stock === 'number' && (
   <div className="mt-2 text-sm text-gray-600">
     {selectedOption.stock > 0 ? (
@@ -449,6 +493,7 @@ export default function ProductPage() {
     )}
   </div>
 )}
+            {/* Beneficios clave (cuotas, envío, retiro, WhatsApp) */}
             <hr className="my-6 border-gray-100" />
             {/* Trust row (beneficios clave) */}
             <div className="mt-3 mb-2 text-sm text-gray-900 flex flex-wrap items-center justify-start gap-3 md:gap-6">
@@ -479,6 +524,7 @@ export default function ProductPage() {
               <span><strong>Entregas en Montevideo $169</strong> · Envíos al interior por DAC</span>
             </div>
 
+            {/* Bloque de compra (CTA principal) */}
             <div id="buy-block" className="grid md:grid-cols-2 gap-6 mt-6 mb-8">
               <button
                 disabled={isOutOfStock || isAdding}
@@ -569,6 +615,9 @@ export default function ProductPage() {
           </div>
         </div>
 
+  {/* ================================================================== */}
+  {/* === DESCRIPCIÓN DETALLADA DEL PRODUCTO ========================= */}
+  {/* ================================================================== */}
         {/* Descripción del producto (al final, ancho completo) */}
         {productDescription && (
           <div
@@ -577,6 +626,9 @@ export default function ProductPage() {
           />
         )}
 
+  {/* ================================================================== */}
+  {/* === PRODUCTOS RELACIONADOS ===================================== */}
+  {/* ================================================================== */}
         {product && (
           <RelatedProducts
             excludeSlugs={[product.slug]}
@@ -585,6 +637,9 @@ export default function ProductPage() {
           />
         )}
 
+  {/* ================================================================== */}
+  {/* === BOTÓN SCROLL TO TOP ======================================== */}
+  {/* ================================================================== */}
         {/* Scroll top */}
         {showScrollTop && (
           <button onClick={scrollToTop} className="fixed bottom-20 right-6 p-3 bg-black text-white rounded-full shadow-lg z-50 hover:bg-[#FF2D55] transition">
@@ -592,7 +647,9 @@ export default function ProductPage() {
           </button>
         )}
 
-
+  {/* ================================================================== */}
+  {/* === TOAST DE ERRORES DE STOCK / VALIDACIONES =================== */}
+  {/* ================================================================== */}
         {/* Toast notification for stock limit and errors */}
         {showToast && (
           <div className="fixed top-4 left-1/2 transform -translate-x-1/2 bg-red-500 bg-opacity-90 text-white text-sm px-4 py-2 rounded shadow-md max-w-[90%] z-50 flex items-center gap-2">
@@ -601,7 +658,9 @@ export default function ProductPage() {
           </div>
         )}
 
-        
+  {/* ================================================================== */}
+  {/* === STICKY CTA (MOBILE) PARA COMPRA RÁPIDA ===================== */}
+  {/* ================================================================== */}
         {/* Sticky CTA (mobile) */}
         {showStickyCTA && !isOutOfStock && (
           <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-gray-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 shadow-[0_-6px_20px_rgba(0,0,0,0.08)]">

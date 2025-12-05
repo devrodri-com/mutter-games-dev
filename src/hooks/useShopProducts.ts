@@ -1,4 +1,7 @@
 // src/hooks/useShopProducts.ts
+// ============================================================================
+// === HOOK PRINCIPAL PARA LA TIENDA (/shop) ==================================
+// ============================================================================
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useSearchParams as useSearchParamsBase } from "react-router-dom";
@@ -7,6 +10,9 @@ import { fetchProductsPage, fetchProducts, type FetchProductsPageOptions } from 
 import type { QueryDocumentSnapshot } from "firebase/firestore";
 import { Product, Category, Subcategory } from "../data/types";
 
+// ============================================================================
+// === TIPOS LOCALES ==========================================================
+// ============================================================================
 // Define un tipo para productos locales
 type LocalProduct = Product & {
   active?: boolean;
@@ -22,6 +28,11 @@ type LocalProduct = Product & {
   price?: number;
 };
 
+type SortOption = "" | "priceAsc" | "priceDesc" | "az" | "za";
+
+// ============================================================================
+// === WRAPPER PARA QUERYSTRING (IOS-SAFE) ====================================
+// ============================================================================
 // Wrapper para evitar escrituras redundantes en iOS y compararlas con la URL actual
 const useSearchParamsSafe = () => {
   const [sp, setSP] = useSearchParamsBase();
@@ -41,12 +52,18 @@ const useSearchParamsSafe = () => {
   return [sp, safeSet] as const;
 };
 
+// ============================================================================
+// === IMPLEMENTACIÓN DEL HOOK useShopProducts ================================
+// ============================================================================
 export function useShopProducts() {
   const { i18n } = useTranslation();
   const location = useLocation();
   const [urlSearchParams, setSearchParams] = useSearchParamsSafe();
   const isIOS = typeof navigator !== "undefined" && /iP(hone|ad|od)/i.test(navigator.userAgent);
 
+  // ------------------------------------------------------------------------
+  // ESTADO LOCAL: PAGINACIÓN, BÚSQUEDA, FILTROS, ORDEN Y UI
+  // ------------------------------------------------------------------------
   // Estado de paginación
   const [paginatedProducts, setPaginatedProducts] = useState<LocalProduct[]>([]);
   const [lastDoc, setLastDoc] = useState<QueryDocumentSnapshot | null>(null);
@@ -67,7 +84,7 @@ export function useShopProducts() {
   const [selectedType, setSelectedType] = useState("Todos");
 
   // Orden
-  const [sortOption, setSortOption] = useState("");
+  const [sortOption, setSortOption] = useState<SortOption>("az");
   const [selectedOrderMobile, setSelectedOrderMobile] = useState("");
   const [showOrderMenuMobile, setShowOrderMenuMobile] = useState(false);
 
@@ -85,6 +102,9 @@ export function useShopProducts() {
   const filterParamRaw = urlSearchParams.get("filter") || "";
   const filterParam = filterParamRaw ? filterParamRaw.toUpperCase() : "";
 
+  // ------------------------------------------------------------------------
+  // EFECTOS DE LAYOUT / UI (mobile, scroll, eventos custom)
+  // ------------------------------------------------------------------------
   // Determinar si es Mobile View
   useEffect(() => {
     const checkMobile = () => setIsMobileView(window.innerWidth < 768);
@@ -116,6 +136,9 @@ export function useShopProducts() {
     return () => window.removeEventListener("mobileSearch", handleMobileSearch);
   }, []);
 
+  // ------------------------------------------------------------------------
+  // EFECTO: CARGA DE CATEGORÍAS Y SUBCATEGORÍAS DESDE FIREBASE
+  // ------------------------------------------------------------------------
   // Cargar categorías y subcategorías
   useEffect(() => {
     const loadData = async () => {
@@ -162,6 +185,9 @@ export function useShopProducts() {
     loadData();
   }, [i18n.language]);
 
+  // ------------------------------------------------------------------------
+  // FUNCIÓN: CARGAR PRIMERA PÁGINA DE PRODUCTOS (PAGINACIÓN)
+  // ------------------------------------------------------------------------
   // Cargar primera página de productos paginados
   const loadFirstPage = async () => {
     setIsInitialLoad(true);
@@ -204,6 +230,9 @@ export function useShopProducts() {
     }
   };
 
+  // ------------------------------------------------------------------------
+  // FUNCIÓN: CARGAR SIGUIENTES PÁGINAS (LOAD MORE)
+  // ------------------------------------------------------------------------
   // Cargar más productos (siguiente página)
   const loadMore = async () => {
     if (!hasMore || isLoadingPage || !lastDoc) return;
@@ -241,6 +270,9 @@ export function useShopProducts() {
     }
   };
 
+  // ------------------------------------------------------------------------
+  // EFECTO: MODO BÚSQUEDA GLOBAL (CARGA TODOS LOS PRODUCTOS UNA VEZ)
+  // ------------------------------------------------------------------------
   // Cargar todos los productos cuando searchTerm pasa de vacío a no vacío (modo búsqueda global)
   useEffect(() => {
     const wasEmpty = prevSearchTermRef.current === "";
@@ -279,6 +311,9 @@ export function useShopProducts() {
     prevSearchTermRef.current = searchTerm;
   }, [searchTerm]);
 
+  // ------------------------------------------------------------------------
+  // EFECTO: CARGA PÁGINA INICIAL CUANDO CAMBIAN FILTROS / ORDEN
+  // ------------------------------------------------------------------------
   // Cargar primera página al montar o cuando cambian filtros/orden (solo si no hay búsqueda)
   useEffect(() => {
     // Si hay búsqueda activa, no cargar páginas paginadas
@@ -294,19 +329,22 @@ export function useShopProducts() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedCategory, selectedSubcategory, sortOption, searchTerm]);
 
+  // ------------------------------------------------------------------------
+  // EFECTO: LECTURA INICIAL DE PARÁMETROS DE URL (QUERYSTRING)
+  // ------------------------------------------------------------------------
   // Lectura inicial desde la URL (al montar)
   useEffect(() => {
     const q = urlSearchParams.get("q") || "";
     const cat = urlSearchParams.get("cat") || "";
     const sub = urlSearchParams.get("sub") || "";
     const type = urlSearchParams.get("type") || "";
-    const sort = urlSearchParams.get("sort") || "";
+    const sort = urlSearchParams.get("sort") || "az"; // Default a "az" para consistencia con UI
 
     setSearchTerm(q);
     setSelectedCategory(cat);
     setSelectedSubcategory(sub);
     setSelectedType(type || "Todos");
-    setSortOption(sort);
+    setSortOption(sort as SortOption);
 
     // Sincroniza el selector mobile de orden
     if (sort === "priceAsc") setSelectedOrderMobile("asc");
@@ -319,6 +357,9 @@ export function useShopProducts() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ------------------------------------------------------------------------
+  // EFECTO: ESCRITURA DE PARÁMETROS EN LA URL (SYNC QUERYSTRING)
+  // ------------------------------------------------------------------------
   // Escritura a la URL al cambiar búsqueda/filtros/orden (evitar loop en iOS/WebKit)
   const lastQSRef = useRef<string>("");
   useEffect(() => {
@@ -354,6 +395,9 @@ export function useShopProducts() {
     setSearchParams,
   ]);
 
+  // ------------------------------------------------------------------------
+  // HANDLERS DE FILTROS Y ORDEN (DESKTOP / MOBILE)
+  // ------------------------------------------------------------------------
   // Handlers
   const handleOrderChangeMobile = (order: string) => {
     setSelectedOrderMobile(order);
@@ -400,6 +444,9 @@ export function useShopProducts() {
   // Determinar si estamos en modo búsqueda global
   const isSearchMode = searchTerm.trim() !== "";
 
+  // ------------------------------------------------------------------------
+  // FILTRADO EN MEMORIA (SEGÚN MODO PAGINADO O BÚSQUEDA GLOBAL)
+  // ------------------------------------------------------------------------
   // Filtrado en memoria: aplicar todos los filtros según el modo
   const filteredProducts = useMemo(() => {
     const selectedTipo = selectedType;
@@ -468,6 +515,9 @@ export function useShopProducts() {
     return p.price ?? 0;
   };
 
+  // ------------------------------------------------------------------------
+  // ORDENAMIENTO EN MEMORIA (DESKTOP)
+  // ------------------------------------------------------------------------
   // Ordenamiento completo en memoria (todo se ordena aquí, sin orderBy en Firestore)
   type Language = "en" | "es";
   const lang = i18n.language as Language;
@@ -508,6 +558,9 @@ export function useShopProducts() {
     return sorted;
   }, [filteredProducts, sortOption, lang]);
 
+  // ------------------------------------------------------------------------
+  // ORDENAMIENTO EN MEMORIA (MOBILE)
+  // ------------------------------------------------------------------------
   // Ordenamiento MOBILE por selectedOrderMobile (todo en memoria)
   const sortedProductsMobile = useMemo(() => {
     let sorted = [...filteredProducts];
@@ -541,9 +594,10 @@ export function useShopProducts() {
     return sorted;
   }, [filteredProducts, selectedOrderMobile, lang]);
 
+  // Products a renderizar (para compatibilidad con código existente)
   const productsToDisplay = sortedProducts;
 
-  // Available types: usar productos globales en modo búsqueda, paginados en modo normal
+  // Tipos disponibles (según modo actual)
   const availableTypes = Array.from(
     new Set((isSearchMode ? allProducts : paginatedProducts).map((p) => p.tipo).filter(Boolean))
   ) as string[];
