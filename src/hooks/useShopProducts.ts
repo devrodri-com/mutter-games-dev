@@ -338,7 +338,7 @@ export function useShopProducts() {
     const cat = urlSearchParams.get("cat") || "";
     const sub = urlSearchParams.get("sub") || "";
     const type = urlSearchParams.get("type") || "";
-    const sort = urlSearchParams.get("sort") || "";
+    const sort = urlSearchParams.get("sort") || "az"; // Default a "az" para consistencia con UI
 
     setSearchTerm(q);
     setSelectedCategory(cat);

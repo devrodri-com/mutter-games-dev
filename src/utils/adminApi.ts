@@ -37,11 +37,6 @@ export async function adminApiFetch(path: string, options: RequestInit = {}) {
   return res.json();
 }
 
-// ⚠️ Solo para uso manual en consola, no usar en producción real
-export async function runSortKeyMigrationOnce() {
-  console.log("[MIGRATION] Ejecutando /api/admin/products/migrate-sort-key...");
-  const res = await adminApiFetch("/api/admin/products/migrate-sort-key", {
-    method: "POST",
-  });
-  console.log("[MIGRATION] Resultado:", res);
-}
+// NOTA: runSortKeyMigrationOnce() fue eliminado - era una herramienta temporal de depuración.
+// Si en el futuro se necesita una migración, implementarla como una acción de administrador real
+// con manejo de errores adecuado y retroalimentación al usuario, no como una función aislada en consola.
