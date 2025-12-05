@@ -36,3 +36,12 @@ export async function adminApiFetch(path: string, options: RequestInit = {}) {
 
   return res.json();
 }
+
+// ⚠️ Solo para uso manual en consola, no usar en producción real
+export async function runSortKeyMigrationOnce() {
+  console.log("[MIGRATION] Ejecutando /api/admin/products/migrate-sort-key...");
+  const res = await adminApiFetch("/api/admin/products/migrate-sort-key", {
+    method: "POST",
+  });
+  console.log("[MIGRATION] Resultado:", res);
+}

@@ -22,6 +22,8 @@ type LocalProduct = Product & {
   price?: number;
 };
 
+type SortOption = "" | "priceAsc" | "priceDesc" | "az" | "za";
+
 // Wrapper para evitar escrituras redundantes en iOS y compararlas con la URL actual
 const useSearchParamsSafe = () => {
   const [sp, setSP] = useSearchParamsBase();
@@ -67,7 +69,7 @@ export function useShopProducts() {
   const [selectedType, setSelectedType] = useState("Todos");
 
   // Orden
-  const [sortOption, setSortOption] = useState("");
+  const [sortOption, setSortOption] = useState<SortOption>("az");
   const [selectedOrderMobile, setSelectedOrderMobile] = useState("");
   const [showOrderMenuMobile, setShowOrderMenuMobile] = useState(false);
 
@@ -306,7 +308,7 @@ export function useShopProducts() {
     setSelectedCategory(cat);
     setSelectedSubcategory(sub);
     setSelectedType(type || "Todos");
-    setSortOption(sort);
+    setSortOption(sort as SortOption);
 
     // Sincroniza el selector mobile de orden
     if (sort === "priceAsc") setSelectedOrderMobile("asc");

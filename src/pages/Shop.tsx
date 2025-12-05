@@ -27,6 +27,9 @@ import MobileFilterDrawer from "../components/MobileFilterDrawer";
 import Footer from "../components/Footer";
 import { useShopProducts } from "../hooks/useShopProducts";
 
+// ============================================================================
+// === TIPOS LOCALES ==========================================================
+// ============================================================================
 // Define un tipo para productos locales
 type LocalProduct = Product & {
   active?: boolean;
@@ -42,9 +45,17 @@ type LocalProduct = Product & {
   price?: number;
 };
 
+type SortOption = "" | "priceAsc" | "priceDesc" | "az" | "za";
+
+// ============================================================================
+// === COMPONENTE PRINCIPAL: SHOP ============================================
+// ============================================================================
 export default function Shop() {
   const { t } = useTranslation();
 
+  // ========================================================================
+  // === HOOK PRINCIPAL: ESTADO Y DATOS DE SHOP ============================
+  // ========================================================================
   // Usar hook para toda la lógica de estado y datos
   const {
     // Estado de paginación
@@ -103,6 +114,9 @@ export default function Shop() {
     setSearchParams,
   } = useShopProducts();
 
+  // ========================================================================
+  // === OPCIONES DE ORDEN Y HANDLERS ======================================
+  // ========================================================================
   // Para el nuevo Listbox de mobile
   const sortOptions = [
     { value: "az", label: "Nombre: A-Z" },
@@ -113,7 +127,7 @@ export default function Shop() {
   const selectedSort = sortOptions.find((o) => o.value === sortOption) || sortOptions[0];
 
   const handleSortChange = (option: { value: string; label: string }) => {
-    setSortOption(option.value);
+    setSortOption(option.value as SortOption);
   };
 
   const handleOpenFilters = () => setIsFilterOpen(true);
@@ -121,6 +135,9 @@ export default function Shop() {
   // Banner dinámico según filtro (normalizando a mayúsculas)
   const normalizedFilter = filterParam.toUpperCase();
 
+  // ========================================================================
+  // === SKELETON INICIAL (CARGA) ==========================================
+  // ========================================================================
   // Mostrar skeletons solo en carga inicial
   if (isInitialLoad && loading) {
     return (
@@ -140,6 +157,9 @@ export default function Shop() {
   return (
     <section className="bg-[#f9f9f9] text-black flex flex-col min-h-screen pt-[90px] md:pt-[110px]">
       <ShopNavbar />
+      {/* ================================================================== */}
+      {/* === SEO / METADATOS (HELMET) ==================================== */}
+      {/* ================================================================== */}
       <Helmet>
         <title>Mutter Games – Tienda de videojuegos y coleccionables</title>
         <meta
@@ -168,6 +188,9 @@ export default function Shop() {
       </Helmet>
 
       <div className="md:grid md:grid-cols-[250px_1fr] max-w-7xl mx-auto px-4 md:px-6 gap-8 overflow-x-hidden">
+        {/* ================================================================== */}
+        {/* === SIDEBAR (DESKTOP) ========================================== */}
+        {/* ================================================================== */}
         {/* Sidebar */}
         <motion.aside
           className="hidden md:block space-y-6 pr-6 border-r border-gray-200"
@@ -231,7 +254,11 @@ export default function Shop() {
         </motion.aside>
 
         {/* Contenido principal - Productos */}
+        {/* ================================================================== */}
+        {/* === CONTENIDO PRINCIPAL: LISTA DE PRODUCTOS ==================== */}
+        {/* ================================================================== */}
         <main>
+          {/* === HEADER DESKTOP (TÍTULO, CONTADOR, QUITAR FILTROS, ORDEN) === */}
           {/* Desktop view */}
           <div className="flex items-center justify-between mb-4 hidden md:flex">
             <div>
@@ -316,6 +343,7 @@ export default function Shop() {
             </div>
           </div>
 
+          {/* === HEADER MOBILE (TÍTULO + CONTADOR) ========================= */}
           {/* Mobile view */}
           <div className="block md:hidden mb-4">
             <div>
@@ -347,6 +375,7 @@ export default function Shop() {
             </div>
           </div>
 
+          {/* === CONTROLES MOBILE: FILTROS Y ORDENAR ======================= */}
           {/* MOBILE: Filtros y ordenar */}
           <div className="flex px-2 py-2 sm:hidden sticky top-[90px] z-40 bg-[#f9f9f9]">
             <div className="w-1/2 px-1">
@@ -386,6 +415,7 @@ export default function Shop() {
             </div>
           </div>
 
+          {/* === PANEL FILTROS MOBILE (SIDEBAR COLLAPSIBLE) ================ */}
           {/* MOBILE: SidebarFilter collapsible panel */}
           {showMobileFilter && (
             <div className="md:hidden mt-4">
@@ -435,6 +465,7 @@ export default function Shop() {
             </div>
           )}
 
+          {/* === GRID DE PRODUCTOS + SKELETONS ============================= */}
           {/* Grid de productos */}
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 mt-6">
             <Suspense
@@ -481,6 +512,7 @@ export default function Shop() {
             </Suspense>
           </div>
 
+          {/* === BOTÓN CARGAR MÁS (PAGINACIÓN) ============================ */}
           {/* Botón "Cargar más" (oculto en modo búsqueda global) */}
           {!isSearchMode && !isInitialLoad && hasMore && !isLoadingPage && (isMobileView ? sortedProductsMobile : sortedProducts).length > 0 && (
             <div className="flex justify-center mt-8 mb-8">
@@ -496,6 +528,9 @@ export default function Shop() {
         </main>
       </div>
 
+      {/* ================================================================== */}
+      {/* === BOTÓN SCROLL TO TOP ======================================== */}
+      {/* ================================================================== */}
       {showScrollTop && (
         <button
           onClick={scrollToTop}
@@ -506,6 +541,9 @@ export default function Shop() {
         </button>
       )}
 
+      {/* ================================================================== */}
+      {/* === DRAWER FILTROS MOBILE ====================================== */}
+      {/* ================================================================== */}
       {/* Drawer de filtros mobile */}
       <MobileFilterDrawer
         isOpen={isFilterOpen}
@@ -517,6 +555,9 @@ export default function Shop() {
         setSelectedSubcategory={setSelectedSubcategory}
       />
 
+      {/* ================================================================== */}
+      {/* === FOOTER ====================================================== */}
+      {/* ================================================================== */}
       {/* Footer */}
       <Footer variant="light" />
     </section>

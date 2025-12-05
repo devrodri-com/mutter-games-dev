@@ -1,6 +1,7 @@
 // src/components/admin/ProductList.tsx
 
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Pencil, Trash2, Power } from "lucide-react";
 import { Product, Category, Subcategory } from "../../data/types";
 import EditProductModal from "./EditProductModal";
@@ -8,6 +9,7 @@ import ModalConfirm from "./ModalConfirm";
 import { normalizeProduct } from "@/utils/normalizeProduct";
 import { fetchCategories, fetchAllSubcategories } from "@/firebase/categories";
 import { adminApiFetch } from "../../utils/adminApi";
+import { ProductAdminHeader } from "./ProductAdminHeader";
 
 async function updateProductAdminAPI(id: string, data: Partial<Product>) {
   await adminApiFetch(`/api/admin/products/${id}`, {
@@ -25,6 +27,7 @@ async function deleteProductAdminAPI(id: string) {
 }
 
 export default function ProductList() {
+  const navigate = useNavigate();
   const [products, setProducts] = useState<Product[]>([]);
   const [categoryFilter, setCategoryFilter] = useState("Todas");
   const [searchTerm, setSearchTerm] = useState("");
@@ -222,7 +225,14 @@ export default function ProductList() {
 
   return (
     <div className="bg-white p-4 rounded shadow">
-      <h2 className="text-xl font-bold mb-4">Publicaciones</h2>
+      <ProductAdminHeader title="Publicaciones">
+        <button
+          onClick={() => navigate("/admin/productForm")}
+          className="px-4 py-2 bg-[#FF2D55] text-white rounded-md hover:bg-[#CC1E44] transition-colors font-medium"
+        >
+          Crear producto
+        </button>
+      </ProductAdminHeader>
 
       {error && (
         <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-md">
