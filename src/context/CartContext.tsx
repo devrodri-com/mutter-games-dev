@@ -13,6 +13,30 @@ const isIOS =
   typeof navigator !== "undefined" &&
   /iP(ad|hone|od)/.test(navigator.userAgent || "");
 
+// Wrappers seguros para localStorage con try/catch
+function safeGetLocalStorageItem(key: string): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem(key);
+  } catch (e) {
+    if (import.meta.env.DEV) {
+      console.warn(`[CartContext] Error leyendo localStorage key "${key}"`, e);
+    }
+    return null;
+  }
+}
+
+function safeSetLocalStorageItem(key: string, value: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(key, value);
+  } catch (e) {
+    if (import.meta.env.DEV) {
+      console.warn(`[CartContext] Error escribiendo localStorage key "${key}"`, e);
+    }
+  }
+}
+
 async function ensureAuthUID(): Promise<string> {
   const authInstance = getAuth();
   if (authInstance.currentUser?.uid) {
@@ -99,7 +123,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const hasInitialized = useRef(false);
 
   const [cartItems, setCartItems] = useState<CartItem[]>(() => {
-    const savedCart = localStorage.getItem("cartItems");
+    const savedCart = safeGetLocalStorageItem("cartItems");
     return savedCart ? JSON.parse(savedCart) : [];
   });
 
@@ -128,7 +152,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   });
 
   const [shippingData, setShippingData] = useState<ShippingData>(() => {
-    const stored = localStorage.getItem("shippingData");
+    const stored = safeGetLocalStorageItem("shippingData");
     return stored
       ? JSON.parse(stored)
       : {
@@ -174,7 +198,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (import.meta.env.DEV) console.log("🟨 useEffect: guardando shippingData en localStorage");
-    localStorage.setItem("shippingData", JSON.stringify(shippingData));
+    safeSetLocalStorageItem("shippingData", JSON.stringify(shippingData));
   }, [shippingData]);
 
   useEffect(() => {
@@ -195,7 +219,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       // 🚧 Guardar: si lo que llega de Firebase está vacío pero tengo carrito local, NO piso el local
       if (!incoming || incoming.length === 0) {
         try {
-          const local = JSON.parse(localStorage.getItem("cartItems") || "[]");
+          const local = JSON.parse(safeGetLocalStorageItem("cartItems") || "[]");
           if (Array.isArray(local) && local.length > 0) {
             if (import.meta.env.DEV)
               console.warn("⏭️ Ignorando carrito remoto vacío para no pisar el local existente");
@@ -207,7 +231,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       const safeItems = Array.isArray(resolvedItems) ? resolvedItems : [];
       if (import.meta.env.DEV) console.log("🟩 Items recibidos desde Firebase:", safeItems);
       setCartItems(safeItems);
-      localStorage.setItem("cartItems", JSON.stringify(safeItems));
+      safeSetLocalStorageItem("cartItems", JSON.stringify(safeItems));
     });
 
     return () => {
@@ -304,7 +328,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       );
       // Persistimos inmediatamente para evitar que reaparezca al recargar
       if (currentUid) { try { saveCartToFirebase(currentUid, next); } catch {} }
-      localStorage.setItem("cartItems", JSON.stringify(next));
+      safeSetLocalStorageItem("cartItems", JSON.stringify(next));
       return next;
     });
   };
@@ -312,7 +336,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const clearCart = () => {
     if (import.meta.env.DEV) console.warn("⚠️ setCartItems([]) ejecutado, posible limpieza del carrito");
     setCartItems([]);
-    localStorage.setItem("cartItems", JSON.stringify([]));
+    safeSetLocalStorageItem("cartItems", JSON.stringify([]));
     // también vaciamos el carrito remoto para que no reaparezca al recargar
     if (currentUid) {
       try { saveCartToFirebase(currentUid, []); } catch (e) { console.warn("No se pudo vaciar carrito remoto:", e); }
@@ -348,7 +372,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   // Sincronización optimizada y escalable con localStorage para cartItems
   useEffect(() => {
-    localStorage.setItem("cartItems", JSON.stringify(cartItems));
+    safeSetLocalStorageItem("cartItems", JSON.stringify(cartItems));
   }, [cartItems]);
 
   /*

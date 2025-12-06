@@ -4,7 +4,7 @@ import { useParams, Link } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { Helmet } from "react-helmet-async";
 import ProductPageNavbar from "../components/ProductPageNavbar";
-import { fetchProductBySlug, fetchProducts } from "@/firebase/products";
+import { fetchProductBySlug } from "@/firebase/products";
 import { useCart } from "../context/CartContext";
 import { Check, ChevronLeft, ArrowUp, CreditCard, Truck, Store, MessageSquare, Lock } from "lucide-react";
 import { FiMinus, FiPlus } from "react-icons/fi";
@@ -15,6 +15,14 @@ import Footer from "../components/Footer";
 import { useTranslation } from "react-i18next";
 import { HiExclamation, HiExclamationCircle } from "react-icons/hi";
 import { toast } from "react-hot-toast";
+
+// === DEBUG iOS ============================================================
+const isIOS =
+  typeof navigator !== "undefined" &&
+  /iP(ad|hone|od)/.test(navigator.userAgent || "");
+
+  const IOS_DEBUG_SIMPLE = false; // Modo pantalla mínima desactivado
+// ==========================================================================
 
 // ============================================================================
 // === COMPONENTE PRINCIPAL: PRODUCT PAGE =====================================
@@ -29,13 +37,22 @@ export default function ProductPage() {
   const { slug } = useParams<{ slug: string }>();
   const decodedSlug = decodeURIComponent(slug || "");
   console.log("🧠 DEBUG PARAMS — slug:", slug);
+  // 🧪 MODO DEBUG SOLO iOS: página mínima sin lógica pesada
+  if (isIOS && IOS_DEBUG_SIMPLE) {
+    return (
+      <div className="p-10">
+        <h1>ProductPage iOS DEBUG</h1>
+        <p>slug: {decodedSlug}</p>
+        <p>Si esta pantalla NO se rompe en tu iPhone, el problema está en la lógica/UX real de ProductPage.</p>
+      </div>
+    );
+  }
   const [product, setProduct] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [selectedOption, setSelectedOption] = useState<{ value: string; priceUSD: number; variantLabel?: string; variantId?: string; stock?: number } | null>(null);
   const [selectedImage, setSelectedImage] = useState(0);
   const [quantity, setQuantity] = useState(1);
   const [showScrollTop, setShowScrollTop] = useState(false);
-  const [relatedProducts, setRelatedProducts] = useState<any[]>([]);
   const { addToCart, items } = useCart();
   const [toastMessage, setToastMessage] = useState('');
   const [showToast, setShowToast] = useState(false);
@@ -108,24 +125,6 @@ export default function ProductPage() {
     loadProduct();
   }, [slug]);
 
-  // ------------------------------------------------------------------------
-  // EFECTO: CARGA DE PRODUCTOS RELACIONADOS (MISMA CATEGORÍA)
-  // ------------------------------------------------------------------------
-  useEffect(() => {
-    async function loadRelated() {
-      if (!product || !product.category?.name) return;
-      try {
-        const all = await fetchProducts();
-        const filtered = all.filter((p: any) =>
-          p.category?.name === product.category.name && p.slug !== product.slug
-        ).slice(0, 4);
-        setRelatedProducts(filtered);
-      } catch (err) {
-        console.error("Error cargando relacionados", err);
-      }
-    }
-    loadRelated();
-  }, [product]);
 
   // ------------------------------------------------------------------------
   // EFECTO: BOTÓN SCROLL TO TOP SEGÚN POSICIÓN DE SCROLL
@@ -201,6 +200,12 @@ export default function ProductPage() {
   // EFECTO: CONTROL DE STICKY CTA (MOBILE) SEGÚN VISIBILIDAD DEL BLOQUE DE COMPRA
   // ------------------------------------------------------------------------
   useEffect(() => {
+    // En iOS desactivamos el observer para evitar posibles bugs de WebKit
+    if (isIOS) {
+      setShowStickyCTA(true); // dejamos siempre visible la barra inferior
+      return;
+    }
+
     const target = document.getElementById('buy-block');
     if (!target) return;
     const observer = new IntersectionObserver(
@@ -275,27 +280,29 @@ export default function ProductPage() {
             }
           />
           <meta name="twitter:image" content={product.images?.[0] || "/seo-image.jpg"} />
-          {/* JSON-LD: Product schema for SEO */}
-          <script type="application/ld+json">{JSON.stringify({
-            "@context": "https://schema.org",
-            "@type": "Product",
-            "name": (product.title?.[lang] || product.title) || "",
-            "description": typeof product.description === 'object'
-              ? (product.description?.[lang] || "Producto original disponible en Mutter Games.")
-              : (product.description || "Producto original disponible en Mutter Games."),
-            "image": Array.isArray(product.images) && product.images.length ? product.images : ["/seo-image.jpg"],
-            "sku": String(product.id || product.slug || ""),
-            "brand": { "@type": "Brand", "name": "Mutter Games" },
-            "category": product.category?.name || "Coleccionables",
-            "url": typeof window !== "undefined" ? window.location.href : "",
-            "offers": {
-              "@type": "Offer",
-              "priceCurrency": "UYU",
-              "price": (selectedOption?.priceUSD ?? product.variants?.[0]?.options?.[0]?.priceUSD ?? product.priceUSD) || 0,
-              "availability": totalStock > 0 ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
-              "url": typeof window !== "undefined" ? window.location.href : ""
-            }
-          })}</script>
+          {/* JSON-LD: Product schema for SEO (desactivado en iOS por ahora) */}
+          {!isIOS && (
+            <script type="application/ld+json">{JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "Product",
+              "name": (product.title?.[lang] || product.title) || "",
+              "description": typeof product.description === 'object'
+                ? (product.description?.[lang] || "Producto original disponible en Mutter Games.")
+                : (product.description || "Producto original disponible en Mutter Games."),
+              "image": Array.isArray(product.images) && product.images.length ? product.images : ["/seo-image.jpg"],
+              "sku": String(product.id || product.slug || ""),
+              "brand": { "@type": "Brand", "name": "Mutter Games" },
+              "category": product.category?.name || "Coleccionables",
+              "url": typeof window !== "undefined" ? window.location.href : "",
+              "offers": {
+                "@type": "Offer",
+                "priceCurrency": "UYU",
+                "price": (selectedOption?.priceUSD ?? product.variants?.[0]?.options?.[0]?.priceUSD ?? product.priceUSD) || 0,
+                "availability": totalStock > 0 ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
+                "url": typeof window !== "undefined" ? window.location.href : ""
+              }
+            })}</script>
+          )}
         </Helmet>
 
         {/* Barra de navegación superior específica de ProductPage */}
@@ -311,54 +318,66 @@ export default function ProductPage() {
     {/* ---------------------------------------------------------------- */}
           <div className="flex flex-col gap-4">
             {product.images?.length ? (
-              <>
-                <div className="relative">
-                  {product.images?.length > 1 && (
-                    <>
-                      <button
-                        onClick={() => slider.current?.prev()}
-                        className="absolute top-1/2 left-2 -translate-y-1/2 z-20 bg-white/80 hover:bg-white rounded-full p-2 shadow-md md:block hidden"
-                      >
-                        <ChevronLeft size={24} className="text-black hover:text-[#FF2D55] transition" />
-                      </button>
-                      <button
-                        onClick={() => slider.current?.next()}
-                        className="absolute top-1/2 right-2 -translate-y-1/2 z-20 bg-white/80 hover:bg-white rounded-full p-2 shadow-md md:block hidden"
-                      >
-                        <ChevronLeft size={24} className="text-black hover:text-[#FF2D55] transition rotate-180" />
-                      </button>
-                    </>
-                  )}
-                  <div
-                    ref={sliderRef}
-                    className="keen-slider rounded-lg overflow-hidden"
-                  >
-                    {product.images.map((img: string, i: number) => (
-                      <div key={i} className="keen-slider__slide">
-                        <img
-                          src={img}
-                          alt={`Imagen ${i}`}
-                          className="object-contain max-h-[400px] w-full select-none"
-                          draggable="false"
-                        />
-                      </div>
-                    ))}
-                  </div>
+              isIOS ? (
+                // En iOS mostramos solo una imagen estática, sin slider ni miniaturas
+                <div className="relative rounded-lg overflow-hidden">
+                  <img
+                    src={product.images[0]}
+                    alt="Imagen principal"
+                    className="object-contain max-h-[400px] w-full select-none"
+                    draggable="false"
+                  />
                 </div>
-                {product.images.length > 1 && (
-                  <div className="flex gap-2 overflow-x-auto pt-4">
-                    {product.images.map((img: string, i: number) => (
-                      <button
-                        key={i}
-                        onClick={() => slider.current?.moveToIdx(i)}
-                        className={`w-20 h-20 rounded-md border ${selectedImage === i ? "border-gray-900" : "border-gray-300"} hover:ring-1 hover:ring-gray-900/20`}
-                      >
-                        <img src={img} alt={`Miniatura ${i}`} className="object-cover w-full h-full" />
-                      </button>
-                    ))}
+              ) : (
+                <>
+                  <div className="relative">
+                    {product.images?.length > 1 && (
+                      <>
+                        <button
+                          onClick={() => slider.current?.prev()}
+                          className="absolute top-1/2 left-2 -translate-y-1/2 z-20 bg-white/80 hover:bg-white rounded-full p-2 shadow-md md:block hidden"
+                        >
+                          <ChevronLeft size={24} className="text-black hover:text-[#FF2D55] transition" />
+                        </button>
+                        <button
+                          onClick={() => slider.current?.next()}
+                          className="absolute top-1/2 right-2 -translate-y-1/2 z-20 bg-white/80 hover:bg-white rounded-full p-2 shadow-md md:block hidden"
+                        >
+                          <ChevronLeft size={24} className="text-black hover:text-[#FF2D55] transition rotate-180" />
+                        </button>
+                      </>
+                    )}
+                    <div
+                      ref={sliderRef}
+                      className="keen-slider rounded-lg overflow-hidden"
+                    >
+                      {product.images.map((img: string, i: number) => (
+                        <div key={i} className="keen-slider__slide">
+                          <img
+                            src={img}
+                            alt={`Imagen ${i}`}
+                            className="object-contain max-h-[400px] w-full select-none"
+                            draggable="false"
+                          />
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                )}
-              </>
+                  {product.images.length > 1 && (
+                    <div className="flex gap-2 overflow-x-auto pt-4">
+                      {product.images.map((img: string, i: number) => (
+                        <button
+                          key={i}
+                          onClick={() => slider.current?.moveToIdx(i)}
+                          className={`w-20 h-20 rounded-md border ${selectedImage === i ? "border-gray-900" : "border-gray-300"} hover:ring-1 hover:ring-gray-900/20`}
+                        >
+                          <img src={img} alt={`Miniatura ${i}`} className="object-cover w-full h-full" />
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )
             ) : (
               <div className="bg-gray-100 h-[450px] w-full rounded-lg flex flex-col items-center justify-center text-gray-400">
                 <div className="text-4xl">📦</div>
@@ -542,6 +561,7 @@ export default function ProductPage() {
                     setStockMessage('Debes seleccionar una opción antes de continuar.');
                     setShowToast(true);
                     setTimeout(() => setShowToast(false), 2500);
+                    scrollToBuyBlock();
                     return;
                   }
 

@@ -254,6 +254,44 @@ export async function fetchProducts(): Promise<Product[]> {
   return productsList.map(({ orden, ...rest }) => rest);
 }
 
+/**
+ * Obtiene productos por categoría con límite (optimizado para RelatedProducts)
+ */
+export async function fetchProductsByCategory(
+  categoryName: string,
+  maxItems: number = 8
+): Promise<Product[]> {
+  try {
+    const productsCollection = collection(db, "products");
+
+    // Query directo por categoría + activos
+    const q = query(
+      productsCollection,
+      where("active", "==", true),
+      where("category.name", "==", categoryName),
+      limit(maxItems)
+    );
+
+    const snapshot = await getDocs(q);
+
+    const products = snapshot.docs.map((docSnap) => {
+      const data = docSnap.data() as any;
+      return mapProductData(docSnap.id, data);
+    });
+
+    if (import.meta.env.DEV) {
+      console.log(
+        `[fetchProductsByCategory] ${products.length} productos cargados para categoría "${categoryName}"`
+      );
+    }
+
+    return products;
+  } catch (error) {
+    console.error("Error en fetchProductsByCategory:", error);
+    return [];
+  }
+}
+
 export async function fetchProductBySlug(slug: string): Promise<Product | null> {
   try {
     const productsCollection = collection(db, "products");

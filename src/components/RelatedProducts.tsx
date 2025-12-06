@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import ProductCard from "./ProductCard";
-import { fetchProducts } from "@/firebase/products";
+import { fetchProductsByCategory } from "@/firebase/products";
 
 interface Props {
   excludeSlugs?: string[];
@@ -32,12 +32,14 @@ export default function RelatedProducts({
   useEffect(() => {
     let mounted = true;
     setLoading(true);
-    fetchProducts()
-      .then((res) => {
+    fetchProductsByCategory(categoryName || "", 8)
+      .then((res: any[] | undefined) => {
         if (!mounted) return;
-        setProducts(res || []);
+        // aplicar excludeSlugs antes de setear
+        const filtered = (res || []).filter((p: any) => !excludeSlugs.includes(p.slug ?? ""));
+        setProducts(filtered);
       })
-      .catch((err) => {
+      .catch((err: unknown) => {
         // mantener silencioso en UI
         console.error("Error loading products in RelatedProducts:", err);
       })
@@ -48,20 +50,7 @@ export default function RelatedProducts({
     return () => {
       mounted = false;
     };
-  }, []);
-
-  // Normalización mínima del título sin cambiar lógica de negocio
-  const filtered = useMemo(
-    () =>
-      (products || []).map((product) => ({
-        ...product,
-        title:
-          typeof product.title === "object"
-            ? product.title?.es || product.name || "Sin título"
-            : product.title || product.name || "Sin título",
-      })),
-    [products]
-  );
+  }, [categoryName, excludeSlugs]);
 
   // Detectar overflow para mostrar flechas y fades
   const recomputeOverflow = () => {
@@ -78,7 +67,7 @@ export default function RelatedProducts({
 
   useEffect(() => {
     recomputeOverflow();
-  }, [filtered.length, loading]);
+  }, [products.length, loading]);
 
   useEffect(() => {
     const onResize = () => recomputeOverflow();
@@ -178,7 +167,7 @@ export default function RelatedProducts({
         >
           {loading
             ? skeletons
-            : filtered.map((product) => {
+            : products.map((product) => {
                 const priceUSD = product.priceUSD || 0;
                 const slug = product.slug;
 
