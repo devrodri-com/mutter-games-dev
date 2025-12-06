@@ -44,7 +44,7 @@ const isIOS =
   typeof navigator !== "undefined" &&
   /iP(ad|hone|od)/.test(navigator.userAgent || "");
 
-const IOS_CART_DEBUG_SIMPLE = false; // cambiar a true para modo carrito mínimo
+const IOS_CART_DEBUG_SIMPLE = true; // modo carrito mínimo ACTIVADO
 // ==========================================================================
 
 const createOrder = () => {
