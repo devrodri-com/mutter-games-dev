@@ -39,12 +39,30 @@ import { calculateTotal, calculateCartBreakdown, getShippingInfoByDepartment } f
 // Importá la función para buscar ciudad y estado por ZIP
 import { getCityAndStateFromZip } from "../utils/getCityAndStateFromZip";
 
+// === DEBUG iOS CART =======================================================
+const isIOS =
+  typeof navigator !== "undefined" &&
+  /iP(ad|hone|od)/.test(navigator.userAgent || "");
+
+const IOS_CART_DEBUG_SIMPLE = false; // cambiar a true para modo carrito mínimo
+// ==========================================================================
 
 const createOrder = () => {
   console.log("📝 createOrder llamada (placeholder)");
 };
 
 export default function CartPage() {
+  // --- DEBUG iOS: versión mínima de carrito sin lógica pesada ------------
+  if (isIOS && IOS_CART_DEBUG_SIMPLE) {
+    return (
+      <div className="p-10">
+        <h1>CartPage iOS DEBUG</h1>
+        <p>Si esta pantalla NO se rompe en tu iPhone, el problema está en la lógica/UX real del carrito.</p>
+      </div>
+    );
+  }
+  // -----------------------------------------------------------------------
+
   // Always call hooks at the top level, never conditionally
   const { shippingInfo, setShippingInfo } = useCart();
   const { items, updateItem, clearCart, removeItem, setShippingData, shippingData, validateShippingData } = useCart();
