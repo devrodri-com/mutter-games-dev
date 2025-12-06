@@ -4,7 +4,7 @@ import { useParams, Link } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { Helmet } from "react-helmet-async";
 import ProductPageNavbar from "../components/ProductPageNavbar";
-import { fetchProductBySlug, fetchProducts } from "@/firebase/products";
+import { fetchProductBySlug } from "@/firebase/products";
 import { useCart } from "../context/CartContext";
 import { Check, ChevronLeft, ArrowUp, CreditCard, Truck, Store, MessageSquare, Lock } from "lucide-react";
 import { FiMinus, FiPlus } from "react-icons/fi";
@@ -53,7 +53,6 @@ export default function ProductPage() {
   const [selectedImage, setSelectedImage] = useState(0);
   const [quantity, setQuantity] = useState(1);
   const [showScrollTop, setShowScrollTop] = useState(false);
-  const [relatedProducts, setRelatedProducts] = useState<any[]>([]);
   const { addToCart, items } = useCart();
   const [toastMessage, setToastMessage] = useState('');
   const [showToast, setShowToast] = useState(false);
@@ -126,24 +125,6 @@ export default function ProductPage() {
     loadProduct();
   }, [slug]);
 
-  // ------------------------------------------------------------------------
-  // EFECTO: CARGA DE PRODUCTOS RELACIONADOS (MISMA CATEGORÍA)
-  // ------------------------------------------------------------------------
-  useEffect(() => {
-    async function loadRelated() {
-      if (!product || !product.category?.name) return;
-      try {
-        const all = await fetchProducts();
-        const filtered = all.filter((p: any) =>
-          p.category?.name === product.category.name && p.slug !== product.slug
-        ).slice(0, 4);
-        setRelatedProducts(filtered);
-      } catch (err) {
-        console.error("Error cargando relacionados", err);
-      }
-    }
-    loadRelated();
-  }, [product]);
 
   // ------------------------------------------------------------------------
   // EFECTO: BOTÓN SCROLL TO TOP SEGÚN POSICIÓN DE SCROLL
