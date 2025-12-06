@@ -266,61 +266,63 @@ export default function ProductPage() {
      {/* ================================================================== */}
      {/* === SEO / METADATOS DEL PRODUCTO (HELMET + JSON-LD) ============ */}
      {/* ================================================================== */}
-        <Helmet>
-          <title>{`${product.title?.[lang] || product.title} | Mutter Games`}</title>
-          <meta
-            name="description"
-            content={
-              typeof product.description === 'object'
-                ? product.description?.[lang] || 'Producto original disponible en Mutter Games.'
-                : product.description || 'Producto original disponible en Mutter Games.'
-            }
-          />
-          <meta property="og:title" content={`${product.title?.[lang] || product.title} | Mutter Games`} />
-          <meta
-            property="og:description"
-            content={
-              typeof product.description === 'object'
-                ? product.description?.[lang] || 'Producto original disponible en Mutter Games.'
-                : product.description || 'Producto original disponible en Mutter Games.'
-            }
-          />
-          <meta property="og:type" content="product" />
-          <meta property="og:image" content={product.images?.[0] || "/seo-image.jpg"} />
-          <meta property="og:url" content={typeof window !== "undefined" ? window.location.href : ""} />
-          <meta name="twitter:card" content="summary_large_image" />
-          <meta name="twitter:title" content={`${product.title?.[lang] || product.title} | Mutter Games`} />
-          <meta
-            name="twitter:description"
-            content={
-              typeof product.description === 'object'
-                ? product.description?.[lang] || 'Producto original disponible en Mutter Games.'
-                : product.description || 'Producto original disponible en Mutter Games.'
-            }
-          />
-          <meta name="twitter:image" content={product.images?.[0] || "/seo-image.jpg"} />
-          {/* JSON-LD: Product schema for SEO */}
-          <script type="application/ld+json">{JSON.stringify({
-            "@context": "https://schema.org",
-            "@type": "Product",
-            "name": (product.title?.[lang] || product.title) || "",
-            "description": typeof product.description === 'object'
-              ? (product.description?.[lang] || "Producto original disponible en Mutter Games.")
-              : (product.description || "Producto original disponible en Mutter Games."),
-            "image": Array.isArray(product.images) && product.images.length ? product.images : ["/seo-image.jpg"],
-            "sku": String(product.id || product.slug || ""),
-            "brand": { "@type": "Brand", "name": "Mutter Games" },
-            "category": product.category?.name || "Coleccionables",
-            "url": typeof window !== "undefined" ? window.location.href : "",
-            "offers": {
-              "@type": "Offer",
-              "priceCurrency": "UYU",
-              "price": (selectedOption?.priceUSD ?? product.variants?.[0]?.options?.[0]?.priceUSD ?? product.priceUSD) || 0,
-              "availability": totalStock > 0 ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
-              "url": typeof window !== "undefined" ? window.location.href : ""
-            }
-          })}</script>
-        </Helmet>
+        {!isIOS && (
+          <Helmet>
+            <title>{`${product.title?.[lang] || product.title} | Mutter Games`}</title>
+            <meta
+              name="description"
+              content={
+                typeof product.description === 'object'
+                  ? product.description?.[lang] || 'Producto original disponible en Mutter Games.'
+                  : product.description || 'Producto original disponible en Mutter Games.'
+              }
+            />
+            <meta property="og:title" content={`${product.title?.[lang] || product.title} | Mutter Games`} />
+            <meta
+              property="og:description"
+              content={
+                typeof product.description === 'object'
+                  ? product.description?.[lang] || 'Producto original disponible en Mutter Games.'
+                  : product.description || 'Producto original disponible en Mutter Games.'
+              }
+            />
+            <meta property="og:type" content="product" />
+            <meta property="og:image" content={product.images?.[0] || "/seo-image.jpg"} />
+            <meta property="og:url" content={typeof window !== "undefined" ? window.location.href : ""} />
+            <meta name="twitter:card" content="summary_large_image" />
+            <meta name="twitter:title" content={`${product.title?.[lang] || product.title} | Mutter Games`} />
+            <meta
+              name="twitter:description"
+              content={
+                typeof product.description === 'object'
+                  ? product.description?.[lang] || 'Producto original disponible en Mutter Games.'
+                  : product.description || 'Producto original disponible en Mutter Games.'
+              }
+            />
+            <meta name="twitter:image" content={product.images?.[0] || "/seo-image.jpg"} />
+            {/* JSON-LD: Product schema for SEO */}
+            <script type="application/ld+json">{JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "Product",
+              "name": (product.title?.[lang] || product.title) || "",
+              "description": typeof product.description === 'object'
+                ? (product.description?.[lang] || "Producto original disponible en Mutter Games.")
+                : (product.description || "Producto original disponible en Mutter Games."),
+              "image": Array.isArray(product.images) && product.images.length ? product.images : ["/seo-image.jpg"],
+              "sku": String(product.id || product.slug || ""),
+              "brand": { "@type": "Brand", "name": "Mutter Games" },
+              "category": product.category?.name || "Coleccionables",
+              "url": typeof window !== "undefined" ? window.location.href : "",
+              "offers": {
+                "@type": "Offer",
+                "priceCurrency": "UYU",
+                "price": (selectedOption?.priceUSD ?? product.variants?.[0]?.options?.[0]?.priceUSD ?? product.priceUSD) || 0,
+                "availability": totalStock > 0 ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
+                "url": typeof window !== "undefined" ? window.location.href : ""
+              }
+            })}</script>
+          </Helmet>
+        )}
 
         {/* Barra de navegación superior específica de ProductPage */}
         <ProductPageNavbar />
@@ -663,7 +665,7 @@ export default function ProductPage() {
   {/* === DESCRIPCIÓN DETALLADA DEL PRODUCTO ========================= */}
   {/* ================================================================== */}
         {/* Descripción del producto (al final, ancho completo) */}
-        {productDescription && (
+        {productDescription && !isIOS && (
           <div
             className="prose prose-blue prose-lg max-w-none mb-8 text-gray-800 [&>p]:mb-4 [&>h2]:mt-8 [&>ul]:mb-4 [&>ul>li]:mb-2"
             dangerouslySetInnerHTML={{ __html: productDescription }}
@@ -673,7 +675,7 @@ export default function ProductPage() {
   {/* ================================================================== */}
   {/* === PRODUCTOS RELACIONADOS ===================================== */}
   {/* ================================================================== */}
-        {product && (
+        {product && !isIOS && (
           <RelatedProducts
             excludeSlugs={[product.slug]}
             categoryName={product.category?.name}
