@@ -266,41 +266,41 @@ export default function ProductPage() {
      {/* ================================================================== */}
      {/* === SEO / METADATOS DEL PRODUCTO (HELMET + JSON-LD) ============ */}
      {/* ================================================================== */}
-        {!isIOS && (
-          <Helmet>
-            <title>{`${product.title?.[lang] || product.title} | Mutter Games`}</title>
-            <meta
-              name="description"
-              content={
-                typeof product.description === 'object'
-                  ? product.description?.[lang] || 'Producto original disponible en Mutter Games.'
-                  : product.description || 'Producto original disponible en Mutter Games.'
-              }
-            />
-            <meta property="og:title" content={`${product.title?.[lang] || product.title} | Mutter Games`} />
-            <meta
-              property="og:description"
-              content={
-                typeof product.description === 'object'
-                  ? product.description?.[lang] || 'Producto original disponible en Mutter Games.'
-                  : product.description || 'Producto original disponible en Mutter Games.'
-              }
-            />
-            <meta property="og:type" content="product" />
-            <meta property="og:image" content={product.images?.[0] || "/seo-image.jpg"} />
-            <meta property="og:url" content={typeof window !== "undefined" ? window.location.href : ""} />
-            <meta name="twitter:card" content="summary_large_image" />
-            <meta name="twitter:title" content={`${product.title?.[lang] || product.title} | Mutter Games`} />
-            <meta
-              name="twitter:description"
-              content={
-                typeof product.description === 'object'
-                  ? product.description?.[lang] || 'Producto original disponible en Mutter Games.'
-                  : product.description || 'Producto original disponible en Mutter Games.'
-              }
-            />
-            <meta name="twitter:image" content={product.images?.[0] || "/seo-image.jpg"} />
-            {/* JSON-LD: Product schema for SEO */}
+        <Helmet>
+          <title>{`${product.title?.[lang] || product.title} | Mutter Games`}</title>
+          <meta
+            name="description"
+            content={
+              typeof product.description === 'object'
+                ? product.description?.[lang] || 'Producto original disponible en Mutter Games.'
+                : product.description || 'Producto original disponible en Mutter Games.'
+            }
+          />
+          <meta property="og:title" content={`${product.title?.[lang] || product.title} | Mutter Games`} />
+          <meta
+            property="og:description"
+            content={
+              typeof product.description === 'object'
+                ? product.description?.[lang] || 'Producto original disponible en Mutter Games.'
+                : product.description || 'Producto original disponible en Mutter Games.'
+            }
+          />
+          <meta property="og:type" content="product" />
+          <meta property="og:image" content={product.images?.[0] || "/seo-image.jpg"} />
+          <meta property="og:url" content={typeof window !== "undefined" ? window.location.href : ""} />
+          <meta name="twitter:card" content="summary_large_image" />
+          <meta name="twitter:title" content={`${product.title?.[lang] || product.title} | Mutter Games`} />
+          <meta
+            name="twitter:description"
+            content={
+              typeof product.description === 'object'
+                ? product.description?.[lang] || 'Producto original disponible en Mutter Games.'
+                : product.description || 'Producto original disponible en Mutter Games.'
+            }
+          />
+          <meta name="twitter:image" content={product.images?.[0] || "/seo-image.jpg"} />
+          {/* JSON-LD: Product schema for SEO (desactivado en iOS por ahora) */}
+          {!isIOS && (
             <script type="application/ld+json">{JSON.stringify({
               "@context": "https://schema.org",
               "@type": "Product",
@@ -321,8 +321,8 @@ export default function ProductPage() {
                 "url": typeof window !== "undefined" ? window.location.href : ""
               }
             })}</script>
-          </Helmet>
-        )}
+          )}
+        </Helmet>
 
         {/* Barra de navegación superior específica de ProductPage */}
         <ProductPageNavbar />
