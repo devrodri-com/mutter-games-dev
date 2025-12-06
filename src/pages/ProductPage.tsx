@@ -335,54 +335,66 @@ export default function ProductPage() {
     {/* ---------------------------------------------------------------- */}
           <div className="flex flex-col gap-4">
             {product.images?.length ? (
-              <>
-                <div className="relative">
-                  {product.images?.length > 1 && (
-                    <>
-                      <button
-                        onClick={() => slider.current?.prev()}
-                        className="absolute top-1/2 left-2 -translate-y-1/2 z-20 bg-white/80 hover:bg-white rounded-full p-2 shadow-md md:block hidden"
-                      >
-                        <ChevronLeft size={24} className="text-black hover:text-[#FF2D55] transition" />
-                      </button>
-                      <button
-                        onClick={() => slider.current?.next()}
-                        className="absolute top-1/2 right-2 -translate-y-1/2 z-20 bg-white/80 hover:bg-white rounded-full p-2 shadow-md md:block hidden"
-                      >
-                        <ChevronLeft size={24} className="text-black hover:text-[#FF2D55] transition rotate-180" />
-                      </button>
-                    </>
-                  )}
-                  <div
-                    ref={sliderRef}
-                    className="keen-slider rounded-lg overflow-hidden"
-                  >
-                    {product.images.map((img: string, i: number) => (
-                      <div key={i} className="keen-slider__slide">
-                        <img
-                          src={img}
-                          alt={`Imagen ${i}`}
-                          className="object-contain max-h-[400px] w-full select-none"
-                          draggable="false"
-                        />
-                      </div>
-                    ))}
-                  </div>
+              isIOS ? (
+                // En iOS mostramos solo una imagen estática, sin slider ni miniaturas
+                <div className="relative rounded-lg overflow-hidden">
+                  <img
+                    src={product.images[0]}
+                    alt="Imagen principal"
+                    className="object-contain max-h-[400px] w-full select-none"
+                    draggable="false"
+                  />
                 </div>
-                {product.images.length > 1 && (
-                  <div className="flex gap-2 overflow-x-auto pt-4">
-                    {product.images.map((img: string, i: number) => (
-                      <button
-                        key={i}
-                        onClick={() => slider.current?.moveToIdx(i)}
-                        className={`w-20 h-20 rounded-md border ${selectedImage === i ? "border-gray-900" : "border-gray-300"} hover:ring-1 hover:ring-gray-900/20`}
-                      >
-                        <img src={img} alt={`Miniatura ${i}`} className="object-cover w-full h-full" />
-                      </button>
-                    ))}
+              ) : (
+                <>
+                  <div className="relative">
+                    {product.images?.length > 1 && (
+                      <>
+                        <button
+                          onClick={() => slider.current?.prev()}
+                          className="absolute top-1/2 left-2 -translate-y-1/2 z-20 bg-white/80 hover:bg-white rounded-full p-2 shadow-md md:block hidden"
+                        >
+                          <ChevronLeft size={24} className="text-black hover:text-[#FF2D55] transition" />
+                        </button>
+                        <button
+                          onClick={() => slider.current?.next()}
+                          className="absolute top-1/2 right-2 -translate-y-1/2 z-20 bg-white/80 hover:bg-white rounded-full p-2 shadow-md md:block hidden"
+                        >
+                          <ChevronLeft size={24} className="text-black hover:text-[#FF2D55] transition rotate-180" />
+                        </button>
+                      </>
+                    )}
+                    <div
+                      ref={sliderRef}
+                      className="keen-slider rounded-lg overflow-hidden"
+                    >
+                      {product.images.map((img: string, i: number) => (
+                        <div key={i} className="keen-slider__slide">
+                          <img
+                            src={img}
+                            alt={`Imagen ${i}`}
+                            className="object-contain max-h-[400px] w-full select-none"
+                            draggable="false"
+                          />
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                )}
-              </>
+                  {product.images.length > 1 && (
+                    <div className="flex gap-2 overflow-x-auto pt-4">
+                      {product.images.map((img: string, i: number) => (
+                        <button
+                          key={i}
+                          onClick={() => slider.current?.moveToIdx(i)}
+                          className={`w-20 h-20 rounded-md border ${selectedImage === i ? "border-gray-900" : "border-gray-300"} hover:ring-1 hover:ring-gray-900/20`}
+                        >
+                          <img src={img} alt={`Miniatura ${i}`} className="object-cover w-full h-full" />
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )
             ) : (
               <div className="bg-gray-100 h-[450px] w-full rounded-lg flex flex-col items-center justify-center text-gray-400">
                 <div className="text-4xl">📦</div>
