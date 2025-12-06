@@ -668,7 +668,7 @@ export default function ProductPage() {
   {/* ================================================================== */}
   {/* === PRODUCTOS RELACIONADOS ===================================== */}
   {/* ================================================================== */}
-        {product && !isIOS && (
+        {product && (
           <RelatedProducts
             excludeSlugs={[product.slug]}
             categoryName={product.category?.name}
