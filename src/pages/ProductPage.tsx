@@ -21,7 +21,7 @@ const isIOS =
   typeof navigator !== "undefined" &&
   /iP(ad|hone|od)/.test(navigator.userAgent || "");
 
-const IOS_DEBUG_SIMPLE = true; // Luego lo pondremos en false o lo borraremos
+const IOS_DEBUG_SIMPLE = false; // Modo pantalla mínima desactivado
 // ==========================================================================
 
 // ============================================================================
@@ -219,6 +219,12 @@ export default function ProductPage() {
   // EFECTO: CONTROL DE STICKY CTA (MOBILE) SEGÚN VISIBILIDAD DEL BLOQUE DE COMPRA
   // ------------------------------------------------------------------------
   useEffect(() => {
+    // En iOS desactivamos el observer para evitar posibles bugs de WebKit
+    if (isIOS) {
+      setShowStickyCTA(true); // dejamos siempre visible la barra inferior
+      return;
+    }
+
     const target = document.getElementById('buy-block');
     if (!target) return;
     const observer = new IntersectionObserver(
