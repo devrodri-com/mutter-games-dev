@@ -21,7 +21,7 @@ const isIOS =
   typeof navigator !== "undefined" &&
   /iP(ad|hone|od)/.test(navigator.userAgent || "");
 
-const IOS_DEBUG_SIMPLE = false; // Modo pantalla mínima desactivado
+  const IOS_DEBUG_SIMPLE = true; // Modo pantalla mínima desactivado
 // ==========================================================================
 
 // ============================================================================
