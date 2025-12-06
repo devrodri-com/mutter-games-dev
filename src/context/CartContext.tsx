@@ -9,6 +9,10 @@ import { CartItem } from "../data/types";
 import { isSameItem, mergeCartItems } from "../utils/cartUtils";
 // import { auth } from "../firebaseUtils"; // make sure this is imported
 
+const isIOS =
+  typeof navigator !== "undefined" &&
+  /iP(ad|hone|od)/.test(navigator.userAgent || "");
+
 async function ensureAuthUID(): Promise<string> {
   const authInstance = getAuth();
   if (authInstance.currentUser?.uid) {
@@ -174,8 +178,17 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }, [shippingData]);
 
   useEffect(() => {
-    if (import.meta.env.DEV) console.log("🟨 useEffect: carga carrito desde Firebase según usuario/UID actual");
+    if (import.meta.env.DEV)
+      console.log("🟨 useEffect: carga carrito desde Firebase según usuario/UID actual");
     if (!currentUid) return;
+
+    // 🔴 EXPERIMENTO: en iOS, deshabilitar sincronización en tiempo real del carrito
+    if (isIOS) {
+      if (import.meta.env.DEV) {
+        console.warn("[Cart] Realtime cart sync DISABLED on iOS (experiment)");
+      }
+      return; // usamos solo el carrito local en iOS
+    }
 
     const stopAny: unknown = loadCartFromFirebaseAndSync(currentUid, async (itemsFromRealtime) => {
       const incoming = Array.isArray(itemsFromRealtime) ? itemsFromRealtime : [];
@@ -184,7 +197,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
         try {
           const local = JSON.parse(localStorage.getItem("cartItems") || "[]");
           if (Array.isArray(local) && local.length > 0) {
-          if (import.meta.env.DEV) console.warn("⏭️ Ignorando carrito remoto vacío para no pisar el local existente");
+            if (import.meta.env.DEV)
+              console.warn("⏭️ Ignorando carrito remoto vacío para no pisar el local existente");
             return; // salimos del callback sin tocar state/localStorage
           }
         } catch {}
