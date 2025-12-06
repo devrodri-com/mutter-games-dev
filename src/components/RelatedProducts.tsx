@@ -1,6 +1,6 @@
 // src/components/RelatedProducts.tsx
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import ProductCard from "./ProductCard";
 import { fetchProductsByCategory } from "@/firebase/products";
@@ -50,7 +50,7 @@ export default function RelatedProducts({
     return () => {
       mounted = false;
     };
-  }, [categoryName, excludeSlugs]);
+  }, [categoryName]);
 
   // Detectar overflow para mostrar flechas y fades
   const recomputeOverflow = () => {
