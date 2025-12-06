@@ -683,7 +683,7 @@ const isValidEmail = (email: string): boolean => {
                     </button>
                   </div>
 
-                  {items.length > 0 && !isIOS && (
+                  {items.length > 0 && (
                     <div className="mt-10 bg-white">
                       <div className="pb-20">
                         <h3 className="text-xl font-semibold">
