@@ -9,7 +9,6 @@ import ModalConfirm from "./ModalConfirm";
 import { normalizeProduct } from "@/utils/normalizeProduct";
 import { fetchCategories, fetchAllSubcategories } from "@/firebase/categories";
 import { adminApiFetch } from "../../utils/adminApi";
-import { ProductAdminHeader } from "./ProductAdminHeader";
 
 async function updateProductAdminAPI(id: string, data: Partial<Product>) {
   await adminApiFetch(`/api/admin/products/${id}`, {
@@ -225,14 +224,15 @@ export default function ProductList() {
 
   return (
     <div className="bg-white p-4 rounded shadow">
-      <ProductAdminHeader title="Publicaciones">
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-lg font-semibold">Publicaciones</h1>
         <button
           onClick={() => navigate("/admin/productForm")}
           className="px-4 py-2 bg-[#FF2D55] text-white rounded-md hover:bg-[#CC1E44] transition-colors font-medium"
         >
           Crear producto
         </button>
-      </ProductAdminHeader>
+      </div>
 
       {error && (
         <div className="mb-4 p-3 bg-red-100 text-red-700 rounded-md">
