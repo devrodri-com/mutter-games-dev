@@ -33,13 +33,13 @@ export default function RelatedProducts({
     let mounted = true;
     setLoading(true);
     fetchProductsByCategory(categoryName || "", 8)
-      .then((res) => {
+      .then((res: any[] | undefined) => {
         if (!mounted) return;
         // aplicar excludeSlugs antes de setear
-        const filtered = (res || []).filter(p => !excludeSlugs.includes(p.slug ?? ""));
+        const filtered = (res || []).filter((p: any) => !excludeSlugs.includes(p.slug ?? ""));
         setProducts(filtered);
       })
-      .catch((err) => {
+      .catch((err: unknown) => {
         // mantener silencioso en UI
         console.error("Error loading products in RelatedProducts:", err);
       })
