@@ -44,7 +44,7 @@ const isIOS =
   typeof navigator !== "undefined" &&
   /iP(ad|hone|od)/.test(navigator.userAgent || "");
 
-const IOS_CART_DEBUG_SIMPLE = true; // modo carrito mínimo ACTIVADO
+const IOS_CART_DEBUG_SIMPLE = false; // modo carrito mínimo DESACTIVADO
 // ==========================================================================
 
 const createOrder = () => {
@@ -683,7 +683,7 @@ const isValidEmail = (email: string): boolean => {
                     </button>
                   </div>
 
-                  {items.length > 0 && (
+                  {items.length > 0 && !isIOS && (
                     <div className="mt-10 bg-white">
                       <div className="pb-20">
                         <h3 className="text-xl font-semibold">
@@ -702,7 +702,9 @@ const isValidEmail = (email: string): boolean => {
           </div>
         </main>
         <Footer variant="light" />
-        <ToastContainer position="top-center" autoClose={3000} hideProgressBar />
+        {!isIOS && (
+          <ToastContainer position="top-center" autoClose={3000} hideProgressBar />
+        )}
       </section>
       </div>
     </>
