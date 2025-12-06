@@ -16,6 +16,14 @@ import { useTranslation } from "react-i18next";
 import { HiExclamation, HiExclamationCircle } from "react-icons/hi";
 import { toast } from "react-hot-toast";
 
+// === DEBUG iOS ============================================================
+const isIOS =
+  typeof navigator !== "undefined" &&
+  /iP(ad|hone|od)/.test(navigator.userAgent || "");
+
+const IOS_DEBUG_SIMPLE = true; // Luego lo pondremos en false o lo borraremos
+// ==========================================================================
+
 // ============================================================================
 // === COMPONENTE PRINCIPAL: PRODUCT PAGE =====================================
 // ============================================================================
@@ -29,6 +37,16 @@ export default function ProductPage() {
   const { slug } = useParams<{ slug: string }>();
   const decodedSlug = decodeURIComponent(slug || "");
   console.log("🧠 DEBUG PARAMS — slug:", slug);
+  // 🧪 MODO DEBUG SOLO iOS: página mínima sin lógica pesada
+  if (isIOS && IOS_DEBUG_SIMPLE) {
+    return (
+      <div className="p-10">
+        <h1>ProductPage iOS DEBUG</h1>
+        <p>slug: {decodedSlug}</p>
+        <p>Si esta pantalla NO se rompe en tu iPhone, el problema está en la lógica/UX real de ProductPage.</p>
+      </div>
+    );
+  }
   const [product, setProduct] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [selectedOption, setSelectedOption] = useState<{ value: string; priceUSD: number; variantLabel?: string; variantId?: string; stock?: number } | null>(null);
