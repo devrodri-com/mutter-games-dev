@@ -702,9 +702,7 @@ const isValidEmail = (email: string): boolean => {
           </div>
         </main>
         <Footer variant="light" />
-        {!isIOS && (
-          <ToastContainer position="top-center" autoClose={3000} hideProgressBar />
-        )}
+        <ToastContainer position="top-center" autoClose={3000} hideProgressBar />
       </section>
       </div>
     </>
