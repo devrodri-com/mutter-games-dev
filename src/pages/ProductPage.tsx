@@ -566,76 +566,69 @@ export default function ProductPage() {
             <div id="buy-block" className="grid md:grid-cols-2 gap-6 mt-6 mb-8">
               <button
                 disabled={isOutOfStock || isAdding}
-                onClick={
-                  isIOS
-                    ? () => {
-                        if (import.meta.env.DEV) {
-                          console.log("[iOS DEBUG] addToCart desactivado en iOS (no toca CartContext)");
-                        }
-                      }
-                    : () => {
-                        if (isOutOfStock) {
-                          // Mostrar toast claro cuando no hay stock
-                          setStockMessage('Sin stock disponible de esta opción');
-                          setShowToast(true);
-                          setTimeout(() => setShowToast(false), 2500);
-                          return;
-                        }
+                onClick={() => {
+                  if (isOutOfStock) {
+                    // Mostrar toast claro cuando no hay stock
+                    setStockMessage('Sin stock disponible de esta opción');
+                    setShowToast(true);
+                    setTimeout(() => setShowToast(false), 2500);
+                    return;
+                  }
 
-                        // Validar selección de variante si existen variantes
-                        if (Array.isArray(product.variants) && product.variants.length > 0 && !selectedOption) {
-                          setStockMessage('Debes seleccionar una opción antes de continuar.');
-                          setShowToast(true);
-                          setTimeout(() => setShowToast(false), 2500);
-                          return;
-                        }
+                  // Validar selección de variante si existen variantes
+                  if (Array.isArray(product.variants) && product.variants.length > 0 && !selectedOption) {
+                    setStockMessage('Debes seleccionar una opción antes de continuar.');
+                    setShowToast(true);
+                    setTimeout(() => setShowToast(false), 2500);
+                    scrollToBuyBlock();
+                    return;
+                  }
 
-                        const availableStock = selectedOption?.stock ?? product.stockTotal ?? 0;
+                  const availableStock = selectedOption?.stock ?? product.stockTotal ?? 0;
 
-                        // Buscar si ya hay un ítem igual en el carrito
-                        const existingItem = items.find(
-                          (item) =>
-                            item.id === String(product.id) &&
-                            item.variantId === (selectedOption?.variantId || '')
-                        );
+                  // Buscar si ya hay un ítem igual en el carrito
+                  const existingItem = items.find(
+                    (item) =>
+                      item.id === String(product.id) &&
+                      item.variantId === (selectedOption?.variantId || '')
+                  );
 
-                        const currentQuantityInCart = existingItem?.quantity || 0;
-                        const requestedTotal = currentQuantityInCart + quantity;
+                  const currentQuantityInCart = existingItem?.quantity || 0;
+                  const requestedTotal = currentQuantityInCart + quantity;
 
-                        if (requestedTotal > availableStock) {
-                          if (availableStock === 0) {
-                            setStockMessage('Sin stock disponible de esta opción');
-                          } else {
-                            setStockMessage(`Solo hay ${availableStock} unidades disponibles`);
-                          }
-                          setShowToast(true);
-                          setTimeout(() => setShowToast(false), 2500);
-                          return;
-                        }
+                  if (requestedTotal > availableStock) {
+                    if (availableStock === 0) {
+                      setStockMessage('Sin stock disponible de esta opción');
+                    } else {
+                      setStockMessage(`Solo hay ${availableStock} unidades disponibles`);
+                    }
+                    setShowToast(true);
+                    setTimeout(() => setShowToast(false), 2500);
+                    return;
+                  }
 
-                        setIsAdding(true);
+                  setIsAdding(true);
 
-                        // Construir el objeto cartItem según las propiedades requeridas por CartItem
-                        const cartItem = {
-                          id: product.id,
-                          slug: product.slug,
-                          name: product.title,
-                          title: product.title,
-                          image: product.images?.[0] || '',
-                          quantity: quantity,
-                          priceUSD: selectedOption?.priceUSD ?? product.priceUSD,
-                          price: selectedOption?.priceUSD ?? product.priceUSD,
-                          variantLabel: selectedOption?.variantLabel,
-                          variantId: selectedOption?.variantId,
-                          stock: selectedOption?.stock,
-                          color: '',
-                        };
-                        addToCart(cartItem);
-                        toast.success(lang === 'en' ? 'Added to cart' : 'Agregado al carrito');
-                        scrollToTop();
-                        setTimeout(() => setIsAdding(false), 800);
-                      }
-                }
+                  // Construir el objeto cartItem según las propiedades requeridas por CartItem
+                  const cartItem = {
+                    id: product.id,
+                    slug: product.slug,
+                    name: product.title,
+                    title: product.title,
+                    image: product.images?.[0] || '',
+                    quantity: quantity,
+                    priceUSD: selectedOption?.priceUSD ?? product.priceUSD,
+                    price: selectedOption?.priceUSD ?? product.priceUSD,
+                    variantLabel: selectedOption?.variantLabel,
+                    variantId: selectedOption?.variantId,
+                    stock: selectedOption?.stock,
+                    color: '',
+                  };
+                  addToCart(cartItem);
+                  toast.success(lang === 'en' ? 'Added to cart' : 'Agregado al carrito');
+                  scrollToTop();
+                  setTimeout(() => setIsAdding(false), 800);
+                }}
                 className={`h-12 rounded-lg shadow hover:shadow-md tracking-wide transition flex items-center justify-center gap-2 border font-semibold ${
                   isOutOfStock
                     ? 'bg-gray-300 text-white cursor-not-allowed'
@@ -727,15 +720,7 @@ export default function ProductPage() {
                 );
               })()}
               <button
-                onClick={
-                  isIOS
-                    ? () => {
-                        if (import.meta.env.DEV) {
-                          console.log("[iOS DEBUG] addToCart desactivado en iOS (no toca CartContext)");
-                        }
-                      }
-                    : handleQuickBuy
-                }
+                onClick={handleQuickBuy}
                 className="flex-1 h-11 rounded-lg bg-black text-white font-semibold tracking-wide shadow hover:bg-white hover:text-black border border-black transition"
               >
                 {lang === 'en' ? 'Buy now' : 'Comprar ahora'}
