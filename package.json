@@ -95,7 +95,7 @@
     "firebase-tools": "^14.26.0",
     "globals": "^15.15.0",
     "happy-dom": "^15.11.7",
-    "next": "^15.3.5",
+    "next": "15.3.6",
     "postcss": "^8.5.3",
     "tailwindcss": "^3.4.17",
     "ts-node": "^10.9.2",
