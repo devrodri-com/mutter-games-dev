@@ -147,27 +147,50 @@ export default function Shop() {
         aria-live="polite"
       >
         <ShopNavbar />
-        <div className="max-w-7xl mx-auto px-4 md:px-6 pt-[90px] md:pt-[110px] pb-10">
-          {/* Mensaje de feedback claro */}
-          <div className="mb-4">
-            <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">
-              Cargando productos…
-            </h1>
-            <p className="text-sm text-gray-600 mt-1">
-              Esto puede tardar un poco más la primera vez que abrís la tienda,
-              dependiendo de la conexión y del navegador.
-            </p>
-          </div>
+        <div className="md:grid md:grid-cols-[250px_1fr] max-w-7xl mx-auto px-4 md:px-6 gap-8 pt-[90px] md:pt-[110px] pb-10">
+          {/* Sidebar skeleton (solo desktop) */}
+          <aside className="hidden md:block space-y-6 pr-6 border-r border-gray-200">
+            <div className="space-y-2">
+              <div className="h-4 w-32 bg-gray-300 rounded" />
+              <div className="h-9 w-full bg-gray-200 rounded-lg" />
+            </div>
+            <div className="space-y-2">
+              <div className="h-4 w-28 bg-gray-300 rounded" />
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="h-4 w-40 bg-gray-200 rounded" />
+              ))}
+            </div>
+            <div className="space-y-2">
+              <div className="h-4 w-32 bg-gray-300 rounded" />
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="h-7 w-32 bg-gray-200 rounded-full" />
+              ))}
+            </div>
+          </aside>
 
-          {/* Grid de skeletons bien visible */}
-          <div
-            className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-6 sm:gap-8 mt-4 animate-pulse min-h-[60vh]"
-            role="status"
-          >
-            {Array.from({ length: 24 }).map((_, index) => (
-              <ProductSkeleton key={index} />
-            ))}
-          </div>
+          {/* Main skeleton: mensaje + grid de productos */}
+          <main>
+            {/* Mensaje de feedback claro */}
+            <div className="mb-4">
+              <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">
+                Cargando productos…
+              </h1>
+              <p className="text-sm text-gray-600 mt-1">
+                Esto puede tardar un poco más la primera vez que abrís la tienda,
+                dependiendo de la conexión y del navegador.
+              </p>
+            </div>
+
+            {/* Grid de skeletons bien visible */}
+            <div
+              className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-6 sm:gap-8 mt-4 animate-pulse min-h-[60vh]"
+              role="status"
+            >
+              {Array.from({ length: 24 }).map((_, index) => (
+                <ProductSkeleton key={index} />
+              ))}
+            </div>
+          </main>
         </div>
       </section>
     );
