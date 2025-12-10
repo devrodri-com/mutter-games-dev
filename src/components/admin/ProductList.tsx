@@ -10,6 +10,8 @@ import { normalizeProduct } from "@/utils/normalizeProduct";
 import { fetchCategories, fetchAllSubcategories } from "@/firebase/categories";
 import { adminApiFetch } from "../../utils/adminApi";
 
+const PAGE_SIZE = 50; // cantidad de productos por página en el panel admin
+
 async function updateProductAdminAPI(id: string, data: Partial<Product>) {
   await adminApiFetch(`/api/admin/products/${id}`, {
     method: "PATCH",
@@ -39,6 +41,8 @@ export default function ProductList() {
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
+
+  const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
     const loadData = async () => {
@@ -222,6 +226,13 @@ export default function ProductList() {
     p.title?.es?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const totalItems = visibleProducts.length;
+  const totalPages = Math.ceil(totalItems / PAGE_SIZE) || 1;
+  const safePage = Math.min(currentPage, totalPages);
+  const startIndex = (safePage - 1) * PAGE_SIZE;
+  const endIndex = startIndex + PAGE_SIZE;
+  const paginatedProducts = visibleProducts.slice(startIndex, endIndex);
+
   return (
     <div className="bg-white p-4 rounded shadow">
       <div className="flex items-center justify-between mb-4">
@@ -245,7 +256,10 @@ export default function ProductList() {
         <label className="mr-2 font-medium">Filtrar por categoría:</label>
         <select
           value={categoryFilter}
-          onChange={(e) => setCategoryFilter(e.target.value)}
+          onChange={(e) => {
+            setCategoryFilter(e.target.value);
+            setCurrentPage(1);
+          }}
           className="px-3 py-2 border rounded shadow-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-black"
         >
           {["Todas", ...categories.map((cat) => cat.name)].map((name) => (
@@ -262,7 +276,10 @@ export default function ProductList() {
           type="text"
           placeholder="Buscar por título..."
           value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
+          onChange={(e) => {
+            setSearchTerm(e.target.value);
+            setCurrentPage(1);
+          }}
           className="px-3 py-2 border rounded shadow-sm focus:outline-none focus:ring-2 focus:ring-black focus:border-black w-full md:w-1/3"
         />
       </div>
@@ -286,7 +303,7 @@ export default function ProductList() {
               </tr>
             </thead>
             <tbody>
-              {visibleProducts.map((product) => (
+              {paginatedProducts.map((product) => (
                 <tr key={product.id} className="border-b hover:bg-gray-50 transition-colors">
                   <td className="py-2 px-3">{product.title.es}</td>
                   <td className="py-2 px-3 whitespace-nowrap">
@@ -337,6 +354,45 @@ export default function ProductList() {
               ))}
             </tbody>
           </table>
+          {totalItems > PAGE_SIZE && (
+            <div className="flex items-center justify-between mt-4 text-sm text-gray-600">
+              <span>
+                Mostrando{" "}
+                <strong>{startIndex + 1}</strong> –{" "}
+                <strong>{Math.min(endIndex, totalItems)}</strong> de{" "}
+                <strong>{totalItems}</strong> productos
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={safePage <= 1}
+                  onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                  className={`px-3 py-1 rounded border text-sm ${
+                    safePage <= 1
+                      ? "text-gray-400 border-gray-200 cursor-not-allowed"
+                      : "text-gray-700 border-gray-300 hover:bg-gray-100"
+                  }`}
+                >
+                  Anterior
+                </button>
+                <span>
+                  Página <strong>{safePage}</strong> de <strong>{totalPages}</strong>
+                </span>
+                <button
+                  type="button"
+                  disabled={safePage >= totalPages}
+                  onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                  className={`px-3 py-1 rounded border text-sm ${
+                    safePage >= totalPages
+                      ? "text-gray-400 border-gray-200 cursor-not-allowed"
+                      : "text-gray-700 border-gray-300 hover:bg-gray-100"
+                  }`}
+                >
+                  Siguiente
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
