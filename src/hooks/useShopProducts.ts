@@ -504,15 +504,33 @@ export function useShopProducts() {
     i18n.language,
   ]);
 
-  // Helper para obtener precio
+  // Helper para obtener el precio mínimo del producto (alineado con la card)
   const getPrice = (p: LocalProduct) => {
-    if (Array.isArray(p.variants) && p.variants.length > 0) {
-      const firstVariant = p.variants[0];
-      if (Array.isArray(firstVariant.options) && firstVariant.options.length > 0) {
-        return firstVariant.options[0].priceUSD ?? 0;
+    const prices: number[] = [];
+  
+    // Precio principal en el producto (si existe)
+    if (typeof (p as any).priceUSD === "number") {
+      prices.push(Number((p as any).priceUSD));
+    } else if (typeof p.price === "number") {
+      prices.push(Number(p.price));
+    }
+  
+    // Precios de todas las variantes/opciones
+    if (Array.isArray((p as any).variants)) {
+      for (const variant of (p as any).variants as any[]) {
+        if (Array.isArray(variant.options)) {
+          for (const opt of variant.options) {
+            const vPrice = Number(opt?.priceUSD ?? opt?.price);
+            if (!Number.isNaN(vPrice)) {
+              prices.push(vPrice);
+            }
+          }
+        }
       }
     }
-    return p.price ?? 0;
+  
+    if (prices.length === 0) return 0;
+    return Math.min(...prices);
   };
 
   // ------------------------------------------------------------------------
