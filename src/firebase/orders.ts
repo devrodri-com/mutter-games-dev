@@ -80,7 +80,11 @@ export async function saveOrderToFirebase(order: {
 
       const token = await currentUser.getIdToken();
 
-      const response = await fetch("/api/orders", {
+      const baseUrl = import.meta.env.VITE_ADMIN_API_URL;
+      if (!baseUrl) throw new Error("VITE_ADMIN_API_URL is not configured");
+      const url = `${baseUrl}/api/orders`;
+
+      const response = await fetch(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -104,15 +108,18 @@ export async function saveOrderToFirebase(order: {
     } catch (err) {
       console.warn("⚠️ Falló la creación de la orden vía /api/orders, usando Firestore directo:", err);
 
-      // Fallback al flujo original en Firestore
-      const ordersRef = collection(db, "orders");
-      const ref = await addDoc(ordersRef, payload);
+      // Fallback al flujo original en Firestore (solo en desarrollo)
+      if (import.meta.env.DEV) {
+        const ordersRef = collection(db, "orders");
+        const ref = await addDoc(ordersRef, payload);
 
-      if (import.meta?.env?.DEV) {
         console.log("✅ Pedido guardado directamente en Firestore (fallback):", payload);
-      }
 
-      orderId = ref.id;
+        orderId = ref.id;
+      } else {
+        // En producción, no intentar fallback a Firestore (evita errores de permisos)
+        throw err;
+      }
     }
 
     // Mantener la actualización de stock igual
