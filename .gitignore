@@ -30,5 +30,6 @@ firestore-debug.log
 # Ignore legacy backend code and nested node_modules
 backend/
 api/
+!api/create-mp-preference.ts
 functions/node_modules/
 node_modules/
