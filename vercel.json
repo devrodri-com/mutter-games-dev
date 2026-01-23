@@ -4,13 +4,8 @@
     { "src": "package.json", "use": "@vercel/static-build" },
     { "src": "api/create-mp-preference.ts", "use": "@vercel/node" }
   ],
-  "rewrites": [
-    {
-      "source": "/api/orders",
-      "destination": "https://mutter-games-admin-api-prod.vercel.app/api/orders"
-    }
-  ],
   "routes": [
+    { "src": "/api/orders", "dest": "https://mutter-games-admin-api-prod.vercel.app/api/orders" },
     { "src": "/api/create-mp-preference", "dest": "/api/create-mp-preference.ts" },
     { "handle": "filesystem" },
     { "src": ".*", "dest": "/index.html" }
