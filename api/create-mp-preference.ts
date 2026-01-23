@@ -36,6 +36,13 @@ export default async function handler(req: any, res: any) {
       })
       .filter((item: any) => item !== null);
 
+    const shippingCost = Number(
+      body.shippingCost ?? body.shippingData?.cost ?? body.shippingData?.shippingCost ?? 0
+    );
+    if (Number.isFinite(shippingCost) && shippingCost > 0) {
+      mpItems.push({ title: "Envío", quantity: 1, unit_price: shippingCost });
+    }
+
     if (mpItems.length === 0) {
       res.status(400).json({ error: "unit_price needed" });
       return;

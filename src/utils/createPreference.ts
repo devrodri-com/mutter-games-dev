@@ -24,6 +24,10 @@ export const createPreference = async (
       return null;
     }
 
+    const shippingCost = Number(
+      (shippingData as any)?.shippingCost ?? (shippingData as any)?.cost ?? 0
+    );
+
     // Llamar al endpoint del backend
     const response = await fetch("/api/create-mp-preference", {
       method: "POST",
@@ -33,6 +37,7 @@ export const createPreference = async (
       body: JSON.stringify({
         items: cartItems,
         shippingData,
+        shippingCost,
       }),
     });
 
