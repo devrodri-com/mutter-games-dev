@@ -9,31 +9,38 @@ export default async function handler(req: any, res: any) {
     return;
   }
 
-  const baseUrl =
-    process.env.VITE_ADMIN_API_URL ||
-    "https://mutter-games-admin-api-prod.vercel.app";
-  const url = `${baseUrl}/api/create-mp-preference`;
+  const accessToken =
+    process.env.MP_ACCESS_TOKEN || process.env.MP_ACCESS_TOKEN_DEV;
+
+  if (!accessToken) {
+    res.status(500).json({ error: "MP_ACCESS_TOKEN is not configured" });
+    return;
+  }
 
   try {
     const body =
       typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body ?? {});
 
-    const authHeader =
-      typeof req.headers?.authorization === "string"
-        ? req.headers.authorization
-        : undefined;
-
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(authHeader ? { Authorization: authHeader } : {}),
-      },
-      body: JSON.stringify(body),
-    });
+    const response = await fetch(
+      "https://api.mercadopago.com/checkout/preferences",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(body),
+      }
+    );
 
     const data = await response.json().catch(() => ({}));
-    res.status(response.status).json(data);
+
+    if (!response.ok) {
+      res.status(500).json({ error: data?.message || "MercadoPago error" });
+      return;
+    }
+
+    res.status(200).json({ init_point: data?.init_point });
   } catch (error) {
     res.status(500).json({ error: "Failed to create preference" });
   }
