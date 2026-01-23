@@ -2,8 +2,7 @@
   "version": 2,
   "builds": [
     { "src": "package.json", "use": "@vercel/static-build" },
-    { "src": "api/create-mp-preference.ts", "use": "@vercel/node" },
-    { "src": "api/orders.ts", "use": "@vercel/node" }
+    { "src": "api/create-mp-preference.ts", "use": "@vercel/node" }
   ],
   "rewrites": [
     {
@@ -13,7 +12,6 @@
   ],
   "routes": [
     { "src": "/api/create-mp-preference", "dest": "/api/create-mp-preference.ts" },
-    { "src": "/api/orders", "dest": "/api/orders.ts" },
     { "handle": "filesystem" },
     { "src": ".*", "dest": "/index.html" }
   ]
