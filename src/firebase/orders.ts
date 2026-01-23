@@ -105,6 +105,8 @@ export async function saveOrderToFirebase(order: {
       if (import.meta?.env?.DEV) {
         console.log("✅ Pedido creado vía backend:", payload, data);
       }
+
+      return orderId;
     } catch (err) {
       console.warn("⚠️ Falló la creación de la orden vía /api/orders, usando Firestore directo:", err);
 
@@ -116,18 +118,18 @@ export async function saveOrderToFirebase(order: {
         console.log("✅ Pedido guardado directamente en Firestore (fallback):", payload);
 
         orderId = ref.id;
+
+        // Mantener la actualización de stock igual (solo fallback dev)
+        if (Array.isArray(cartItems) && cartItems.length > 0) {
+          await updateStockAfterOrder(cartItems);
+        }
+
+        return orderId;
       } else {
         // En producción, no intentar fallback a Firestore (evita errores de permisos)
         throw err;
       }
     }
-
-    // Mantener la actualización de stock igual
-    if (Array.isArray(cartItems) && cartItems.length > 0) {
-      await updateStockAfterOrder(cartItems);
-    }
-
-    return orderId;
   } catch (error) {
     console.error("❌ Error al guardar el pedido:", error);
     throw error;
