@@ -171,6 +171,7 @@ const isValidEmail = (email: string): boolean => {
 
   // Agregá la función handlePay justo antes del return
   const handlePay = async () => {
+    let orderId: string | null = null;
     try {
       // Asegurar que haya un usuario autenticado (anónimo o normal)
       const uid = auth.currentUser?.uid;
@@ -241,7 +242,7 @@ const isValidEmail = (email: string): boolean => {
       };
 
       // Guardar orden en Firestore antes de ir a Mercado Pago, usando helper centralizado
-      const orderId = await saveOrderToFirebase({
+      orderId = await saveOrderToFirebase({
         items: orderPayload.items,
         shipping: {
           name: shippingInfo?.name || "",
@@ -255,7 +256,11 @@ const isValidEmail = (email: string): boolean => {
         createdAt: orderPayload.createdAt,
       });
 
-      localStorage.setItem("lastOrderId", orderId);
+      try {
+        localStorage.setItem("lastOrderId", orderId);
+      } catch (e) {
+        console.warn("[checkout] No se pudo guardar lastOrderId:", e);
+      }
 
       if (import.meta.env.DEV) {
         console.log("🧾 Orden creada en Firebase:", { id: orderId, ...orderPayload });
@@ -299,6 +304,11 @@ const isValidEmail = (email: string): boolean => {
         toast.error("No se pudo generar la orden de pago.");
       }
     } catch (error) {
+      if (orderId) {
+        console.warn("[checkout] Orden creada, pero falló el post-proceso:", error);
+        toast.error("Orden creada, pero no se pudo sincronizar el carrito.");
+        return;
+      }
       console.error("❌ Error creando la orden:", error);
       toast.error("No se pudo guardar la orden. Revisá los datos e intentá de nuevo.");
     }
