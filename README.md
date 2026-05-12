@@ -110,6 +110,14 @@ npm run test:e2e:codegen
 
 ## 🌐 Environment Variables
 
+Use `.env.example` as the safe template. It intentionally contains no secrets.
+
+### Admin API environments
+
+- `https://mutter-games-admin-api-prod.vercel.app` is the production Admin API.
+- `https://mutter-games-admin-api.vercel.app` is the legacy dev/staging Admin API. Do not treat it as a second production backend.
+- Local development can point to a local Admin API when one is running, for example `http://localhost:3000`.
+
 ### Development (`.env.development.local`)
 Must contain:
 ```
@@ -122,6 +130,8 @@ VITE_FIREBASE_APP_ID=...
 
 VITE_ADMIN_API_URL=https://mutter-games-admin-api.vercel.app
 ```
+
+This points to the legacy dev/staging Admin API. If you need to test against production temporarily, use `https://mutter-games-admin-api-prod.vercel.app` deliberately and switch back after testing.
 
 ### Production (Vercel → frontend project)
 ```
@@ -202,5 +212,5 @@ Test suite, admin backend, refactors, migrations, and audits, consolidated in 20
 
 ## 📞 Contact
 
-For support or consulting:  
-**https://devrodri.com**  
+For support or consulting:
+**https://devrodri.com**
