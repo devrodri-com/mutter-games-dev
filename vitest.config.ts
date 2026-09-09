@@ -12,6 +12,8 @@ export default defineConfig({
       env: {
         VITE_ADMIN_API_URL: "https://api.example.com",
         VITE_FIREBASE_API_KEY: "TEST_KEY",
+        VITE_FIREBASE_PROJECT_ID: "demo-mutter-r1",
+        VITE_USE_FIREBASE_EMULATORS: "true",
       },
     },
     resolve: {

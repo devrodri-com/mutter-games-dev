@@ -25,6 +25,13 @@ const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
 
+// Explicit isolated development only: connect before auth or reads can run.
+if (import.meta.env.VITE_USE_FIREBASE_EMULATORS === 'true') {
+  if (!import.meta.env.DEV || !firebaseConfig.projectId?.startsWith('demo-')) throw new Error('Isolated demo project required');
+  connectFirestoreEmulator(db, '127.0.0.1', 8188);
+  connectAuthEmulator(auth, 'http://127.0.0.1:9198', {disableWarnings:true});
+}
+
 // Persistencia local + sesión anónima para invitados
 setPersistence(auth, browserLocalPersistence).catch(() => {});
 

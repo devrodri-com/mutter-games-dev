@@ -4,7 +4,7 @@ import { useParams, Link } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { Helmet } from "react-helmet-async";
 import ProductPageNavbar from "../components/ProductPageNavbar";
-import { fetchProductBySlug } from "@/firebase/products";
+import { usePublishedProduct } from "../hooks/usePublishedProduct";
 import { useCart } from "../context/CartContext";
 import { Check, ChevronLeft, ArrowUp, CreditCard, Truck, Store, MessageSquare, Lock } from "lucide-react";
 import { FiMinus, FiPlus } from "react-icons/fi";
@@ -35,9 +35,7 @@ export default function ProductPage() {
   // ------------------------------------------------------------------------
   const { slug } = useParams<{ slug: string }>();
   const decodedSlug = decodeURIComponent(slug || "");
-  console.log("🧠 DEBUG PARAMS — slug:", slug);
-  const [product, setProduct] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const {product, loading, error: productError, retry} = usePublishedProduct(decodedSlug);
   const [selectedOption, setSelectedOption] = useState<{ value: string; priceUSD: number; variantLabel?: string; variantId?: string; stock?: number } | null>(null);
   const [selectedImage, setSelectedImage] = useState(0);
   const [quantity, setQuantity] = useState(1);
@@ -67,53 +65,13 @@ export default function ProductPage() {
   // EFECTO: CARGA DEL PRODUCTO POR SLUG DESDE FIREBASE
   // ------------------------------------------------------------------------
   useEffect(() => {
-    async function loadProduct() {
-      if (!slug) {
-        setProduct(null);
-        setLoading(false);
-        return;
-      }
-      try {
-        const productData = await fetchProductBySlug(decodedSlug);
-        if (!productData) {
-          console.warn("❌ No se encontró el producto con slug:", decodedSlug);
-          setProduct(null);
-          setLoading(false);
-          return;
-        }
-
-        console.log("✅ Producto encontrado:", productData);
-        setProduct({
-          ...productData,
-          title: productData.title || "",
-          description: productData.description || "",
-        });
-
-        // Autoselección si hay una única variante con una sola opción
-        if (
-          productData?.variants &&
-          productData.variants.length === 1 &&
-          productData.variants[0].options.length === 1
-        ) {
-          const single = productData.variants[0].options[0];
-          setSelectedOption({
-            value: single.value,
-            priceUSD: single.priceUSD,
-            variantLabel: productData.variants[0].label?.[lang] || "Opción",
-            variantId: single.variantId || `${productData.variants[0].label?.[lang] || "Opción"}-${single.value}`,
-            stock: single.stock ?? 0,
-          });
-        }
-      } catch (error) {
-        console.error("[ProductPage] Error cargando producto:", error);
-        setProduct(null);
-      } finally {
-        setLoading(false);
-      }
+    setSelectedOption(null);
+    setQuantity(1);
+    if (product?.variants?.length === 1 && product.variants[0].options.length === 1) {
+      const variant = product.variants[0]; const option = variant.options[0];
+      setSelectedOption({...option,variantLabel:variant.label[lang],variantId:option.variantId || `${variant.label.es || variant.label.en}-${option.value}`});
     }
-    loadProduct();
-  }, [slug]);
-
+  }, [product, lang]);
 
   // ------------------------------------------------------------------------
   // EFECTO: BOTÓN SCROLL TO TOP SEGÚN POSICIÓN DE SCROLL
@@ -132,8 +90,8 @@ export default function ProductPage() {
     }
   };
 
-  const handleQuickBuy = () => {
-    if (isOutOfStock) {
+  const handleQuickBuy = async () => {
+    if (!product || isOutOfStock) {
       setStockMessage('Sin stock disponible de esta opción');
       setShowToast(true);
       setTimeout(() => setShowToast(false), 2500);
@@ -168,8 +126,8 @@ export default function ProductPage() {
     setIsAdding(true);
     const cartItem = {
       id: product.id,
-      slug: product.slug,
-      name: product.title,
+      slug: product.slug || "",
+      name: product.name,
       title: product.title,
       image: product.images?.[0] || '',
       quantity: quantity,
@@ -180,7 +138,8 @@ export default function ProductPage() {
       stock: selectedOption?.stock,
       color: '',
     };
-    addToCart(cartItem);
+    const added = await addToCart(cartItem);
+    if (!added) { setIsAdding(false); return; }
     toast.success(lang === 'en' ? 'Added to cart' : 'Agregado al carrito');
     scrollToTop();
     setTimeout(() => setIsAdding(false), 800);
@@ -213,9 +172,10 @@ export default function ProductPage() {
   // ESTADOS DE CARGA Y PRODUCTO NO ENCONTRADO
   // ------------------------------------------------------------------------
   if (loading) return <div className="p-10">Cargando producto...</div>;
+  if (productError) return <div role="alert" className="p-10">{productError}<button onClick={retry} className="underline ml-2">Reintentar</button><Link to="/shop" className="block underline">Volver a la tienda</Link></div>;
   if (!product) return (
     <div className="p-10 text-center">
-      <h1 className="text-2xl font-bold mb-4">Producto no encontrado</h1>
+      <h1 className="text-2xl font-bold mb-4">Producto no disponible</h1>
       <Link to="/shop" className="text-[#FF2D55] underline">Volver a la tienda</Link>
     </div>
   );
@@ -228,7 +188,7 @@ export default function ProductPage() {
     : product.description || "";
 
   const totalStock = typeof product.stockTotal === 'number' ? product.stockTotal : 0;
-  const isOutOfStock = totalStock <= 0;
+  const isOutOfStock = product.active !== true || (selectedOption ? (selectedOption.stock ?? 0) <= 0 : totalStock <= 0);
 
   return (
     <div className="bg-gradient-to-b from-[#fafafa] to-white min-h-[100dvh] flex flex-col">
@@ -536,69 +496,7 @@ export default function ProductPage() {
             <div id="buy-block" className="grid md:grid-cols-2 gap-6 mt-6 mb-8">
               <button
                 disabled={isOutOfStock || isAdding}
-                onClick={() => {
-                  if (isOutOfStock) {
-                    // Mostrar toast claro cuando no hay stock
-                    setStockMessage('Sin stock disponible de esta opción');
-                    setShowToast(true);
-                    setTimeout(() => setShowToast(false), 2500);
-                    return;
-                  }
-
-                  // Validar selección de variante si existen variantes
-                  if (Array.isArray(product.variants) && product.variants.length > 0 && !selectedOption) {
-                    setStockMessage('Debes seleccionar una opción antes de continuar.');
-                    setShowToast(true);
-                    setTimeout(() => setShowToast(false), 2500);
-                    scrollToBuyBlock();
-                    return;
-                  }
-
-                  const availableStock = selectedOption?.stock ?? product.stockTotal ?? 0;
-
-                  // Buscar si ya hay un ítem igual en el carrito
-                  const existingItem = items.find(
-                    (item) =>
-                      item.id === String(product.id) &&
-                      item.variantId === (selectedOption?.variantId || '')
-                  );
-
-                  const currentQuantityInCart = existingItem?.quantity || 0;
-                  const requestedTotal = currentQuantityInCart + quantity;
-
-                  if (requestedTotal > availableStock) {
-                    if (availableStock === 0) {
-                      setStockMessage('Sin stock disponible de esta opción');
-                    } else {
-                      setStockMessage(`Solo hay ${availableStock} unidades disponibles`);
-                    }
-                    setShowToast(true);
-                    setTimeout(() => setShowToast(false), 2500);
-                    return;
-                  }
-
-                  setIsAdding(true);
-
-                  // Construir el objeto cartItem según las propiedades requeridas por CartItem
-                  const cartItem = {
-                    id: product.id,
-                    slug: product.slug,
-                    name: product.title,
-                    title: product.title,
-                    image: product.images?.[0] || '',
-                    quantity: quantity,
-                    priceUSD: selectedOption?.priceUSD ?? product.priceUSD,
-                    price: selectedOption?.priceUSD ?? product.priceUSD,
-                    variantLabel: selectedOption?.variantLabel,
-                    variantId: selectedOption?.variantId,
-                    stock: selectedOption?.stock,
-                    color: '',
-                  };
-                  addToCart(cartItem);
-                  toast.success(lang === 'en' ? 'Added to cart' : 'Agregado al carrito');
-                  scrollToTop();
-                  setTimeout(() => setIsAdding(false), 800);
-                }}
+                onClick={handleQuickBuy}
                 className={`h-12 rounded-lg shadow hover:shadow-md tracking-wide transition flex items-center justify-center gap-2 border font-semibold ${
                   isOutOfStock
                     ? 'bg-gray-300 text-white cursor-not-allowed'
@@ -640,7 +538,7 @@ export default function ProductPage() {
   {/* ================================================================== */}
         {product && (
           <RelatedProducts
-            excludeSlugs={[product.slug]}
+            excludeSlugs={[product.slug || ""]}
             categoryName={product.category?.name}
             title="También te podría interesar"
           />

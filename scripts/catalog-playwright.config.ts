@@ -1,0 +1,2 @@
+import { defineConfig, devices } from '@playwright/test';
+export default defineConfig({testDir:'../tests/e2e',testMatch:'catalog-r1.spec.ts',workers:1,retries:0,timeout:30000,use:{baseURL:'http://127.0.0.1:5277',trace:'retain-on-failure',...(process.env.CI?{channel:'chrome'}:{})},projects:[{name:'desktop',use:{...devices['Desktop Chrome']}},{name:'mobile',use:{...devices['iPhone 13'],browserName:'chromium'}},...(process.env.CATALOG_WEBKIT==='1'?[{name:'webkit-iphone',use:{...devices['iPhone 13'],browserName:'webkit' as const}}]:[])],outputDir:'../../browser-evidence'});

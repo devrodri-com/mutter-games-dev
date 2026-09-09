@@ -9,16 +9,9 @@ import ModalConfirm from "./ModalConfirm";
 import { normalizeProduct } from "@/utils/normalizeProduct";
 import { fetchCategories, fetchAllSubcategories } from "@/firebase/categories";
 import { adminApiFetch } from "../../utils/adminApi";
+import { editProductChanges } from "../../domain/productEdit";
 
 const PAGE_SIZE = 50; // cantidad de productos por página en el panel admin
-
-async function updateProductAdminAPI(id: string, data: Partial<Product>) {
-  await adminApiFetch(`/api/admin/products/${id}`, {
-    method: "PATCH",
-    body: JSON.stringify(data),
-  });
-  return true;
-}
 
 async function deleteProductAdminAPI(id: string) {
   await adminApiFetch(`/api/admin/products/${id}`, {
@@ -82,15 +75,6 @@ export default function ProductList() {
 
   const handleEdit = async (id: string) => {
     try {
-      // Intentar primero buscar en el estado local
-      const localProduct = products.find((p) => p.id === id);
-      if (localProduct) {
-        setEditingProduct(localProduct);
-        setIsModalOpen(true);
-        return;
-      }
-
-      // Si no está en el estado local, obtener desde el backend
       const response = await adminApiFetch(`/api/admin/products/${id}`);
       const raw = response.product || response;
       
@@ -100,7 +84,7 @@ export default function ProductList() {
         const freshSubcategories = await fetchAllSubcategories();
 
         const normalized = normalizeProduct(raw, freshCategories, freshSubcategories);
-        setEditingProduct(normalized);
+        setEditingProduct({...normalized, version: raw.version});
         setIsModalOpen(true);
       } else {
         setError(`No se encontró el producto con ID: ${id}`);
@@ -114,7 +98,9 @@ export default function ProductList() {
   const handleSaveProduct = async (updatedProduct: Product) => {
     try {
       if (updatedProduct.id) {
-        await updateProductAdminAPI(updatedProduct.id, updatedProduct);
+        if (!editingProduct?.version) throw new Error('Cerrá y volvé a abrir el producto para editar.');
+        const changes = editProductChanges(editingProduct, updatedProduct);
+        if (Object.keys(changes).length) await adminApiFetch(`/api/admin/products/${updatedProduct.id}`, {method:'PATCH',body:JSON.stringify({version:editingProduct.version,intent:'edit',changes})});
         
         // 🔁 Refrescamos subcategorías manualmente para asegurar consistencia
         const freshSubcategories = await fetchAllSubcategories();
@@ -145,7 +131,7 @@ export default function ProductList() {
       }
     } catch (error) {
       console.error("Error al guardar cambios:", error);
-      setError("No se pudo guardar el producto. Intenta nuevamente.");
+      throw error;
     }
   };
 
@@ -153,7 +139,8 @@ export default function ProductList() {
     try {
       const product = products.find((p) => p.id === id);
       if (!product) return;
-      await updateProductAdminAPI(id, { active: !product.active });
+      const fresh = await adminApiFetch(`/api/admin/products/${id}`);
+      await adminApiFetch(`/api/admin/products/${id}`, {method:'PATCH',body:JSON.stringify({version:fresh.product.version,intent:'publication',changes:{active:product.active !== true}})});
       
       // Refrescar la lista completa de productos
       const response = await adminApiFetch("/api/admin/products");
@@ -170,7 +157,7 @@ export default function ProductList() {
       setProducts(normalizedRefreshed.filter((p): p is Product => p !== null));
     } catch (error) {
       console.error("Error al actualizar estado:", error);
-      setError("No se pudo actualizar el estado del producto.");
+      setError(error instanceof Error ? error.message : "No se pudo actualizar el estado del producto.");
     }
   };
 

@@ -1,333 +1,39 @@
-// src/firebase/products.ts
-import { collection, getDocs, doc, getDoc, addDoc, updateDoc, deleteDoc, query, where, limit, startAfter, QueryDocumentSnapshot } from "firebase/firestore";
-import { Product } from "../data/types";
+import { collection, getDocsFromServer, doc, getDocFromServer, addDoc, updateDoc, deleteDoc, query, where, limit, startAfter, QueryDocumentSnapshot } from "firebase/firestore";
+import type { Product } from "../data/types";
 import { db } from "../firebaseUtils";
-
-function mapProductData(id: string, data: any): Product {
-  return {
-    id,
-    slug:
-      data.slug ||
-      `${id}-${(typeof data.title === "string" ? data.title : data.title?.es || "producto")
-        .toLowerCase()
-        .replace(/\s+/g, "-")}`,
-    name: data.name || (typeof data.title === "string" ? data.title : data.title?.es) || "Producto sin nombre",
-    title: {
-      es:
-        typeof data.title === "object" && typeof data.title?.es === "string"
-          ? data.title.es
-          : typeof data.title === "string"
-          ? data.title
-          : typeof data.titleEs === "string"
-          ? data.titleEs
-          : "Producto",
-      en:
-        typeof data.title === "object" && typeof data.title?.en === "string"
-          ? data.title.en
-          : typeof data.titleEn === "string"
-          ? data.titleEn
-          : "",
-    },
-    images: data.images || [],
-    priceUSD: data.priceUSD || 0,
-    category: data.category || { id: "", name: "" },
-    subcategory: data.subcategory || { id: "", name: "" },
-    tipo: data.tipo || "",
-    subtitle: data.subtitle || "",
-    description: data.description || "",
-    defaultDescriptionType: data.defaultDescriptionType || "none",
-    extraDescriptionTop: data.extraDescriptionTop || "",
-    extraDescriptionBottom: data.extraDescriptionBottom || "",
-    descriptionPosition: data.descriptionPosition || "bottom",
-    active: data.active ?? true,
-    customName: data.customName || "",
-    customNumber: data.customNumber || "",
-    allowCustomization: data.allowCustomization ?? false,
-    stockTotal: data.stockTotal ?? 0,
-    variants: Array.isArray(data.variants) ? data.variants : [],
-  };
+import { isPublished, mapCatalogProduct } from "../domain/catalog";
+export interface FetchProductsPageOptions { limit:number; cursor?:QueryDocumentSnapshot|null; filters?:{categoryId?:string;subcategoryId?:string} }
+export interface FetchProductsPageResult { products:Product[];lastDoc:QueryDocumentSnapshot|null;hasMore:boolean }
+export async function fetchProductsPage(options:FetchProductsPageOptions):Promise<FetchProductsPageResult>{
+  const constraints=[where("active","==",true)];
+  if(options.filters?.categoryId)constraints.push(where("category.id","==",options.filters.categoryId));
+  if(options.filters?.subcategoryId)constraints.push(where("subcategory.id","==",options.filters.subcategoryId));
+  const q=query(collection(db,"products"),...constraints,limit(options.limit+1),...(options.cursor?[startAfter(options.cursor)]:[]));
+  const snapshot=await getDocsFromServer(q);const docs=snapshot.docs.slice(0,options.limit);
+  return {products:docs.map(d=>mapCatalogProduct(d.id,d.data())),lastDoc:docs.at(-1)??null,hasMore:snapshot.docs.length>options.limit};
 }
-
-// Interfaz para opciones de paginación
-export interface FetchProductsPageOptions {
-  limit: number;
-  cursor?: QueryDocumentSnapshot | null;
-  filters?: {
-    categoryId?: string;
-    subcategoryId?: string;
-  };
+export async function fetchProductById(id:string):Promise<Product|null>{
+  const snapshot=await getDocFromServer(doc(db,"products",id));
+  if(!snapshot.exists()||!isPublished(snapshot.data()))return null;
+  return mapCatalogProduct(snapshot.id,snapshot.data());
 }
-
-// Resultado de la paginación
-export interface FetchProductsPageResult {
-  products: Product[];
-  lastDoc: QueryDocumentSnapshot | null;
-  hasMore: boolean;
+export async function fetchProducts():Promise<Product[]>{
+  const products:Product[]=[];let cursor:QueryDocumentSnapshot|null=null;
+  do{const page=await fetchProductsPage({limit:100,cursor});products.push(...page.products);cursor=page.hasMore?page.lastDoc:null;}while(cursor);
+  return products.sort((a,b)=>(a.title.es||a.name).localeCompare(b.title.es||b.name,'es'));
 }
-
-/**
- * Carga productos paginados desde Firestore
- * 
- * Filtros en Firestore (solo where de igualdad, sin orderBy):
- * - active == true (siempre aplicado)
- * - category.id (opcional)
- * - subcategory.id (opcional)
- * 
- * El ordenamiento se hace en memoria en el cliente.
- * Esto evita la necesidad de índices compuestos en Firestore.
- */
-export async function fetchProductsPage(options: FetchProductsPageOptions): Promise<FetchProductsPageResult> {
-  try {
-    const { limit: pageLimit, cursor, filters = {} } = options;
-    const productsCollection = collection(db, "products");
-
-    // Construir query base
-    let q = query(productsCollection);
-
-    // Filtro: siempre activos
-    q = query(q, where("active", "==", true));
-
-    // Filtros opcionales
-    if (filters.categoryId) {
-      q = query(q, where("category.id", "==", filters.categoryId));
-    }
-    if (filters.subcategoryId) {
-      q = query(q, where("subcategory.id", "==", filters.subcategoryId));
-    }
-
-    // Paginación: limit y cursor (sin orderBy para evitar índices compuestos)
-    q = query(q, limit(pageLimit + 1)); // +1 para detectar si hay más páginas
-    if (cursor) {
-      q = query(q, startAfter(cursor));
-    }
-
-    // Ejecutar query
-    const snapshot = await getDocs(q);
-    const docs = snapshot.docs;
-
-    // Detectar si hay más páginas
-    const hasMore = docs.length > pageLimit;
-    const productsToReturn = hasMore ? docs.slice(0, pageLimit) : docs;
-
-    // Mapear productos
-    const productsList = productsToReturn.map((docSnap) => {
-      const data = docSnap.data() as any;
-      const rawTitle = data.title;
-      const title = {
-        es:
-          typeof rawTitle === "object" && typeof rawTitle?.es === "string"
-            ? rawTitle.es
-            : typeof rawTitle === "string"
-            ? rawTitle
-            : typeof data.titleEs === "string"
-            ? data.titleEs
-            : "Producto",
-        en:
-          typeof rawTitle === "object" && typeof rawTitle?.en === "string"
-            ? rawTitle.en
-            : typeof rawTitle === "string"
-            ? rawTitle
-            : typeof data.titleEn === "string"
-            ? data.titleEn
-            : "",
-      };
-
-      return {
-        id: docSnap.id,
-        slug: data.slug || `${docSnap.id}-${title.es.toLowerCase().replace(/\s+/g, "-")}`,
-        name: title.es || data.name || "Producto sin nombre",
-        title,
-        images: data.images || [],
-        priceUSD: data.priceUSD || 0,
-        category: data.category || { id: "", name: "" },
-        subcategory: data.subcategory || { id: "", name: "" },
-        tipo: data.tipo || "",
-        subtitle: data.subtitle || "",
-        description: data.description || "",
-        defaultDescriptionType: data.defaultDescriptionType || "none",
-        extraDescriptionTop: data.extraDescriptionTop || "",
-        extraDescriptionBottom: data.extraDescriptionBottom || "",
-        descriptionPosition: data.descriptionPosition || "bottom",
-        active: data.active ?? true,
-        customName: data.customName || "",
-        customNumber: data.customNumber || "",
-        allowCustomization: data.allowCustomization ?? false,
-        stockTotal: data.stockTotal ?? 0,
-        variants: Array.isArray(data.variants) ? data.variants : [],
-      } as Product;
-    });
-
-    // Obtener último documento para cursor
-    const lastDoc = productsToReturn.length > 0 ? productsToReturn[productsToReturn.length - 1] : null;
-
-    if (import.meta?.env?.DEV) {
-      console.log(`[fetchProductsPage] Cargados ${productsList.length} productos, hasMore: ${hasMore}`);
-    }
-
-    return {
-      products: productsList,
-      lastDoc,
-      hasMore,
-    };
-  } catch (error: any) {
-    console.error("[fetchProductsPage] Error:", error);
-    throw error;
-  }
+export async function fetchProductsByCategory(categoryName:string,maxItems=8):Promise<Product[]>{
+  const snapshot=await getDocsFromServer(query(collection(db,"products"),where("active","==",true),where("category.name","==",categoryName),limit(maxItems)));
+  return snapshot.docs.map(d=>mapCatalogProduct(d.id,d.data()));
 }
-
-export async function fetchProductById(id: string): Promise<Product | null> {
-  try {
-    const ref = doc(db, "products", id);
-    const snap = await getDoc(ref);
-    if (!snap.exists()) return null;
-    const data = snap.data();
-    return mapProductData(snap.id, data);
-  } catch (error) {
-    console.error("Error fetching product by ID:", error);
-    return null;
-  }
-}
-
-export async function fetchProducts(): Promise<Product[]> {
-  const productsCollection = collection(db, "products");
-  const productsSnapshot = await getDocs(productsCollection);
-
-  const productsList = productsSnapshot.docs.map((docSnap) => {
-    const data = docSnap.data() as any;
-    const rawTitle = data.title;
-    const title = {
-      es:
-        typeof rawTitle === "object" && typeof rawTitle?.es === "string"
-          ? rawTitle.es
-          : typeof rawTitle === "string"
-          ? rawTitle
-          : typeof data.titleEs === "string"
-          ? data.titleEs
-          : "Producto",
-      en:
-        typeof rawTitle === "object" && typeof rawTitle?.en === "string"
-          ? rawTitle.en
-          : typeof data.titleEn === "string"
-          ? data.titleEn
-          : "",
-    };
-
-    return {
-      id: docSnap.id,
-      slug: data.slug || `${docSnap.id}-${title.es.toLowerCase().replace(/\s+/g, "-")}`,
-      name: title.es || data.name || "Producto sin nombre",
-      title,
-      images: data.images || [],
-      priceUSD: data.priceUSD || 0,
-      category: data.category || { id: "", name: "" },
-      subcategory: data.subcategory || { id: "", name: "" },
-      tipo: data.tipo || "",
-      subtitle: data.subtitle || "",
-      description: data.description || "",
-      defaultDescriptionType: data.defaultDescriptionType || "none",
-      extraDescriptionTop: data.extraDescriptionTop || "",
-      extraDescriptionBottom: data.extraDescriptionBottom || "",
-      descriptionPosition: data.descriptionPosition || "bottom",
-      active: data.active ?? true,
-      customName: data.customName || "",
-      customNumber: data.customNumber || "",
-      allowCustomization: data.allowCustomization ?? false,
-      stockTotal: data.stockTotal ?? 0,
-      variants: Array.isArray(data.variants) ? data.variants : [],
-      orden: typeof data.orden === "number" ? data.orden : 0,
-    } as Product & { orden?: number };
-  }) as (Product & { orden?: number })[];
-
-  productsList.sort((a, b) => {
-    const ao = typeof (a as any).orden === "number" ? (a as any).orden : 0;
-    const bo = typeof (b as any).orden === "number" ? (b as any).orden : 0;
-    if (ao !== bo) return ao - bo;
-    const an = (a.title?.es || a.name || "").toString();
-    const bn = (b.title?.es || b.name || "").toString();
-    return an.localeCompare(bn, "es");
-  });
-
-  if (import.meta?.env?.DEV) {
-    console.log("🔥 DEBUG desde firebaseUtils – productos cargados (ordenados):", productsList);
-  }
-
-  return productsList.map(({ orden, ...rest }) => rest);
-}
-
-/**
- * Obtiene productos por categoría con límite (optimizado para RelatedProducts)
- */
-export async function fetchProductsByCategory(
-  categoryName: string,
-  maxItems: number = 8
-): Promise<Product[]> {
-  try {
-    const productsCollection = collection(db, "products");
-
-    // Query directo por categoría + activos
-    const q = query(
-      productsCollection,
-      where("active", "==", true),
-      where("category.name", "==", categoryName),
-      limit(maxItems)
-    );
-
-    const snapshot = await getDocs(q);
-
-    const products = snapshot.docs.map((docSnap) => {
-      const data = docSnap.data() as any;
-      return mapProductData(docSnap.id, data);
-    });
-
-    if (import.meta.env.DEV) {
-      console.log(
-        `[fetchProductsByCategory] ${products.length} productos cargados para categoría "${categoryName}"`
-      );
-    }
-
-    return products;
-  } catch (error) {
-    console.error("Error en fetchProductsByCategory:", error);
-    return [];
-  }
-}
-
-export async function fetchProductBySlug(slug: string): Promise<Product | null> {
-  try {
-    const productsCollection = collection(db, "products");
-
-    // 1) Intentar buscar por coincidencia exacta del campo slug
-    const exactQuery = query(productsCollection, where("slug", "==", slug));
-    const exactSnap = await getDocs(exactQuery);
-
-    if (!exactSnap.empty) {
-      const docSnap = exactSnap.docs[0];
-      const data = docSnap.data();
-      return mapProductData(docSnap.id, data);
-    }
-
-    // 2) Fallback para productos antiguos sin campo slug consistente
-    const productsSnapshot = await getDocs(productsCollection);
-    for (const productDoc of productsSnapshot.docs) {
-      const data = productDoc.data() as any;
-      const baseTitle =
-        typeof data.title === "string"
-          ? data.title
-          : data?.title?.es || data?.name || "producto";
-      const computedSlug =
-        data.slug ||
-        `${productDoc.id}-${String(baseTitle).toLowerCase().replace(/\s+/g, "-")}`;
-
-      if (computedSlug === slug) {
-        return mapProductData(productDoc.id, data);
-      }
-    }
-
-    return null;
-  } catch (error) {
-    console.error("Error al obtener producto por Slug:", error);
-    return null;
-  }
+export async function fetchProductBySlug(slug:string):Promise<Product|null>{
+  const snapshot=await getDocsFromServer(query(collection(db,"products"),where("active","==",true),where("slug","==",slug),limit(1)));
+  if(!snapshot.empty)return mapCatalogProduct(snapshot.docs[0].id,snapshot.docs[0].data());
+  // Legacy computed routes start with the document ID. Resolve only candidate IDs;
+  // never download the full collection for a missing detail route.
+  const boundaries=[...slug.matchAll(/-/g)].map(match=>match.index).slice(0,30);
+  for(const boundary of boundaries){const product=await fetchProductById(slug.slice(0,boundary));if(product?.slug===slug)return product;}
+  return null;
 }
 
 export async function createProduct(product: Partial<Product>) {

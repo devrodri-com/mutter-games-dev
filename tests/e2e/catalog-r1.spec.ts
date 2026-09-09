@@ -1,0 +1,42 @@
+import { test, expect } from '@playwright/test';
+import { initializeApp } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
+if(process.env.FIRESTORE_EMULATOR_HOST!=='127.0.0.1:8188')throw Error('Local demo emulator required');
+const db=getFirestore(initializeApp({projectId:'demo-mutter-r1'},'browser-fixtures'));
+const product={active:true,title:{es:'Juego sintético R1',en:'Synthetic game R1'},priceUSD:100,stockTotal:5,slug:'r1-synthetic',description:'Prueba local',category:{id:'r1-games',name:'Games'},subcategory:{id:'r1-sub',name:'Sub',categoryId:'r1-games'},variants:[],images:[]};
+const item={id:'r1-ui-product',slug:'r1-synthetic',name:'Snapshot antiguo',title:product.title,priceUSD:50,price:50,quantity:1,image:''};
+test.beforeEach(async({page})=>{
+ await page.route('**/*',route=>['127.0.0.1','localhost'].includes(new URL(route.request().url()).hostname)?route.continue():route.abort());
+ await db.collection('products').doc(item.id).set(product);
+});
+test('direct detail, withdrawn product and navigation',async({page})=>{
+ const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.goto('/producto/r1-synthetic');await expect(page.getByRole('heading',{name:'Juego sintético R1'})).toBeVisible();
+ await db.collection('products').doc(item.id).update({active:false});
+ await expect(page.getByText('Producto no disponible',{exact:true})).toBeVisible();await page.getByRole('link',{name:'Volver a la tienda'}).click();await expect(page).toHaveURL(/shop/);expect(errors).toEqual([]);
+});
+test('restored cart updates price, explicit last-item clear survives reload and remote readback',async({page})=>{
+ await page.addInitScript(value=>{if(!localStorage.getItem('seeded')){localStorage.setItem('cartItems',JSON.stringify([value]));localStorage.setItem('seeded','yes');}},item);
+ await page.goto('/carrito');await expect(page.getByText('El precio cambió. Revisá el importe actualizado.')).toBeVisible();await expect(page.getByText('$100.00 c/u',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Quitar',exact:true}).click();await expect(page.getByText('Juego sintético R1',{exact:true})).toHaveCount(0);
+ await expect.poll(async()=>page.evaluate(()=>Object.keys(localStorage).filter(k=>k.startsWith('mutter-cart:')).map(k=>JSON.parse(localStorage.getItem(k)||'{}').dirty))).toEqual([false]);
+ const uid=await page.evaluate(()=>Object.keys(localStorage).find(k=>k.startsWith('mutter-cart:'))?.slice('mutter-cart:'.length));expect(uid).toBeTruthy();
+ if(!uid)throw Error('UID missing');expect((await db.collection('carts').doc(uid).get()).data()?.cartItems).toEqual([]);
+ await page.reload();await expect(page.getByText('Juego sintético R1',{exact:true})).toHaveCount(0);
+});
+test('withdrawn snapshot retained with warning and excluded from checkout',async({page})=>{
+ await db.collection('products').doc(item.id).update({active:false});
+ await page.addInitScript(value=>localStorage.setItem('cartItems',JSON.stringify([value])),item);
+ await page.goto('/carrito');await expect(page.getByText('No disponible para compra',{exact:true})).toBeVisible();await expect(page.getByText('Juego sintético R1',{exact:true})).toBeVisible();
+});
+
+test('same identity on another device observes explicit clear',async({page,browser})=>{
+ await page.addInitScript(value=>{if(!localStorage.getItem('seeded')){localStorage.setItem('cartItems',JSON.stringify([value]));localStorage.setItem('seeded','yes');}},item);
+ await page.goto('/carrito');await expect(page.getByText('$100.00 c/u',{exact:true})).toBeVisible();
+ const state=await page.context().storageState({indexedDB:true});
+ const device=await browser.newContext({storageState:state});
+ try{const other=await device.newPage();await other.route('**/*',route=>['127.0.0.1','localhost'].includes(new URL(route.request().url()).hostname)?route.continue():route.abort());
+  await other.goto('http://127.0.0.1:5277/carrito');await expect(other.getByText('$100.00 c/u',{exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Quitar',exact:true}).click();await expect(other.getByText('Juego sintético R1',{exact:true})).toHaveCount(0);
+ }finally{await device.close();}
+});

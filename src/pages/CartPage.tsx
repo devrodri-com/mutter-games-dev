@@ -4,7 +4,7 @@ import { CartFormData } from "@/data/types";
 import EmptyCart from "@/components/cart/EmptyCart";
 import { useCart } from "../context/CartContext";
 import { Link, useNavigate } from "react-router-dom";
-import { useState, Fragment, useRef, useEffect } from "react";
+import { useState, Fragment, useRef } from "react";
 import { Listbox, Transition } from '@headlessui/react';
 import { CheckIcon, ChevronUpDownIcon } from '@heroicons/react/20/solid';
 
@@ -13,24 +13,21 @@ const departamentos = [
   "Lavalleja", "Maldonado", "Montevideo", "Paysandú", "Río Negro", "Rivera",
   "Rocha", "Salto", "San José", "Soriano", "Tacuarembó", "Treinta y Tres",
 ];
-import { createPreference } from "../utils/createPreference";
+import { useCatalogCheckout } from "../hooks/useCatalogCheckout";
 import RelatedProducts from "../components/RelatedProducts";
 import { CartItem } from "../data/types";
 import { ShippingInfo } from "../data/types";
 import { Trash2, Minus, Plus } from "lucide-react";
 import Footer from "../components/Footer";
-import { auth } from "../firebaseConfig";
 
-import { serverTimestamp } from "firebase/firestore";
 
 import { useLanguage } from '../hooks/useLanguage';
 import CartNavbar from "../components/CartNavbar";
-import { toast } from "react-hot-toast";
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { validateCartForm } from "../utils/formValidation";
-import { registerClient, saveClientToFirebase, upsertClientFromCheckout } from "../firebaseUtils";
-import { saveOrderToFirebase } from "@/firebase/orders";
+import { registerClient, saveClientToFirebase } from "../firebaseUtils";
+
 import { saveCartToFirebase } from "@/firebase/cart";
 import { extractStateFromAddress, extractAddressComponents } from "@/utils/locationUtils";
 import { prepareInitialOrderData } from '../utils/orderUtils';
@@ -39,33 +36,12 @@ import { calculateTotal, calculateCartBreakdown, getShippingInfoByDepartment } f
 // Importá la función para buscar ciudad y estado por ZIP
 import { getCityAndStateFromZip } from "../utils/getCityAndStateFromZip";
 
-// === DEBUG iOS CART =======================================================
-const isIOS =
-  typeof navigator !== "undefined" &&
-  /iP(ad|hone|od)/.test(navigator.userAgent || "");
-
-const IOS_CART_DEBUG_SIMPLE = false; // modo carrito mínimo DESACTIVADO
-// ==========================================================================
-
-const createOrder = () => {
-  console.log("📝 createOrder llamada (placeholder)");
-};
+const isIOS = typeof navigator !== "undefined" && /iP(ad|hone|od)/.test(navigator.userAgent);
 
 export default function CartPage() {
-  // --- DEBUG iOS: versión mínima de carrito sin lógica pesada ------------
-  if (isIOS && IOS_CART_DEBUG_SIMPLE) {
-    return (
-      <div className="p-10">
-        <h1>CartPage iOS DEBUG</h1>
-        <p>Si esta pantalla NO se rompe en tu iPhone, el problema está en la lógica/UX real del carrito.</p>
-      </div>
-    );
-  }
-  // -----------------------------------------------------------------------
-
   // Always call hooks at the top level, never conditionally
   const { shippingInfo, setShippingInfo } = useCart();
-  const { items, updateItem, clearCart, removeItem, setShippingData, shippingData, validateShippingData } = useCart();
+  const { items, updateItem, clearCart, removeItem, setShippingData, validateShippingData } = useCart();
   const { language } = useLanguage() as { language: 'en' | 'es' };
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -95,19 +71,6 @@ export default function CartPage() {
   const phoneRef = useRef<HTMLInputElement>(null);
   const emailRef = useRef<HTMLInputElement>(null);
 
-
-  // Poblar automáticamente los campos del formulario si hay datos guardados en shippingData
-  useEffect(() => {
-    if (shippingData?.name)
-      setShippingInfo((prev) => ({ ...prev, name: shippingData.name || "" }));
-    if (shippingData?.address) setShippingInfo((prev) => ({ ...prev, address: shippingData.address }));
-    if (shippingData?.city) setShippingInfo((prev) => ({ ...prev, city: shippingData.city }));
-    if (shippingData?.state) setShippingInfo((prev) => ({ ...prev, state: shippingData.state }));
-    if (shippingData?.postalCode)
-      setShippingInfo((prev) => ({ ...prev, postalCode: shippingData.postalCode || "" }));
-    if (shippingData?.phone) setShippingInfo((prev) => ({ ...prev, phone: shippingData.phone }));
-    if (shippingData?.email) setShippingInfo((prev) => ({ ...prev, email: shippingData.email }));
-  }, []);
 
   // Validación de información de envío
   // (No longer used: validateShippingInfo)
@@ -148,171 +111,28 @@ const isValidEmail = (email: string): boolean => {
 };
 
 
-  console.log("🧾 items en CartPage:", items);
   // Envío dinámico según departamento
   const department = shippingInfo?.state || "";
   const { label: shippingText, cost: shippingCost } = getShippingInfoByDepartment(department);
   // Subtotal
   const breakdown = calculateCartBreakdown(items);
   // Total con envío
-  const total = breakdown.subtotal + (typeof shippingCost === "number" ? shippingCost : 0);
+  const total = breakdown.subtotal + (pickup ? 0 : shippingCost);
 
   const handleQuantityChange = (item: CartItem, newQty: number) => {
     if (newQty >= 1 && newQty <= 99) {
-      updateItem(Number(item.id), item.variantLabel ?? "-", { quantity: newQty });
+      updateItem(item, { quantity: newQty });
     }
   };
 
   const handleRemoveItem = (item: CartItem) => {
     if (!removeItem) return;
-    removeItem(item.id, item.variantLabel ?? "-");
+    removeItem(item);
   };
 
 
-  // Agregá la función handlePay justo antes del return
-  const handlePay = async () => {
-    let orderId: string | null = null;
-    try {
-      // Asegurar que haya un usuario autenticado (anónimo o normal)
-      const uid = auth.currentUser?.uid;
-      if (!uid) {
-        toast.error("Inicializando sesión segura... intentá de nuevo en unos segundos.");
-        return;
-      }
-
-      // Calcular totales en USD (como usa el sitio)
-      const subtotal = items.reduce((sum, item) => sum + Number(item.priceUSD || 0) * Number(item.quantity || 0), 0);
-      const shippingCostNumber = typeof shippingCost === "number" ? shippingCost : 0;
-      const totalNumber = Number((subtotal + shippingCostNumber).toFixed(2));
-
-      // Preparar estructura de envío según reglas
-      const shipping = {
-        name: shippingInfo?.name || "",
-        address: [shippingInfo?.address, shippingInfo?.address2].filter(Boolean).join(", "),
-        city: shippingInfo?.city || "",
-        state: shippingInfo?.state || "",
-        postalCode: shippingInfo?.postalCode || "",
-        phone: shippingInfo?.phone || "",
-        email: shippingInfo?.email || "",
-        cost: pickup ? 0 : shippingCostNumber,
-      };
-
-      // Reducir items a lo esencial (multilenguaje seguro)
-      const orderItems = items.map((it) => {
-        // Normalizar nombre del producto (acepta string u objeto multilenguaje)
-        const normalizedTitle = (() => {
-          if (typeof it.title === "object" && it.title) {
-            const t = it.title as Record<string, string>;
-            return t[language] ?? Object.values(t)[0] ?? "Producto";
-          }
-          return (it as any).title || (it as any).name || "Producto";
-        })();
-
-        // Normalizar customName (string u objeto multilenguaje)
-        const normalizedCustomName = (() => {
-          const cn: unknown = (it as any).customName;
-          if (cn && typeof cn === "object") {
-            const t = cn as Record<string, string>;
-            return t[language] ?? Object.values(t)[0] ?? "";
-          }
-          return (typeof cn === "string" ? cn : "");
-        })();
-
-        return {
-          id: it.id,
-          slug: it.slug,
-          name: normalizedTitle,
-          priceUSD: Number((it as any).priceUSD ?? (it as any).price ?? 0),
-          quantity: Number((it as any).quantity ?? 1),
-          variantLabel: (it as any).variantLabel ?? null,
-          variantId: (it as any).variantId ?? null,
-          customName: normalizedCustomName,
-          customNumber: (it as any).customNumber ?? "",
-        };
-      });
-
-      // **Cumplir reglas de Firestore /orders**:
-      // Debe contener: uid, createdAt, items, shipping, total
-      const orderPayload = {
-        uid,
-        createdAt: serverTimestamp(),
-        items: orderItems,
-        shipping,
-        total: totalNumber,
-      };
-
-      // Guardar orden en Firestore antes de ir a Mercado Pago, usando helper centralizado
-      orderId = await saveOrderToFirebase({
-        items: orderPayload.items,
-        shipping: {
-          name: shippingInfo?.name || "",
-          email: shippingInfo?.email || "",
-          phone: shippingInfo?.phone || "",
-          address: shipping.address,
-          country: "UY",
-          cost: shipping.cost,
-        },
-        total: orderPayload.total,
-        createdAt: orderPayload.createdAt,
-      });
-
-      try {
-        localStorage.setItem("lastOrderId", orderId);
-      } catch (e) {
-        console.warn("[checkout] No se pudo guardar lastOrderId:", e);
-      }
-
-      if (import.meta.env.DEV) {
-        console.log("🧾 Orden creada en Firebase:", { id: orderId, ...orderPayload });
-      }
-
-      // Si el usuario eligió registrarse, crear/actualizar la ficha de cliente
-      try {
-        if (shippingInfo?.wantsToRegister) {
-          await upsertClientFromCheckout({
-            uid: auth.currentUser?.uid ?? null,
-            name: shippingInfo?.name || "",
-            email: shippingInfo?.email || "",
-            phone: shippingInfo?.phone || "",
-            address: shippingInfo?.address || "",
-            address2: shippingInfo?.address2 || "",
-            city: shippingInfo?.city || "",
-            department: shippingInfo?.state || "",
-            postalCode: shippingInfo?.postalCode || "",
-            country: "UY",
-            source: "checkout",
-          });
-          console.log("👤 Cliente upserted desde checkout");
-        }
-      } catch (e) {
-        console.warn("[clientes] no se pudo registrar el cliente:", e);
-      }
-
-      // Luego crear preferencia de Mercado Pago y redirigir
-      const url = await createPreference(items, {
-        ...shippingInfo,
-        department: shippingInfo.state || "",
-        wantsToRegister: shippingInfo.wantsToRegister ?? false,
-        password: shippingInfo.password || "",
-        confirmPassword: shippingInfo.confirmPassword || "",
-        shippingCost: shippingCostNumber,
-      });
-
-      if (url) {
-        window.location.href = url;
-      } else {
-        toast.error("No se pudo generar la orden de pago.");
-      }
-    } catch (error) {
-      if (orderId) {
-        console.warn("[checkout] Orden creada, pero falló el post-proceso:", error);
-        toast.error("Orden creada, pero no se pudo sincronizar el carrito.");
-        return;
-      }
-      console.error("❌ Error creando la orden:", error);
-      toast.error("No se pudo guardar la orden. Revisá los datos e intentá de nuevo.");
-    }
-  };
+  const checkout = useCatalogCheckout(pickup);
+  const { cartError, cartReady, refreshCart } = useCart();
 
   return (
     <>
@@ -604,6 +424,8 @@ const isValidEmail = (email: string): boolean => {
                                 {localizedTitle}
                               </p>
                             </Link>
+                            {item.availability !== "available" && <p role="status">{item.availability === "unavailable" ? "No disponible para compra" : "Pendiente de verificar"}</p>}
+                            {item.priceChanged && <p role="status">El precio cambió. Revisá el importe actualizado.</p>}
                             <p className="text-sm text-gray-500 mb-1">
                               {`$${item.priceUSD.toFixed(2)} c/u`}
                             </p>
@@ -684,12 +506,16 @@ const isValidEmail = (email: string): boolean => {
                     <p className="text-sm text-gray-500 mb-2">
                       Compra segura con garantía de satisfacción y productos verificados.
                     </p>
+                    {checkout.quote && <p role="status" className="my-3">Total verificado: ${checkout.quote.total.toFixed(2)} {checkout.quote.currency}. Revisá los precios y confirmá para ir a Mercado Pago.</p>}
+                    {checkout.recovery && <p role="alert">Existe un intento que requiere verificación. Podés reintentar la misma compra; no generes otra intención de pago.</p>}
+                    {cartError && <div role="alert">{cartError}<button type="button" onClick={() => { void refreshCart().catch(() => undefined); }} className="underline ml-2">Reintentar</button></div>}
                     {/* Botón de checkout funcional Mercado Pago */}
                     <button
-                      onClick={handlePay}
+                      onClick={checkout.pay}
+                      disabled={checkout.loading || !cartReady || Boolean(cartError)}
                       className="bg-[#FF2D55] hover:bg-[#e0264a] text-white px-6 py-2 rounded transition font-semibold w-full mt-2"
                     >
-                      Finalizar compra
+                      {checkout.loading ? "Verificando…" : checkout.quote ? "Confirmar y pagar" : "Revisar compra"}
                     </button>
                   </div>
 

@@ -1,82 +1,43 @@
-export default async function handler(req: any, res: any) {
-  if (req.method === "OPTIONS") {
-    res.status(200).end();
-    return;
-  }
-
-  if (req.method !== "POST") {
-    res.status(405).json({ error: "Method not allowed" });
-    return;
-  }
-
-  const accessToken =
-    process.env.MP_ACCESS_TOKEN || process.env.MP_ACCESS_TOKEN_DEV;
-
-  if (!accessToken) {
-    res.status(500).json({ error: "MP_ACCESS_TOKEN is not configured" });
-    return;
-  }
-
-  try {
-    const body =
-      typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body ?? {});
-
-    const rawItems = body.items ?? body.cartItems ?? [];
-    const mpItems = rawItems
-      .map((item: any) => {
-        const title =
-          item.title?.es ||
-          item.title ||
-          item.name ||
-          item.slug;
-        const quantity = Math.max(1, Number(item.quantity || 1));
-        const unit_price = Number(item.priceUYU ?? item.priceUSD ?? item.price ?? item.unit_price);
-        if (!title || isNaN(unit_price)) return null;
-        return { title, quantity, unit_price };
-      })
-      .filter((item: any) => item !== null);
-
-    const shippingCost = Number(
-      body.shippingCost ?? body.shippingData?.cost ?? body.shippingData?.shippingCost ?? 0
-    );
-    if (Number.isFinite(shippingCost) && shippingCost > 0) {
-      mpItems.push({ title: "Envío", quantity: 1, unit_price: shippingCost });
+import type { VercelRequest } from '@vercel/node';
+import { cert, getApps, initializeApp } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
+import { getFirestore } from 'firebase-admin/firestore';
+import { CheckoutError } from './_lib/checkout-domain';
+import { checkout } from './_lib/checkout-service';
+import { createMercadoPagoPreference } from './_lib/mercado-pago';
+type Response = {
+    setHeader(name: string, value: string): unknown;
+    status(code: number): Response;
+    json(body: unknown): unknown;
+};
+export default async function handler(req: Pick<VercelRequest, 'method' | 'headers' | 'body'>, res: Response) {
+    res.setHeader('Cache-Control', 'no-store');
+    if (req.method !== 'POST')
+        return res.status(405).json({ error: 'Method not allowed' });
+    const header = req.headers.authorization;
+    if (typeof header !== 'string' || !header.startsWith('Bearer '))
+        return res.status(401).json({ error: 'Iniciá sesión para continuar.' });
+    try {
+        const app = getApps().find(app => app.name === 'catalog-checkout') ?? initializeApp({ credential: cert({ projectId: process.env.FIREBASE_PROJECT_ID, clientEmail: process.env.FIREBASE_CLIENT_EMAIL, privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n') }) }, 'catalog-checkout');
+        let uid: string;
+        try {
+            uid = (await getAuth(app).verifyIdToken(header.slice(7), true)).uid;
+        }
+        catch {
+            return res.status(401).json({ error: 'La sesión no es válida. Volvé a intentarlo.' });
+        }
+        let body: unknown;
+        try {
+            body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+        }
+        catch {
+            return res.status(400).json({ error: 'Datos inválidos.' });
+        }
+        return res.status(200).json(await checkout(getFirestore(app), uid, body, createMercadoPagoPreference));
     }
-
-    if (mpItems.length === 0) {
-      res.status(400).json({ error: "unit_price needed" });
-      return;
+    catch (error: unknown) {
+        if (error instanceof CheckoutError)
+            return res.status(error.status).json({ code: error.code, error: error.message });
+        return res.status(503).json({ code: 'UNAVAILABLE', error: 'No pudimos verificar la compra. Conservamos tu carrito; intentá nuevamente.' });
     }
-
-    const mpPayload = {
-      items: mpItems,
-      ...(body.back_urls ? { back_urls: body.back_urls } : {}),
-      ...(body.auto_return ? { auto_return: body.auto_return } : {}),
-      ...(body.notification_url ? { notification_url: body.notification_url } : {}),
-      ...(body.external_reference ? { external_reference: body.external_reference } : {}),
-    };
-
-    const response = await fetch(
-      "https://api.mercadopago.com/checkout/preferences",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify(mpPayload),
-      }
-    );
-
-    const data = await response.json().catch(() => ({}));
-
-    if (!response.ok) {
-      res.status(400).json({ error: data?.message || data?.error || "MercadoPago error", details: data });
-      return;
-    }
-
-    res.status(200).json({ init_point: data?.init_point });
-  } catch (error) {
-    res.status(500).json({ error: "Failed to create preference" });
-  }
 }

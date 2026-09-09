@@ -4,23 +4,15 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Product } from "../../data/types";
 import { fetchCategories } from "@/firebase/categories";
-import { generateSlug } from "../../utils/generateSlug";
+
 import { uploadImageToImageKit } from "../../utils/imagekitUtils";
-import { adminApiFetch } from "../../utils/adminApi";
+
 import TiptapEditor from "./TiptapEditor";
 import { TIPOS } from "../../constants/tipos";
 
-async function updateProductAdminAPI(id: string, data: Partial<Product>) {
-  await adminApiFetch(`/api/admin/products/${id}`, {
-    method: "PATCH",
-    body: JSON.stringify(data),
-  });
-  return true;
-}
-
 interface Props {
   product: Product;
-  onSave: (updatedProduct: Product) => void;
+  onSave: (updatedProduct: Product) => Promise<void>;
   onClose: () => void;
   subcategories: {
     id: string;
@@ -44,7 +36,7 @@ export default function EditProductModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [images, setImages] = useState<string[]>([]);
-  const [variants, setVariants] = useState<any[]>([]);
+  const [variants, setVariants] = useState<NonNullable<Product['variants']>>([]);
   const dragFromIndex = useRef<number | null>(null);
   const [lastFileName, setLastFileName] = useState<string>("");
   const [selectedCategory, setSelectedCategory] = useState<string>("");
@@ -61,10 +53,10 @@ export default function EditProductModal({
   const tipoRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const getCatName = (c: any) =>
+  const getCatName = (c: { name: string | { es?: string; en?: string } } | undefined) =>
     typeof c?.name === "string" ? c.name : c?.name?.es || c?.name?.en || "";
 
-  const getSubName = (s: any) =>
+  const getSubName = (s: { name: string | { es?: string; en?: string } } | undefined) =>
     typeof s?.name === "string" ? s.name : s?.name?.es || s?.name?.en || "";
 
   // Cargar categorías
@@ -75,7 +67,6 @@ export default function EditProductModal({
   // Inicializar form al abrir
   useEffect(() => {
     if (product) {
-      console.log("🧪 Producto recibido en modal:", product);
       // Normalizamos el título para que siempre tenga { es, en }
       const normalizedTitle =
         typeof product.title === "string"
@@ -94,10 +85,6 @@ export default function EditProductModal({
         description: product.description || "",
         extraDescriptionTop: product.extraDescriptionTop || "",
         extraDescriptionBottom: product.extraDescriptionBottom || "",
-      });
-      console.log("🧪 formData seteado al abrir modal:", {
-        ...product,
-        tipo: product.tipo || "",
       });
       setImages(product.images || []);
       setVariants(product.variants || []);
@@ -142,11 +129,11 @@ export default function EditProductModal({
   }, [isCatOpen, isSubOpen, isTipoOpen]);
 
   // Handlers de inputs
-  const handleChange = (key: keyof Product, value: any) => {
+  const handleChange = <K extends keyof Product,>(key: K, value: Product[K]) => {
     setForm((prev) => (prev ? { ...prev, [key]: value } : prev));
   };
 
-  const handleVariantChange = (vIdx: number, key: string, value: any) => {
+  const handleVariantChange = <K extends keyof NonNullable<Product['variants']>[number],>(vIdx: number, key: K, value: NonNullable<Product['variants']>[number][K]) => {
     setVariants((prev) =>
       prev.map((v, i) =>
         i === vIdx ? { ...v, [key]: value } : v
@@ -154,13 +141,13 @@ export default function EditProductModal({
     );
   };
 
-  const handleOptionChange = (vIdx: number, oIdx: number, key: string, value: any) => {
+  const handleOptionChange = <K extends keyof NonNullable<Product['variants']>[number]['options'][number],>(vIdx: number, oIdx: number, key: K, value: NonNullable<Product['variants']>[number]['options'][number][K]) => {
     setVariants((prev) =>
       prev.map((v, i) =>
         i === vIdx
           ? {
               ...v,
-              options: v.options.map((o: any, j: number) =>
+              options: v.options.map((o, j) =>
                 j === oIdx ? { ...o, [key]: value } : o
               ),
             }
@@ -194,7 +181,7 @@ export default function EditProductModal({
     setVariants((prev) =>
       prev.map((v, i) =>
         i === vIdx
-          ? { ...v, options: v.options.filter((_: any, j: number) => j !== oIdx) }
+          ? { ...v, options: v.options.filter((_, j) => j !== oIdx) }
           : v
       )
     );
@@ -256,71 +243,18 @@ export default function EditProductModal({
         throw new Error("Debe seleccionar categoría y subcategoría");
       if (!images.length) throw new Error("Debe subir al menos una imagen");
 
-      // Calcular stockTotal y priceUSD
-      const stockTotal = variants.reduce(
-        (total, v) =>
-          total +
-          (v.options
-            ? v.options.reduce((s: number, o: any) => s + (o.stock || 0), 0)
-            : 0),
-        0
-      );
-      const priceUSD = Math.min(
-        ...variants.flatMap((v) => v.options.map((o: any) => o.priceUSD))
-      );
-
-      // Slug
-      const subcatObj = subcategories.find((s) => s.id === selectedSubcategory);
-      const subcatName =
-        typeof subcatObj?.name === "string"
-          ? subcatObj?.name
-          : subcatObj?.name?.es || subcatObj?.name?.en || "";
-
-      const slug = `${generateSlug(titleEn || "")}-${(subcatName || "")
-        .toLowerCase()
-        .replace(/\s+/g, "-")}`;
-
-      // Eliminar size del objeto actualizado si existe
-      const { size, ...formWithoutSize } = form as any;
-
+      const subcatObj = subcategories.find(s => s.id === selectedSubcategory);
+      const category = categories.find(c => c.id === selectedCategory);
+      const categoryName = typeof category?.name === 'string' ? category.name : category?.name?.es || category?.name?.en || '';
+      const subcatName = typeof subcatObj?.name === 'string' ? subcatObj.name : subcatObj?.name?.es || subcatObj?.name?.en || '';
       const updated: Product = {
-        ...formWithoutSize,
-        // Normalizamos el título para que siempre sea coherente
-        title:
-          typeof form.title === "string"
-            ? { es: form.title, en: form.title }
-            : {
-                es: (form.title?.es as string) || titleEn,
-                en: titleEn,
-              },
-        id: form.id,
-        images,
-        variants,
-        stockTotal,
-        priceUSD,
-        slug,
-        category: {
-          id: selectedCategory,
-          name:
-            typeof categories.find((c) => c.id === selectedCategory)?.name ===
-            "string"
-              ? (categories.find((c) => c.id === selectedCategory)?.name as string)
-              : (categories.find((c) => c.id === selectedCategory)?.name as any)?.es ||
-                (categories.find((c) => c.id === selectedCategory)?.name as any)?.en ||
-                "",
-        },
-        subcategory: {
-          id: selectedSubcategory,
-          name: subcatName,
-          categoryId: subcatObj?.categoryId || "",
-        },
-        description: description,
+        ...form, images, variants, description,
+        category: selectedCategory === product.category?.id ? form.category : {id:selectedCategory,name:categoryName},
+        subcategory: selectedSubcategory === product.subcategory?.id ? form.subcategory : {id:selectedSubcategory,name:subcatName,categoryId:subcatObj?.categoryId || ''},
       };
-
-      await updateProductAdminAPI(form.id, updated);
-      onSave(updated);
-    } catch (e: any) {
-      setError(e.message || "Error al guardar");
+      await onSave(updated);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Error al guardar");
     } finally {
       setSaving(false);
     }
@@ -596,7 +530,7 @@ export default function EditProductModal({
                         }
                       />
                     </div>
-                    {variant.options.map((option: any, oIdx: number) => (
+                    {variant.options.map((option, oIdx) => (
                       <div key={oIdx} className="grid grid-cols-3 gap-2 mb-1 items-end">
                         <div>
                           <label className="block text-xs font-medium text-gray-700 mb-1">Valor</label>

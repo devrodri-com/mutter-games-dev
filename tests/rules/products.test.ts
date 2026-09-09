@@ -24,10 +24,10 @@ let testEnv: RulesTestEnvironment;
 
 beforeAll(async () => {
   testEnv = await initializeTestEnvironment({
-    projectId: "mutter-games-dev",
+    projectId: "demo-mutter-rules-products",
     firestore: {
-      host: "localhost",
-      port: 8080,
+      host: "127.0.0.1",
+      port: Number(process.env.FIRESTORE_EMULATOR_HOST?.split(":")[1] || 8188),
       rules: readFileSync(path.resolve(__dirname, "../../firebase.rules"), "utf8"),
     },
   });

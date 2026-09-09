@@ -1,434 +1,266 @@
-// src/context/CartContext.tsx
-
-import { createContext, useContext, useState, useEffect, useRef, ReactNode } from "react";
-import { getAuth, onAuthStateChanged, signInAnonymously } from "firebase/auth";
-// import { useAuth } from "./AuthContext";
-import { loadCartFromFirebase as loadCartFromFirebaseUtils, saveCartToFirebase, loadCartFromFirebaseAndSync } from "../utils/cartFirebase";
-import { enrichCartItems } from "../utils/cartUtils";
-import { CartItem } from "../data/types";
-import { isSameItem, mergeCartItems } from "../utils/cartUtils";
-// import { auth } from "../firebaseUtils"; // make sure this is imported
-
-const isIOS =
-  typeof navigator !== "undefined" &&
-  /iP(ad|hone|od)/.test(navigator.userAgent || "");
-
-// Wrappers seguros para localStorage con try/catch
-function safeGetLocalStorageItem(key: string): string | null {
-  if (typeof window === "undefined") return null;
-  try {
-    return window.localStorage.getItem(key);
-  } catch (e) {
-    if (import.meta.env.DEV) {
-      console.warn(`[CartContext] Error leyendo localStorage key "${key}"`, e);
-    }
-    return null;
-  }
-}
-
-function safeSetLocalStorageItem(key: string, value: string): void {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(key, value);
-  } catch (e) {
-    if (import.meta.env.DEV) {
-      console.warn(`[CartContext] Error escribiendo localStorage key "${key}"`, e);
-    }
-  }
-}
-
-async function ensureAuthUID(): Promise<string> {
-  const authInstance = getAuth();
-  if (authInstance.currentUser?.uid) {
-    return authInstance.currentUser.uid;
-  }
-  const cred = await signInAnonymously(authInstance);
-  localStorage.setItem("anonymousUID", cred.user.uid);
-  return cred.user.uid;
-}
-
-// --- ShippingInfo type for createPreference and other uses ---
-export interface ShippingInfo {
-  nombreCompleto: string;
-  direccion: string;
-  departamento: string;
-  ciudad: string;
-  codigoPostal: string;
-  telefono: string;
-  email: string;
-  shippingCost?: number;
-}
-
+import { createContext, useContext, useState, useEffect, useRef, type ReactNode } from 'react';
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth } from '../firebase';
+import { listenToCartChanges, parseCartItems, saveCartToFirebase } from '../utils/cartFirebase';
+import { enrichCartItems, isSameItem } from '../utils/cartUtils';
+import type { CartItem } from '../data/types';
+import { toast } from 'react-hot-toast';
 export type ShippingData = {
-  name: string;
-  address: string;
-  address2?: string;
-  city: string;
-  departamento: string;
-  state: string;
-  postalCode: string;
-  phone: string;
-  email: string;
-  country?: string;
-  password?: string;
-  confirmPassword?: string;
-  wantsToRegister?: boolean;
-  coordinates?: {
-    lat: number;
-    lng: number;
-  };
-  zip?: string;
+    name: string;
+    address: string;
+    address2?: string;
+    city: string;
+    departamento: string;
+    state: string;
+    postalCode: string;
+    phone: string;
+    email: string;
+    country?: string;
+    password?: string;
+    confirmPassword?: string;
+    wantsToRegister?: boolean;
+    coordinates?: {
+        lat: number;
+        lng: number;
+    };
+    zip?: string;
 };
-
+const emptyShipping: ShippingData = { name: '', address: '', city: '', departamento: '', state: '', postalCode: '', phone: '', email: '', country: 'UY' };
 type CartContextType = {
-  items: CartItem[];
-  cartItems: CartItem[]; // agregado para compatibilidad con componentes que usan cartItems
-  addToCart: (item: CartItem) => void;
-  updateItem: (id: string | number, variantLabel: string, updates: Partial<CartItem>) => void;
-  removeItem: (id: string | number, variantLabel: string) => void;
-  clearCart: () => void;
-  shippingInfo: ShippingData;
-  setShippingInfo: React.Dispatch<React.SetStateAction<ShippingData>>;
-  shippingData: ShippingData;
-  setShippingData: (data: ShippingData) => void;
-  validateShippingData: (data: ShippingData) => boolean;
-  total: number;
+    items: CartItem[];
+    cartItems: CartItem[];
+    addToCart: (item: CartItem) => Promise<boolean>;
+    updateItem: (item: CartItem, updates: Pick<CartItem, 'quantity'>) => Promise<void>;
+    removeItem: (item: CartItem) => Promise<void>;
+    clearCart: () => Promise<void>;
+    shippingInfo: ShippingData;
+    shippingData: ShippingData;
+    setShippingInfo: React.Dispatch<React.SetStateAction<ShippingData>>;
+    setShippingData: (data: ShippingData) => void;
+    validateShippingData: (data: ShippingData) => boolean;
+    total: number;
+    cartError: string | null;
+    cartReady: boolean;
+    refreshCart: () => Promise<CartItem[]>;
 };
-
 export const CartContext = createContext<CartContextType | undefined>(undefined);
-
-export function CartProvider({ children }: { children: ReactNode }) {
-  // const { user } = useAuth();
-
-  const [currentUid, setCurrentUid] = useState<string | null>(null);
-
-  // Asegura sesión anónima y guarda el UID actual (anónimo o logueado)
-  useEffect(() => {
-    const authInstance = getAuth();
-    const unsub = onAuthStateChanged(authInstance, async (fbUser) => {
-      if (fbUser) {
-        setCurrentUid(fbUser.uid);
-      } else {
+const cacheKey = (owner: string) => `mutter-cart:${owner}`;
+const store = (owner: string, next: CartItem[], dirty: boolean) => localStorage.setItem(cacheKey(owner), JSON.stringify({ items: next, dirty }));
+export function CartProvider({ children }: {
+    children: ReactNode;
+}) {
+    const [uid, setUid] = useState<string | null>(null);
+    const [items, setItems] = useState<CartItem[]>([]);
+    const itemsRef = useRef<CartItem[]>([]);
+    const [cartError, setCartError] = useState<string | null>(null);
+    const [cartReady, setCartReady] = useState(false);
+    const [shippingInfo, setShippingInfo] = useState<ShippingData>(() => {
         try {
-          const cred = await signInAnonymously(authInstance);
-          setCurrentUid(cred.user.uid);
-        } catch (e) {
-          console.error("No se pudo iniciar sesión anónima:", e);
+            const raw: unknown = JSON.parse(localStorage.getItem('shippingData') ?? '{}');
+            const restored = {...emptyShipping};
+            if (raw && typeof raw === 'object') for (const [key,value] of Object.entries(raw)) {
+                if (Object.hasOwn(emptyShipping,key) && typeof value === 'string') Object.assign(restored, {[key]:value});
+            }
+            return restored;
+        } catch { return emptyShipping; }
+    });
+    useEffect(() => {
+        // Retain the existing delivery form persistence; credentials are never cached.
+        const {name,address,address2,city,state,postalCode,phone,email,country,departamento} = shippingInfo;
+        try { localStorage.setItem('shippingData',JSON.stringify({name,address,address2,city,state,postalCode,phone,email,country,departamento})); }
+        catch { setCartError('No pudimos guardar los datos de entrega en este dispositivo.'); }
+    }, [shippingInfo]);
+    const revision = useRef(0);
+    const pending = useRef(0);
+    const queue = useRef<Promise<void>>(Promise.resolve());
+    const activeUid = useRef<string | null>(null);
+    const unsynced = useRef(false);
+    const fail = (error: unknown) => { const message = error instanceof Error ? error.message : 'No pudimos sincronizar el carrito.'; setCartError(message); toast.error(message); };
+    const show = (next: CartItem[]) => { itemsRef.current = next; setItems(next); };
+    useEffect(() => onAuthStateChanged(auth, user => { activeUid.current = user?.uid ?? null; setUid(user?.uid ?? null); revision.current++; }), []);
+    useEffect(() => {
+        if (!uid)
+            return;
+        let stopped = false;
+        setCartReady(false);
+        setCartError(null);
+        show([]);
+        let cached: CartItem[] = [];
+        let dirty = false;
+        try {
+            const raw = localStorage.getItem(cacheKey(uid));
+            if (raw) {
+                const data: unknown = JSON.parse(raw);
+                if (!data || typeof data !== 'object' || !('items' in data))
+                    throw new Error('Carrito local inválido.');
+                cached = parseCartItems(data.items);
+                dirty = 'dirty' in data && data.dirty === true;
+            }
+            else if (!localStorage.getItem('mutter-cart-migrated')) {
+                const legacy = localStorage.getItem('cartItems');
+                if (legacy) {
+                    cached = parseCartItems(JSON.parse(legacy));
+                    dirty = cached.length > 0;
+                }
+                store(uid, cached, dirty);
+                localStorage.setItem('mutter-cart-migrated', 'yes');
+            }
+            show(cached);
         }
-      }
-    });
-    return () => unsub();
-  }, []);
-
-  const hasInitialized = useRef(false);
-
-  const [cartItems, setCartItems] = useState<CartItem[]>(() => {
-    const savedCart = safeGetLocalStorageItem("cartItems");
-    return savedCart ? JSON.parse(savedCart) : [];
-  });
-
-  const [loading, setLoading] = useState(true);
-  const [cartLoaded, setCartLoaded] = useState(false);
-
-  const [shippingInfo, setShippingInfo] = useState<ShippingData>({
-    name: "",
-    address: "",
-    address2: "",
-    city: "",
-    state: "",
-    postalCode: "",
-    phone: "",
-    email: "",
-    country: "",
-    password: "",
-    confirmPassword: "",
-    wantsToRegister: false,
-    coordinates: {
-      lat: 0,
-      lng: 0,
-    },
-    zip: "",
-    departamento: "Montevideo",
-  });
-
-  const [shippingData, setShippingData] = useState<ShippingData>(() => {
-    const stored = safeGetLocalStorageItem("shippingData");
-    return stored
-      ? JSON.parse(stored)
-      : {
-          name: "",
-          address: "",
-          city: "",
-          state: "",
-          postalCode: "",
-          country: "",
-          phone: "",
-          email: "",
-          coordinates: {
-            lat: 0,
-            lng: 0,
-          },
+        catch (error) {
+            fail(error);
+            return;
+        }
+        unsynced.current = dirty;
+        const restore = async (next: CartItem[]) => {
+            const version = ++revision.current;
+            try {
+                const current = await enrichCartItems(next);
+                if (stopped || version !== revision.current || activeUid.current !== uid)
+                    return;
+                show(current);
+                store(uid, current, false);
+                setCartReady(true);
+                setCartError(null);
+            }
+            catch (error) {
+                if (!stopped && version === revision.current) {
+                    setCartReady(false);
+                    fail(error);
+                }
+            }
         };
-  });
-
-  const validateShippingData = (data: ShippingData): boolean => {
-    const requiredFields = ["name", "address", "city", "state", "postalCode", "phone", "email"];
-    for (const field of requiredFields) {
-      const value = (data as any)[field];
-      if (!value || typeof value !== "string" || value.trim() === "") {
-        if (import.meta.env.DEV) console.warn(`Campo inválido o vacío: ${field}`);
-        return false;
-      }
-    }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(data.email)) {
-      if (import.meta.env.DEV) console.warn("Email inválido");
-      return false;
-    }
-
-    const phoneRegex = /^\d{8,15}$/;
-    if (!phoneRegex.test(data.phone)) {
-      if (import.meta.env.DEV) console.warn("Teléfono inválido");
-      return false;
-    }
-
-    return true;
-  };
-
-  useEffect(() => {
-    if (import.meta.env.DEV) console.log("🟨 useEffect: guardando shippingData en localStorage");
-    safeSetLocalStorageItem("shippingData", JSON.stringify(shippingData));
-  }, [shippingData]);
-
-  useEffect(() => {
-    if (import.meta.env.DEV)
-      console.log("🟨 useEffect: carga carrito desde Firebase según usuario/UID actual");
-    if (!currentUid) return;
-
-    // 🔴 EXPERIMENTO: en iOS, deshabilitar sincronización en tiempo real del carrito
-    if (isIOS) {
-      if (import.meta.env.DEV) {
-        console.warn("[Cart] Realtime cart sync DISABLED on iOS (experiment)");
-      }
-      return; // usamos solo el carrito local en iOS
-    }
-
-    const stopAny: unknown = loadCartFromFirebaseAndSync(currentUid, async (itemsFromRealtime) => {
-      const incoming = Array.isArray(itemsFromRealtime) ? itemsFromRealtime : [];
-      // 🚧 Guardar: si lo que llega de Firebase está vacío pero tengo carrito local, NO piso el local
-      if (!incoming || incoming.length === 0) {
+        let stop: undefined | (() => void);
+        const initialize = async () => {
+            try {
+                if (dirty) {
+                    const restoreRevision = revision.current;
+                    const operation = queue.current.then(() => {
+                        if (activeUid.current !== uid) throw new Error('Cambió la sesión antes de restaurar.');
+                        return saveCartToFirebase(uid, cached);
+                    });
+                    queue.current = operation.catch(() => undefined);
+                    await operation;
+                    if (stopped)
+                        return;
+                    if (restoreRevision === revision.current) {
+                        store(uid, cached, false);
+                        unsynced.current = false;
+                    }
+                }
+                if (stopped)
+                    return;
+                stop = listenToCartChanges(uid, (next, exists) => { if (!pending.current && !unsynced.current)
+                    void restore(exists ? next : []); }, fail);
+            }
+            catch (error) {
+                if (!stopped)
+                    fail(error);
+            }
+        };
+        void initialize();
+        return () => { stopped = true; stop?.(); };
+    }, [uid]);
+    const persist = async (next: CartItem[]) => {
+        if (!uid || activeUid.current !== uid) {
+            fail(new Error('Esperá a que termine de cargar la sesión.'));
+            return false;
+        }
+        const owner = uid;
+        revision.current++;
+        pending.current++;
+        unsynced.current = true;
+        show(next);
+        setCartReady(false);
         try {
-          const local = JSON.parse(safeGetLocalStorageItem("cartItems") || "[]");
-          if (Array.isArray(local) && local.length > 0) {
-            if (import.meta.env.DEV)
-              console.warn("⏭️ Ignorando carrito remoto vacío para no pisar el local existente");
-            return; // salimos del callback sin tocar state/localStorage
-          }
-        } catch {}
-      }
-      const resolvedItems = await enrichCartItems(incoming || []);
-      const safeItems = Array.isArray(resolvedItems) ? resolvedItems : [];
-      if (import.meta.env.DEV) console.log("🟩 Items recibidos desde Firebase:", safeItems);
-      setCartItems(safeItems);
-      safeSetLocalStorageItem("cartItems", JSON.stringify(safeItems));
-    });
-
-    return () => {
-      if (stopAny && typeof stopAny === "function") {
-        stopAny();
-      }
+            store(owner, next, true);
+        }
+        catch (error) {
+            pending.current--;
+            fail(error);
+            return false;
+        }
+        const operation = queue.current.then(async () => {
+            if (activeUid.current !== owner)
+                throw new Error('Cambió la sesión antes de guardar.');
+            await saveCartToFirebase(owner, next);
+        });
+        queue.current = operation.catch(() => undefined);
+        try {
+            await operation;
+            if (activeUid.current === owner && pending.current === 1) {
+                store(owner, next, false);
+                unsynced.current = false;
+                setCartError(null);
+            }
+        }
+        catch (error) {
+            if (activeUid.current === owner)
+                fail(error);
+            return false;
+        }
+        finally {
+            pending.current--;
+        }
+        if (activeUid.current === owner && pending.current === 0) {
+            try {
+                await refreshCart();
+            }
+            catch {
+                return false;
+            }
+        }
+        return true;
     };
-  }, [currentUid]);
-
-  const addToCart = (newItem: CartItem) => {
-    if (!newItem || !newItem.id) {
-      if (import.meta.env.DEV) console.warn("Intento de agregar item inválido al carrito:", newItem);
-      return;
-    }
-
-    const title =
-      typeof newItem.title === "object"
-        ? newItem.title
-        : {
-            es: newItem.title || "",
-            en: newItem.title || "",
-          };
-
-    const variant =
-      newItem.variant && typeof newItem.variant.label === "object"
-        ? {
-            label: {
-              es: newItem.variant.label.es || "Tamaño",
-              en: newItem.variant.label.en || "Size"
+    const refreshCart = async (): Promise<CartItem[]> => {
+        const version = ++revision.current;
+        setCartReady(false);
+        try {
+            if (unsynced.current && uid && !pending.current) {
+                await saveCartToFirebase(uid, itemsRef.current);
+                unsynced.current = false;
+                store(uid, itemsRef.current, false);
             }
-          }
-        : typeof newItem.variantTitle === "object"
-        ? {
-            label: {
-              es: newItem.variantTitle.es || "Tamaño",
-              en: newItem.variantTitle.en || "Size"
-            }
-          }
-        : typeof newItem.variantTitle === "string"
-        ? {
-            label: {
-              es: newItem.variantTitle,
-              en: newItem.variantTitle
-            }
-          }
-        : undefined;
-
-    const itemToAdd: CartItem = {
-      ...newItem,
-      title,
-      variant: variant as CartItem["variant"],
-      quantity: newItem.quantity || 1,
+            const current = await enrichCartItems(itemsRef.current);
+            if (version !== revision.current || pending.current)
+                throw new Error('El carrito cambió. Revisalo antes de continuar.');
+            show(current);
+            if (uid)
+                store(uid, current, false);
+            setCartReady(true);
+            setCartError(null);
+            return current;
+        }
+        catch (error) {
+            fail(error);
+            throw error;
+        }
     };
-
-    if (import.meta.env.DEV) console.log("✅ Agregando al carrito:", itemToAdd);
-
-    setCartItems((prevItems) => {
-      const existingIndex = prevItems.findIndex(
-        (item) =>
-          item.id === itemToAdd.id &&
-          item.variantLabel === itemToAdd.variantLabel &&
-          item.variantId === itemToAdd.variantId
-      );
-
-      if (existingIndex !== -1) {
-        const updated = [...prevItems];
-        updated[existingIndex] = {
-          ...updated[existingIndex],
-          quantity: updated[existingIndex].quantity + itemToAdd.quantity,
-        };
-        return updated;
-      } else {
-        return [...prevItems, itemToAdd as CartItem];
-      }
-    });
-  };
-
-  const updateItem = (id: string | number, variantLabel: string, updates: Partial<CartItem>) => {
-    setCartItems((prevItems) =>
-      prevItems
-        .map((item) =>
-          item.id?.toString() === id.toString() && item.variantLabel === variantLabel
-            ? { ...item, ...updates }
-            : item
-        )
-        .filter((item) => item.quantity > 0) // 🔥 Esto elimina del carrito los de cantidad 0
-    );
-  };
-
-  const removeItem = (id: string | number, variantLabel: string) => {
-    setCartItems((prevItems) => {
-      const next = prevItems.filter(
-        (item) => !(item.id?.toString() === id.toString() && item.variantLabel === variantLabel)
-      );
-      // Persistimos inmediatamente para evitar que reaparezca al recargar
-      if (currentUid) { try { saveCartToFirebase(currentUid, next); } catch {} }
-      safeSetLocalStorageItem("cartItems", JSON.stringify(next));
-      return next;
-    });
-  };
-
-  const clearCart = () => {
-    if (import.meta.env.DEV) console.warn("⚠️ setCartItems([]) ejecutado, posible limpieza del carrito");
-    setCartItems([]);
-    safeSetLocalStorageItem("cartItems", JSON.stringify([]));
-    // también vaciamos el carrito remoto para que no reaparezca al recargar
-    if (currentUid) {
-      try { saveCartToFirebase(currentUid, []); } catch (e) { console.warn("No se pudo vaciar carrito remoto:", e); }
-    }
-  };
-
-  // Wrapper to sync shippingInfo and shippingData
-  const setShippingInfoWrapper = (data: ShippingData) => {
-    setShippingInfo(data);
-    setShippingData(data); // Sync both states
-  };
-
-  // Nueva función calculateCartTotal que suma envío si corresponde a Montevideo
-  const calculateCartTotal = () => {
-    let total = 0;
-
-    cartItems.forEach((item) => {
-      const price = item.price || 0;
-      const quantity = item.quantity || 1;
-      total += price * quantity;
-    });
-
-    if (shippingInfo?.departamento === "Montevideo") {
-      total += 169;
-    }
-
-    return total;
-  };
-
-  // Si existieran funciones con impuestos, las comentamos:
-  // const totalWithTax = items.reduce((acc, item) => acc + (item.priceUSD * item.quantity), 0) * 1.075;
-  // const finalTotal = items.reduce((acc, item) => acc + (item.priceUSD * item.quantity), 0) * 1.1;
-
-  // Sincronización optimizada y escalable con localStorage para cartItems
-  useEffect(() => {
-    safeSetLocalStorageItem("cartItems", JSON.stringify(cartItems));
-  }, [cartItems]);
-
-  /*
-  // Nueva función loadCartFromFirebase con validación y retorno
-  const loadCartFromFirebase = async (uid: string): Promise<CartItem[]> => {
-    if (!uid) return [];
-    try {
-      const { doc, getDoc } = await import("firebase/firestore");
-      const { db } = await import("../firebaseUtils");
-      const docRef = doc(db, "carts", uid);
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) {
-        const items: CartItem[] = (docSnap.data() as any).items || [];
-        // no forzamos setCartItems aquí; dejamos que el caller decida
-        return items;
-      }
-      return [];
-    } catch (error) {
-      console.error("Error loading cart from Firebase:", error);
-      return [];
-    }
-  };
-  */
-
-  // Efecto para recalcular total cuando cambian cartItems o shippingInfo
-  const [total, setTotal] = useState<number>(() => calculateCartTotal());
-  useEffect(() => {
-    setTotal(calculateCartTotal());
-  }, [cartItems, shippingInfo]);
-
-  return (
-    <CartContext.Provider
-      value={{
-        items: cartItems,
-        cartItems,
-        addToCart,
-        updateItem,
-        clearCart,
-        removeItem,
-        shippingInfo,
-        setShippingInfo: setShippingInfoWrapper as React.Dispatch<React.SetStateAction<ShippingData>>,
-        shippingData,
-        setShippingData,
-        validateShippingData,
-        total,
-      }}
-    >
-      {children}
-    </CartContext.Provider>
-  );
+    const addToCart = async (item: CartItem) => {
+        try {
+            const version = revision.current;
+            const next = [...itemsRef.current];
+            const index = next.findIndex(existing => isSameItem(existing, item));
+            if (index >= 0)
+                next[index] = { ...next[index], quantity: next[index].quantity + item.quantity };
+            else
+                next.push(item);
+            const current = await enrichCartItems(next);
+            if (version !== revision.current) throw new Error('El carrito cambió. Volvé a agregar el producto.');
+            if (current.some(i => i.availability !== 'available'))
+                throw new Error('La opción seleccionada ya no está disponible. Revisá tu carrito.');
+            return await persist(current);
+        }
+        catch (error) {
+            fail(error);
+            return false;
+        }
+    };
+    const removeItem = async (target: CartItem) => { await persist(itemsRef.current.filter(item => !isSameItem(item,target))); };
+    const updateItem = async (target: CartItem, updates: Pick<CartItem, 'quantity'>) => { await persist(itemsRef.current.map(item => isSameItem(item,target) ? { ...item, ...updates } : item).filter(item => item.quantity > 0)); };
+    const clearCart = async () => { await persist([]); };
+    const total = items.reduce((sum, item) => sum + (Number.isFinite(item.priceUSD) ? item.priceUSD * item.quantity : 0), 0);
+    return <CartContext.Provider value={{ items, cartItems: items, addToCart, removeItem, updateItem, clearCart, shippingInfo, shippingData: shippingInfo, setShippingInfo, setShippingData: setShippingInfo, validateShippingData: data => Boolean(data.name && data.address && data.city && data.state && data.phone && data.email), total, cartError, cartReady, refreshCart }}>{children}</CartContext.Provider>;
 }
-
-export function useCart() {
-  const context = useContext(CartContext);
-  if (!context) {
-    throw new Error("useCart debe usarse dentro de <CartProvider>");
-  }
-  return context;
-}
+export function useCart() { const context = useContext(CartContext); if (!context)
+    throw new Error('useCart debe usarse dentro de CartProvider'); return context; }

@@ -32,3 +32,25 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Checkout API typecheck
+        run: npm run typecheck:api
+
+      - name: Setup Java for declared Firebase emulator tooling
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Catalog regressions and existing suites in isolation
+        env:
+          JAVA_TOOL_OPTIONS: -Duser.language=en -Duser.country=US
+        run: npm run test:catalog
+
+      - name: Verify checkout function packaging
+        run: npm run check:checkout-packaging
+
+      - name: Catalog desktop and mobile browser regressions
+        env:
+          JAVA_TOOL_OPTIONS: -Duser.language=en -Duser.country=US
+        run: npm run test:catalog:browser

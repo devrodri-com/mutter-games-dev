@@ -1,6 +1,7 @@
 // src/data/types.ts
 
 export type Product = {
+  version?: string;
   id: string;
   title: {
     en: string;
@@ -44,6 +45,8 @@ export type Product = {
 };
 
 export type CartItem = {
+  availability?: "available" | "unavailable" | "unverified";
+  priceChanged?: boolean;
   id: string;
   slug: string;
   name: string;

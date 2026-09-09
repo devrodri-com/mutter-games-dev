@@ -57,6 +57,8 @@ const useSearchParamsSafe = () => {
 // ============================================================================
 export function useShopProducts() {
   const { i18n } = useTranslation();
+  const [catalogRevision, setCatalogRevision] = useState(0);
+  useEffect(() => { const refresh = () => setCatalogRevision(value => value + 1); window.addEventListener('focus', refresh); return () => window.removeEventListener('focus', refresh); }, []);
   const location = useLocation();
   const [urlSearchParams, setSearchParams] = useSearchParamsSafe();
   const isIOS = typeof navigator !== "undefined" && /iP(hone|ad|od)/i.test(navigator.userAgent);
@@ -280,7 +282,8 @@ export function useShopProducts() {
     const justBecameNonEmpty = wasEmpty && !isEmpty;
 
     // Si searchTerm pasa de vacío a no vacío, cargar todos los productos
-    if (justBecameNonEmpty) {
+    if (justBecameNonEmpty || (!isEmpty && catalogRevision > 0)) {
+      setAllProducts([]);
       setIsLoadingAllProducts(true);
       fetchProducts()
         .then((products) => {
@@ -309,7 +312,7 @@ export function useShopProducts() {
     }
 
     prevSearchTermRef.current = searchTerm;
-  }, [searchTerm]);
+  }, [searchTerm, catalogRevision]);
 
   // ------------------------------------------------------------------------
   // EFECTO: CARGA PÁGINA INICIAL CUANDO CAMBIAN FILTROS / ORDEN
@@ -327,7 +330,7 @@ export function useShopProducts() {
 
     loadFirstPage();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCategory, selectedSubcategory, sortOption, searchTerm]);
+  }, [selectedCategory, selectedSubcategory, sortOption, searchTerm, catalogRevision]);
 
   // ------------------------------------------------------------------------
   // EFECTO: LECTURA INICIAL DE PARÁMETROS DE URL (QUERYSTRING)
@@ -458,6 +461,7 @@ export function useShopProducts() {
 
     // Filtrar productos
     const filtered = sourceProducts.filter((product) => {
+      if (product.active !== true) return false;
       // En modo búsqueda, aplicar TODOS los filtros en memoria
       // En modo paginado, category y subcategory ya están filtrados en Firestore
       if (isSearchMode) {

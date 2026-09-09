@@ -1,6 +1,7 @@
+import { currentCartItem } from "../domain/catalog";
 // src/utils.cartUtils.ts
 
-import { fetchProductBySlug } from "@/firebase/products";
+import { fetchProductById } from "@/firebase/products";
 
 import { db } from "../firebase"; // Asegurate de que este import exista en el archivo final
 import { collection, doc, setDoc } from "firebase/firestore"; // También al comienzo si aún no están
@@ -123,25 +124,8 @@ export function calculateCartBreakdown(
   };
 }
 
-export async function enrichCartItems(items: CartItem[]): Promise<CartItem[]> {
-  const enriched = await Promise.all(items.map(async (item) => {
-    if (!item.slug) return item;
-
-    const product = await fetchProductBySlug(item.slug);
-    if (!product) return item;
-
-    return {
-      ...item,
-      priceUSD:
-        item.priceUSD && item.priceUSD > 0
-          ? item.priceUSD
-          : product.priceUSD ?? 0,
-      title: product.title ?? item.title,
-      image: product.images?.[0] ?? item.image,
-    };
-  }));
-
-  return enriched;
+export async function enrichCartItems(items:CartItem[]):Promise<CartItem[]> {
+  return Promise.all(items.map(async item=>currentCartItem(item,await fetchProductById(item.id))));
 }
 
 export function getShippingInfoByDepartment(department: string): {

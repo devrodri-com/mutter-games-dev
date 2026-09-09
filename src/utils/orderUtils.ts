@@ -1,9 +1,6 @@
 // src/utils/orderUtils.ts
 // ✅ orderUtils.ts abierto correctamente
 import { db } from "../firebase";
-import { authReady } from "../firebase";
-import { getAuth, signInAnonymously } from "firebase/auth";
-import { collection, addDoc, Timestamp } from "firebase/firestore";
 import { Order, CartItem } from "@/data/types";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { calculateCartBreakdown } from "./cartUtils";
@@ -19,75 +16,9 @@ interface ShippingInfo {
   telefono: string;
 }
 
-// Asegura que exista un usuario (anónimo o logueado) y devuelve su UID
-async function ensureAnonUid(): Promise<string> {
-  const auth = getAuth();
-  if (!auth.currentUser) {
-    await signInAnonymously(auth);
-  }
-  if (!auth.currentUser) {
-    throw new Error("No se pudo obtener un UID de usuario");
-  }
-  return auth.currentUser.uid;
-}
-
-
-// Función para crear la orden
-export async function createOrder(orderData: Order): Promise<string> {
-  try {
-    // Esperar el UID del usuario (anónimo o logueado)
-    let uid = await authReady as unknown as string | undefined;
-    if (!uid) {
-      uid = await ensureAnonUid();
-    }
-
-    // Armar payload compatible con las reglas de Firestore
-    const payload = {
-      uid: uid as string,                          // requerido por reglas
-      createdAt: Timestamp.now(),                  // timestamp aceptado por reglas
-      items: (orderData.cartItems || []).map((it) => ({
-        id: it.id || "",
-        slug: (it as any).slug || "",
-        // Tomamos un título legible; si viene objeto multi-idioma usamos es/en
-        title: typeof (it as any).title === "object"
-          ? ((it as any).title.es || (it as any).title.en || it.name || "")
-          : ((it as any).title || it.name || ""),
-        price: Number(it.price ?? (it as any).priceUSD ?? 0),
-        quantity: Number(it.quantity ?? 1),
-        // Campos opcionales que guardamos por trazabilidad
-        variantLabel: (it as any).variantLabel || "",
-        customName: (it as any).customName || "",
-        customNumber: (it as any).customNumber || "",
-      })),
-      shipping: {
-        method: orderData.paymentMethod || "A coordinar",
-        cost: Number(orderData.breakdown?.shipping || 0),
-        address: {
-          name: orderData.client?.name || "",
-          phone: orderData.client?.phone || "",
-          line1: orderData.client?.address || "",
-          city: orderData.client?.city || "",
-          state: orderData.client?.state || "",
-          zip: orderData.client?.zip || "",
-          country: orderData.client?.country || "UY",
-        },
-      },
-      total: Number(orderData.totalAmount || 0),
-
-      // Campos extra útiles para backoffice (no afectan a las reglas)
-      clientEmail: orderData.clientEmail || "",
-      status: orderData.paymentStatus || "pending",
-    };
-
-    console.log("🧾 Payload que se guardará en orders:", payload);
-
-    const docRef = await addDoc(collection(db, "orders"), payload);
-    console.log("✅ Orden creada con ID:", docRef.id);
-    return docRef.id;
-  } catch (error) {
-    console.error("❌ Error al crear la orden:", error);
-    throw error;
-  }
+export async function createOrder(_orderData: Order): Promise<string> {
+  void _orderData; // Legacy payload is deliberately never trusted.
+  throw new Error("Actualizá la página y usá la compra verificada desde el carrito.");
 }
 
 // ✅ Función para preparar la orden antes de guardarla en Firebase
