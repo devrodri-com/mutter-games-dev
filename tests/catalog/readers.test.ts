@@ -1,7 +1,9 @@
 // @vitest-environment node
 import { beforeAll, afterAll, test, expect, vi } from 'vitest';
 import { initializeApp, deleteApp } from 'firebase/app';
-import { getFirestore, connectFirestoreEmulator, doc, setDoc } from 'firebase/firestore';
+import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
+import { readFileSync } from 'node:fs';
+import { initializeTestEnvironment, type RulesTestEnvironment } from '@firebase/rules-unit-testing';
 import { mapCatalogProduct, currentCartItem } from '../../src/domain/catalog';
 import { editProductChanges } from '../../src/domain/productEdit';
 const fixtures=vi.hoisted(()=>({db:undefined as ReturnType<typeof getFirestore>|undefined}));
@@ -11,8 +13,17 @@ const host=process.env.FIRESTORE_EMULATOR_HOST;if(!host||!/^127\.0\.0\.1:\d+$/.t
 const app=initializeApp({projectId:'demo-mutter-readers',apiKey:'synthetic'},'readers');const db=getFirestore(app);connectFirestoreEmulator(db,'127.0.0.1',Number(host.split(':')[1]));fixtures.db=db;
 const values=[true,false,undefined,null,'true',1];
 const base={title:'Legacy',priceUSD:100,stockTotal:4,category:{id:'games',name:'Games'},subcategory:{id:'sub',name:'Sub',categoryId:'games'},variants:[],images:[]};
-beforeAll(async()=>{await fetch(`http://${host}/emulator/v1/projects/demo-mutter-readers/databases/(default)/documents`,{method:'DELETE'});for(let i=0;i<values.length;i++)await setDoc(doc(db,'products',`product${i}`),{...base,slug:`product${i}-legacy`,...(values[i]!==undefined?{active:values[i]}:{})});});
-afterAll(()=>deleteApp(app));
+let environment: RulesTestEnvironment;
+beforeAll(async () => {
+ environment = await initializeTestEnvironment({ projectId: 'demo-mutter-readers', firestore: { host: '127.0.0.1', port: Number(host.split(':')[1]), rules: readFileSync('firebase.catalog-r1b.rules', 'utf8') } });
+ await environment.clearFirestore();
+ // Seed only synthetic fixtures through the emulator's privileged test context.
+ // The real production readers below still run as the unauthenticated browser SDK.
+ await environment.withSecurityRulesDisabled(async context => {
+  for (let i = 0; i < values.length; i++) await context.firestore().doc(`products/product${i}`).set({ ...base, slug: `product${i}-legacy`, ...(values[i] !== undefined ? { active: values[i] } : {}) });
+ });
+});
+afterAll(async () => { await deleteApp(app); await environment.cleanup(); });
 test('publication matrix applies to actual paginated, search and related queries',async()=>{
  expect((await fetchProductsPage({limit:1})).products.map(p=>p.id)).toEqual(['product0']);
  expect((await fetchProducts()).map(p=>p.id)).toEqual(['product0']);

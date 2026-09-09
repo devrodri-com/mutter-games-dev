@@ -1,0 +1,19 @@
+{
+  "emulators": {
+    "auth": {
+      "host": "127.0.0.1",
+      "port": 9198
+    },
+    "firestore": {
+      "host": "127.0.0.1",
+      "port": 8188
+    },
+    "ui": {
+      "enabled": false
+    },
+    "singleProjectMode": false
+  },
+  "firestore": {
+    "rules": "firebase.catalog-r1b.rules"
+  }
+}
