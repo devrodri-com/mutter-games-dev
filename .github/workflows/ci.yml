@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - codex/mutter-catalog-prep-r2-20260909
 
 jobs:
   build:
@@ -14,6 +15,20 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Verify event checkout identity
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+          EVENT_REF: ${{ github.ref }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          actual_sha="$(git rev-parse HEAD)"
+          actual_tree="$(git rev-parse 'HEAD^{tree}')"
+          printf 'event=%s\nref=%s\nexpected_sha=%s\nhead=%s\ntree=%s\n' "$EVENT_NAME" "$EVENT_REF" "$EXPECTED_SHA" "$actual_sha" "$actual_tree"
+          test "$actual_sha" = "$EXPECTED_SHA"
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -50,7 +65,12 @@ jobs:
       - name: Verify checkout function packaging
         run: npm run check:checkout-packaging
 
+      # CI config selects the Chrome channel for Chromium and Playwright WebKit.
+      - name: Prepare declared Playwright browsers
+        run: node node_modules/@playwright/test/cli.js install --with-deps chrome webkit
+
       - name: Catalog desktop and mobile browser regressions
         env:
           JAVA_TOOL_OPTIONS: -Duser.language=en -Duser.country=US
+          CATALOG_WEBKIT: '1'
         run: npm run test:catalog:browser
