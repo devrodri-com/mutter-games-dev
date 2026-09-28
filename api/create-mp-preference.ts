@@ -5,6 +5,7 @@ import { getFirestore } from 'firebase-admin/firestore';
 import { CheckoutError } from './_lib/checkout-domain.js';
 import { checkout } from './_lib/checkout-service.js';
 import { createMercadoPagoPreference } from './_lib/mercado-pago.js';
+import { mercadoPagoGateway } from './_lib/mercado-pago-payments.js';
 type Response = {
     setHeader(name: string, value: string): unknown;
     status(code: number): Response;
@@ -33,7 +34,7 @@ export default async function handler(req: Pick<VercelRequest, 'method' | 'heade
         catch {
             return res.status(400).json({ error: 'Datos inválidos.' });
         }
-        return res.status(200).json(await checkout(getFirestore(app), uid, body, createMercadoPagoPreference));
+        return res.status(200).json(await checkout(getFirestore(app), uid, body, createMercadoPagoPreference, { gateway: mercadoPagoGateway }));
     }
     catch (error: unknown) {
         if (error instanceof CheckoutError)

@@ -1,20 +1,39 @@
 import { record, type Quote } from './checkout-domain.js';
 import type { Preference } from './checkout-service.js';
-export async function createMercadoPagoPreference(id: string, quote: Quote): Promise<Preference> {
+import { mercadoPagoNumericId } from './mercado-pago-payments.js';
+
+export async function createMercadoPagoPreference(id: string, quote: Quote, expiresAt: number): Promise<Preference> {
     const token = process.env.MP_ACCESS_TOKEN;
     if (!token)
         throw new Error('Payment configuration unavailable');
+    const now = Date.now();
+    if (!/^[a-zA-Z0-9_-]{1,200}$/.test(id) || !Number.isSafeInteger(expiresAt) || expiresAt <= now)
+        throw new Error('Invalid payment preference lifetime');
     const items = quote.items.map(item => ({ id: item.id, title: item.title, quantity: item.quantity, unit_price: item.unitPrice, currency_id: quote.currency }));
     if (quote.shippingCost)
         items.push({ id: 'shipping', title: 'Envío', quantity: 1, unit_price: quote.shippingCost, currency_id: quote.currency });
-    const response = await fetch('https://api.mercadopago.com/checkout/preferences', { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ items, external_reference: id }), signal: AbortSignal.timeout(15000) });
+    const returnUrl = `https://www.muttergames.com/success?orderId=${encodeURIComponent(id)}`;
+    const response = await fetch('https://api.mercadopago.com/checkout/preferences', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            items,
+            external_reference: id,
+            expires: true,
+            expiration_date_from: new Date(now).toISOString(),
+            expiration_date_to: new Date(expiresAt).toISOString(),
+            back_urls: { success: returnUrl, pending: returnUrl, failure: returnUrl },
+        }),
+        signal: AbortSignal.timeout(15000),
+        redirect: 'error',
+    });
     if (!response.ok)
         throw new Error('Provider outcome requires verification');
     const result = record(await response.json());
-    if (typeof result.id !== 'string' || typeof result.init_point !== 'string' || result.external_reference !== id)
+    if (typeof result.id !== 'string' || !/^[a-zA-Z0-9_-]{1,200}$/.test(result.id) || typeof result.init_point !== 'string' || result.external_reference !== id)
         throw new Error('Unverified preference response');
     const url = new URL(result.init_point);
-    if (url.protocol !== 'https:' || url.hostname !== 'www.mercadopago.com.uy')
+    if (url.protocol !== 'https:' || url.hostname !== 'www.mercadopago.com.uy' || url.username || url.password || url.port)
         throw new Error('Unverified provider URL');
-    return { id: result.id, init_point: result.init_point };
+    return { id: result.id, init_point: result.init_point, collectorId: mercadoPagoNumericId(result.collector_id) };
 }

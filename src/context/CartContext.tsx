@@ -5,6 +5,7 @@ import { listenToCartChanges, parseCartItems, saveCartToFirebase } from '../util
 import { enrichCartItems, isSameItem } from '../utils/cartUtils';
 import type { CartItem } from '../data/types';
 import { toast } from 'react-hot-toast';
+import { useLiveCartInventory } from '../hooks/useLiveCartInventory';
 export type ShippingData = {
     name: string;
     address: string;
@@ -259,8 +260,9 @@ export function CartProvider({ children }: {
     const removeItem = async (target: CartItem) => { await persist(itemsRef.current.filter(item => !isSameItem(item,target))); };
     const updateItem = async (target: CartItem, updates: Pick<CartItem, 'quantity'>) => { await persist(itemsRef.current.map(item => isSameItem(item,target) ? { ...item, ...updates } : item).filter(item => item.quantity > 0)); };
     const clearCart = async () => { await persist([]); };
-    const total = items.reduce((sum, item) => sum + (Number.isFinite(item.priceUSD) ? item.priceUSD * item.quantity : 0), 0);
-    return <CartContext.Provider value={{ items, cartItems: items, addToCart, removeItem, updateItem, clearCart, shippingInfo, shippingData: shippingInfo, setShippingInfo, setShippingData: setShippingInfo, validateShippingData: data => Boolean(data.name && data.address && data.city && data.state && data.phone && data.email), total, cartError, cartReady, refreshCart }}>{children}</CartContext.Provider>;
+    const visibleItems = useLiveCartInventory(uid, items);
+    const total = visibleItems.reduce((sum, item) => sum + (Number.isFinite(item.priceUSD) ? item.priceUSD * item.quantity : 0), 0);
+    return <CartContext.Provider value={{ items: visibleItems, cartItems: visibleItems, addToCart, removeItem, updateItem, clearCart, shippingInfo, shippingData: shippingInfo, setShippingInfo, setShippingData: setShippingInfo, validateShippingData: data => Boolean(data.name && data.address && data.city && data.state && data.phone && data.email), total, cartError, cartReady, refreshCart }}>{children}</CartContext.Provider>;
 }
 export function useCart() { const context = useContext(CartContext); if (!context)
     throw new Error('useCart debe usarse dentro de CartProvider'); return context; }

@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type APIRequestContext } from '@playwright/test';
 import { initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 if(process.env.FIRESTORE_EMULATOR_HOST!=='127.0.0.1:8188')throw Error('Local demo emulator required');
@@ -39,4 +39,46 @@ test('same identity on another device observes explicit clear',async({page,brows
   await other.goto('http://127.0.0.1:5277/carrito');await expect(other.getByText('$100.00 c/u',{exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Quitar',exact:true}).click();await expect(other.getByText('Juego sintético R1',{exact:true})).toHaveCount(0);
  }finally{await device.close();}
+});
+
+
+async function syntheticBuyer(request: APIRequestContext): Promise<{ Authorization: string }> {
+ const authResponse = await request.post('http://127.0.0.1:9198/identitytoolkit.googleapis.com/v1/accounts:signUp?key=synthetic', { data: { returnSecureToken: true } });
+ expect(authResponse.ok()).toBe(true);
+ const identity: unknown = await authResponse.json();
+ if (!identity || typeof identity !== 'object' || !('idToken' in identity) || typeof identity.idToken !== 'string') throw new Error('Synthetic auth token missing');
+ return { Authorization: `Bearer ${identity.idToken}` };
+}
+
+test('real checkout reserves the last unit and the open product stops offering it', async ({ page, request }, testInfo) => {
+ await db.collection('products').doc(item.id).set({ ...product, stockTotal: 1 });
+ await page.goto('/producto/r1-synthetic');
+ await expect(page.getByRole('button', { name: 'Agregar al carrito', exact: true })).toBeEnabled();
+ await page.getByRole('button', { name: 'Agregar al carrito', exact: true }).click();
+ const cartPage = await page.context().newPage();
+ await cartPage.route('**/*', route => ['127.0.0.1', 'localhost'].includes(new URL(route.request().url()).hostname) ? route.continue() : route.abort());
+ await cartPage.goto('/carrito');
+ await expect(cartPage.getByText('$100.00 c/u', { exact: true })).toBeVisible();
+ await expect(cartPage.getByText('No disponible para compra', { exact: true })).toHaveCount(0);
+ const headers = await syntheticBuyer(request);
+ const purchase = { items: [{ id: item.id, quantity: 1 }], shipping: { pickup: true, department: '', name: 'Synthetic Buyer', address: '', city: '', postalCode: '', phone: '00000000', email: 'browser@example.invalid' } };
+ const quoted = await request.post('/api/create-mp-preference', { headers, data: { action: 'quote', purchase } });
+ expect(quoted.status()).toBe(200);
+ const quoteResult: unknown = await quoted.json();
+ if (!quoteResult || typeof quoteResult !== 'object' || !('quote' in quoteResult) || !quoteResult.quote || typeof quoteResult.quote !== 'object' || !('hash' in quoteResult.quote) || typeof quoteResult.quote.hash !== 'string') throw new Error('Real quote missing');
+ const started = await request.post('/api/create-mp-preference', { headers, data: { action: 'start', purchase, quoteHash: quoteResult.quote.hash, key: crypto.randomUUID() } });
+ expect(started.status()).toBe(200);
+ const startResult: unknown = await started.json();
+ expect(startResult).toMatchObject({ init_point: expect.stringContaining('synthetic-browser-') });
+ await expect(page.getByRole('button', { name: 'SIN STOCK', exact: true })).toBeDisabled();
+ await expect(cartPage.getByText('No disponible para compra', { exact: true })).toBeVisible();
+ await expect(page.getByRole('button', { name: 'Comprar ahora', exact: true })).toHaveCount(0);
+ const stored = (await db.collection('products').doc(item.id).get()).data();
+ expect(stored?.stockTotal).toBe(1); expect(Object.keys(stored?.webReservations ?? {})).toHaveLength(1);
+ const competingBuyer = await syntheticBuyer(request);
+ const blocked = await request.post('/api/create-mp-preference', { headers: competingBuyer, data: { action: 'start', purchase, quoteHash: quoteResult.quote.hash, key: crypto.randomUUID() } });
+ expect(blocked.status()).toBe(409); expect(await blocked.json()).not.toHaveProperty('init_point');
+ await page.screenshot({ path: testInfo.outputPath('last-unit-reserved.png'), fullPage: true });
+ await cartPage.screenshot({ path: testInfo.outputPath('cart-unit-reserved.png'), fullPage: true });
+ await cartPage.close();
 });

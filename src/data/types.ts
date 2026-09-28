@@ -39,6 +39,7 @@ export type Product = {
     }[];
   }[];
   stockTotal?: number;
+  hasWebReservations?: boolean;
   sku?: string;
   tipo?: string; // Ej: "Juego" | "Consola" | "Accesorio" | "Merch"
   type?: string; // Ej: "Juego", "Consola", etc.

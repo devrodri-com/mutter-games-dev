@@ -4,7 +4,7 @@ import path from 'path';
 
 export default defineConfig({
     test: {
-      exclude: [...configDefaults.exclude, "tests/e2e/**"],
+      exclude: [...configDefaults.exclude, "tests/e2e/**", "paired-admin-api/**"],
       environment: 'happy-dom',
       globals: true,
       setupFiles: ['./src/test/setupTests.ts'],

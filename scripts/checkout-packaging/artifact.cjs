@@ -52,7 +52,7 @@ async function buildArtifact(source, workspace) {
   for (const key of ['FIREBASE_PRIVATE_KEY', 'MP_ACCESS_TOKEN', 'IMAGEKIT_PRIVATE_KEY', 'GOOGLE_APPLICATION_CREDENTIALS']) {
     assert(!process.env[key], `Credential environment is forbidden: ${key}`);
   }
-  const files = await glob('api/**/*.ts', source);
+  const files = { ...await glob('api/**/*.ts', source), ...await glob('src/domain/webInventory.ts', source) };
   // npm ci precedes this gate. Reuse the builder's installation deduplication;
   // emission/tracing still use production mode and the real project scope.
   const builderConfig = { nodeVersion: '22.x' };
@@ -61,7 +61,7 @@ async function buildArtifact(source, workspace) {
   const output = built.output;
   assert.equal(output.handler, 'api/create-mp-preference.js');
   assert.equal(output.runtime, 'nodejs22.x');
-  for (const name of ['api/create-mp-preference.js', 'api/_lib/checkout-service.js', 'api/_lib/checkout-domain.js', 'api/_lib/mercado-pago.js']) assert(output.files[name], `Missing traced module ${name}`);
+  for (const name of ['api/create-mp-preference.js', 'api/_lib/checkout-service.js', 'api/_lib/checkout-domain.js', 'api/_lib/mercado-pago.js', 'api/_lib/mercado-pago-payments.js', 'api/_lib/payment-service.js', 'api/_lib/payment-transitions.js', 'api/_lib/inventory-transactions.js', 'src/domain/webInventory.js']) assert(output.files[name], `Missing traced module ${name}`);
   assert(output.files['package.json'], 'Builder omitted real package scope; do not fabricate it');
   const manifest = [];
   for (const [name, file] of Object.entries(output.files).sort(([a], [b]) => a.localeCompare(b))) {

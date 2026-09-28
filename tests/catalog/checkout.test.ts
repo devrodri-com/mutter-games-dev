@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { beforeAll, afterAll, test, expect, vi } from 'vitest';
+import { beforeEach, afterAll, test, expect, vi } from 'vitest';
 import { initializeApp, deleteApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { checkout } from '../../api/_lib/checkout-service';
@@ -9,10 +9,10 @@ if(!host||!/^127\.0\.0\.1:\d+$/.test(host))throw new Error('Isolated emulator re
 const app=initializeApp({projectId:'demo-mutter-checkout'},'checkout-regression');const db=getFirestore(app);
 const product={active:true,title:{es:'Juego',en:'Game'},priceUSD:200,stockTotal:5,variants:[{label:{es:'Color',en:'Color'},options:[{value:'Rojo',priceUSD:200,stock:5}]}]};
 const purchase={items:[{id:'test-game',variantId:'Color-Rojo',quantity:1}],shipping:{pickup:false,department:'Montevideo',name:'Synthetic',address:'Test',city:'Test',postalCode:'10000',phone:'00000000',email:'synthetic@example.invalid'}};
-let calls=0;const provider=async(id:string)=>{calls++;return {id:'pref-'+id,init_point:'https://www.mercadopago.com.uy/checkout/test'};};
+let calls=0;const provider=async(id:string)=>{calls++;return {id:'pref-'+id,collectorId:'123',init_point:'https://www.mercadopago.com.uy/checkout/test'};};
 let sequence=0;
 async function start(input:unknown=purchase){const q=await checkout(db,'synthetic-user',{action:'quote',purchase:input},provider);if(!('quote' in q))throw Error('Expected quote');return {action:'start',purchase:input,key:`synthetic-intent-${++sequence}-000000`,quoteHash:q.quote.hash};}
-beforeAll(async()=>{await fetch(`http://${host}/emulator/v1/projects/demo-mutter-checkout/databases/(default)/documents`,{method:'DELETE'});await db.collection('products').doc('test-game').set(product);});
+beforeEach(async()=>{await fetch(`http://${host}/emulator/v1/projects/demo-mutter-checkout/databases/(default)/documents`,{method:'DELETE'});await db.collection('products').doc('test-game').set(product);});
 afterAll(async()=>{await db.terminate();await deleteApp(app);});
 test.each([false,undefined,null,'true',1])('strict publication rejects %s without writes',async active=>{
  const p={...product,active};const baseline=calls;const orders=(await db.collection('orders').get()).size;

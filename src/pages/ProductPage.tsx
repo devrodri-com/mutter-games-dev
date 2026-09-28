@@ -36,7 +36,7 @@ export default function ProductPage() {
   const { slug } = useParams<{ slug: string }>();
   const decodedSlug = decodeURIComponent(slug || "");
   const {product, loading, error: productError, retry} = usePublishedProduct(decodedSlug);
-  const [selectedOption, setSelectedOption] = useState<{ value: string; priceUSD: number; variantLabel?: string; variantId?: string; stock?: number } | null>(null);
+  const [selectedVariant, setSelectedVariant] = useState<{ productId: string; id: string } | null>(null);
   const [selectedImage, setSelectedImage] = useState(0);
   const [quantity, setQuantity] = useState(1);
   const [showScrollTop, setShowScrollTop] = useState(false);
@@ -64,14 +64,16 @@ export default function ProductPage() {
   // ------------------------------------------------------------------------
   // EFECTO: CARGA DEL PRODUCTO POR SLUG DESDE FIREBASE
   // ------------------------------------------------------------------------
-  useEffect(() => {
-    setSelectedOption(null);
-    setQuantity(1);
-    if (product?.variants?.length === 1 && product.variants[0].options.length === 1) {
-      const variant = product.variants[0]; const option = variant.options[0];
-      setSelectedOption({...option,variantLabel:variant.label[lang],variantId:option.variantId || `${variant.label.es || variant.label.en}-${option.value}`});
-    }
-  }, [product, lang]);
+  const options = product?.variants?.flatMap(variant => variant.options.map(option => ({
+    ...option,
+    variantLabel: variant.label[lang],
+    variantId: option.variantId || `${variant.label.es || variant.label.en}-${option.value}`,
+  }))) ?? [];
+  // Keep only selection identity in state; stock always comes from the latest snapshot.
+  const selectedOption = selectedVariant?.productId === product?.id
+    ? options.find(option => option.variantId === selectedVariant?.id) ?? null
+    : options.length === 1 ? options[0] : null;
+  useEffect(() => { setQuantity(1); setSelectedVariant(null); }, [decodedSlug]);
 
   // ------------------------------------------------------------------------
   // EFECTO: BOTÓN SCROLL TO TOP SEGÚN POSICIÓN DE SCROLL
@@ -404,24 +406,20 @@ export default function ProductPage() {
               {/* Opciones de variante multilenguaje y precio */}
               {Array.isArray(product.variants) && product.variants.length > 0 && (
                 <div className="mb-6">
-                  {product.variants.map((variant: any, vIndex: number) => (
+                  {product.variants.map((variant, vIndex) => (
                     <div key={vIndex} className="mb-4">
                       <h3 className="uppercase text-sm font-semibold text-gray-800 mb-1">
                         {variant.label?.[lang] || "Opción"}
                       </h3>
                       <div className="flex flex-wrap gap-2 mt-2">
-                        {variant.options.map((option: any, oIndex: number) => (
+                        {variant.options.map((option, oIndex) => (
                           <button
                             key={oIndex}
                             onClick={() => {
-                              setSelectedOption({
-                                ...option,
-                                variantLabel: variant.label?.[lang] || "Opción",
-                                variantId: option.variantId || `${variant.label?.[lang] || "Opción"}-${option.value}`,
-                              });
+                              setSelectedVariant({ productId: product.id, id: option.variantId || `${variant.label.es || variant.label.en}-${option.value}` });
                             }}
                             className={`px-4 py-2 rounded-md border ${
-                              selectedOption?.value === option.value
+                              selectedOption?.variantId === (option.variantId || `${variant.label.es || variant.label.en}-${option.value}`)
                                 ? "bg-black text-white border-black"
                                 : "bg-white text-black border-gray-300"
                             } hover:shadow-md transition`}

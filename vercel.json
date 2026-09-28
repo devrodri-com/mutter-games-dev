@@ -1,5 +1,6 @@
 {
   "version": 2,
+  "git": { "deploymentEnabled": { "codex/mutter-web-stock-prep-20260928": false } },
   "builds": [
     { "src": "package.json", "use": "@vercel/static-build" },
     { "src": "api/create-mp-preference.ts", "use": "@vercel/node" }

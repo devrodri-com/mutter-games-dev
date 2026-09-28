@@ -26,7 +26,7 @@ test('real Auth + checkout handler + candidate Rules persist one canonical order
       posts++; const body = object(JSON.parse(string(init?.body)));
       externalReference = string(body.external_reference);
       expect(body.items).toEqual([{ id: 'p', title: 'P', quantity: 1, unit_price: 100, currency_id: 'UYU' }]);
-      return new Response(JSON.stringify({ id: 'synthetic-preference', init_point: 'https://www.mercadopago.com.uy/checkout/v1/redirect?pref_id=synthetic', external_reference: externalReference }));
+      return new Response(JSON.stringify({ id: 'synthetic-preference', collector_id: 123, init_point: 'https://www.mercadopago.com.uy/checkout/v1/redirect?pref_id=synthetic', external_reference: externalReference }));
     }
     if (!['127.0.0.1', 'localhost'].includes(url.hostname)) throw Error('Nonlocal transport blocked');
     return actualFetch(input, init);

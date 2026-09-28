@@ -22,9 +22,12 @@ export function purchaseInput(items: CartItem[], shipping: ShippingData, pickup:
     return { items: items.map(i => ({ id: i.id, variantId: i.variantId ?? '', quantity: i.quantity, customName: i.customName ?? '', customNumber: i.customNumber ?? '' })), shipping: { pickup, department: shipping.state, name: shipping.name, address: [shipping.address, shipping.address2].filter(Boolean).join(', '), city: shipping.city, postalCode: shipping.postalCode, phone: shipping.phone, email: shipping.email } };
 }
 async function request(body: unknown): Promise<Record<string, unknown>> {
-    if (!auth.currentUser)
+    const user = auth.currentUser;
+    if (!user)
         throw new Error('Esperá a que termine de cargar tu sesión.');
-    const token = await auth.currentUser.getIdToken();
+    const token = await user.getIdToken();
+    if (auth.currentUser?.uid !== user.uid)
+        throw new Error('Cambió la sesión. Revisá la compra antes de continuar.');
     const response = await fetch('/api/create-mp-preference', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(body) });
     const data: unknown = await response.json();
     if (!data || typeof data !== 'object' || Array.isArray(data))
@@ -47,8 +50,42 @@ export async function startCheckout(purchase: ReturnType<typeof purchaseInput>, 
     const data = await request({ action: 'start', purchase, quoteHash, key });
     if (typeof data.id !== 'string' || typeof data.init_point !== 'string')
         throw new Error('El intento requiere verificación.');
-    const url = new URL(data.init_point);
-    if (url.protocol !== 'https:' || url.hostname !== 'www.mercadopago.com.uy')
+    return { id: data.id, url: paymentUrl(data.init_point) };
+}
+
+function paymentUrl(value: string): string {
+    const url = new URL(value);
+    if (url.protocol !== 'https:' || url.hostname !== 'www.mercadopago.com.uy' || url.username || url.password || url.port)
         throw new Error('Destino de pago inválido.');
-    return { id: data.id, url: data.init_point };
+    return value;
+}
+export type CheckoutStatus = {
+    id: string;
+    inventoryState: 'reserved' | 'committed' | 'released' | 'attention';
+    paymentStatus: string;
+    reservedUntil: number;
+    canRetry: boolean;
+    url?: string;
+};
+function checkoutStatus(data: Record<string, unknown>): CheckoutStatus {
+    if (typeof data.id !== 'string' || !data.id.trim() ||
+        typeof data.paymentStatus !== 'string' || typeof data.reservedUntil !== 'number' || !Number.isFinite(data.reservedUntil) ||
+        typeof data.canRetry !== 'boolean') throw new Error('No pudimos verificar el estado de la compra.');
+    const inventoryState = data.inventoryState;
+    if (inventoryState !== 'reserved' && inventoryState !== 'committed' && inventoryState !== 'released' && inventoryState !== 'attention')
+        throw new Error('Estado de inventario inválido.');
+    if (data.canRetry && inventoryState !== 'released') throw new Error('La compra requiere verificación.');
+    if (data.init_point !== undefined && typeof data.init_point !== 'string') throw new Error('Destino de pago inválido.');
+    return { id: data.id, inventoryState, paymentStatus: data.paymentStatus, reservedUntil: data.reservedUntil, canRetry: data.canRetry,
+        ...(typeof data.init_point === 'string' ? { url: paymentUrl(data.init_point) } : {}) };
+}
+export async function requestCheckoutStatus(identity: { key: string } | { orderId: string }): Promise<CheckoutStatus> {
+    return checkoutStatus(await request({ action: 'status', ...identity }));
+}
+export async function verifyCheckoutPayment(orderId: string, paymentId: string): Promise<CheckoutStatus> {
+    return checkoutStatus(await request({ action: 'verify', orderId, paymentId }));
+}
+export async function refreshAvailability(productIds: string[]): Promise<void> {
+    const data = await request({ action: 'availability', productIds });
+    if (data.checked !== true) throw new Error('No pudimos verificar la disponibilidad.');
 }

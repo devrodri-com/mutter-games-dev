@@ -6,11 +6,15 @@ on:
     branches:
       - main
       - codex/mutter-catalog-prep-r2-20260909
+      - codex/mutter-web-stock-prep-20260928
 
 jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
+    env:
+      WEB_INVENTORY_ADMIN_SHA: 70c45e4d74b1b1941435387e3ebf5fe7dbc8fd4d
+      MUTTER_ADMIN_API_SOURCE: ${{ github.workspace }}/paired-admin-api
 
     steps:
       - name: Checkout
@@ -50,6 +54,29 @@ jobs:
 
       - name: Checkout API typecheck
         run: npm run typecheck:api
+
+      - name: Checkout exact paired Admin inventory target
+        uses: actions/checkout@v4
+        with:
+          repository: devrodri-com/mutter-games-admin-api
+          ref: ${{ env.WEB_INVENTORY_ADMIN_SHA }}
+          path: paired-admin-api
+          persist-credentials: false
+
+      - name: Verify paired Admin identity
+        working-directory: paired-admin-api
+        env:
+          EXPECTED_SHA: ${{ env.WEB_INVENTORY_ADMIN_SHA }}
+        run: |
+          set -euo pipefail
+          actual_sha="$(git rev-parse HEAD)"
+          actual_tree="$(git rev-parse 'HEAD^{tree}')"
+          printf 'paired_admin_expected=%s\nhead=%s\ntree=%s\n' "$EXPECTED_SHA" "$actual_sha" "$actual_tree"
+          test "$actual_sha" = "$EXPECTED_SHA"
+
+      - name: Install paired Admin dependencies
+        working-directory: paired-admin-api
+        run: npm ci --ignore-scripts --no-audit --no-fund
 
       - name: Setup Java for declared Firebase emulator tooling
         uses: actions/setup-java@v4
