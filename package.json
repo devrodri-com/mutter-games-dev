@@ -18,7 +18,7 @@
     "test:e2e:codegen": "playwright codegen http://localhost:5173",
     "test:catalog:run": "vitest run --fileParallelism=false",
     "test:catalog": "firebase emulators:exec --only firestore,auth --project demo-mutter-r1 --config firebase.catalog-emulators.json \"npm run test:catalog:run\"",
-    "typecheck:api": "tsc --noEmit --skipLibCheck --moduleResolution node --target ES2022 --module commonjs --esModuleInterop api/create-mp-preference.ts",
+    "typecheck:api": "tsc --noEmit --skipLibCheck --moduleResolution NodeNext --target ES2022 --module NodeNext --esModuleInterop api/create-mp-preference.ts",
     "test:catalog:browser": "firebase emulators:exec --only firestore,auth --project demo-mutter-r1 --config firebase.catalog-emulators.json \"node scripts/run-catalog-browser.mjs\"",
     "check:checkout-packaging": "node scripts/verify-checkout-packaging.cjs"
   },

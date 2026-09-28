@@ -2,9 +2,9 @@ import type { VercelRequest } from '@vercel/node';
 import { cert, getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
-import { CheckoutError } from './_lib/checkout-domain';
-import { checkout } from './_lib/checkout-service';
-import { createMercadoPagoPreference } from './_lib/mercado-pago';
+import { CheckoutError } from './_lib/checkout-domain.js';
+import { checkout } from './_lib/checkout-service.js';
+import { createMercadoPagoPreference } from './_lib/mercado-pago.js';
 type Response = {
     setHeader(name: string, value: string): unknown;
     status(code: number): Response;

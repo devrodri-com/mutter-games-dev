@@ -1,5 +1,5 @@
 import { FieldValue, type Firestore } from 'firebase-admin/firestore';
-import { CheckoutError, hash, parsePurchase, quotePurchase, record, type Quote } from './checkout-domain';
+import { CheckoutError, hash, parsePurchase, quotePurchase, record, type Quote } from './checkout-domain.js';
 export type Preference = {
     id: string;
     init_point: string;

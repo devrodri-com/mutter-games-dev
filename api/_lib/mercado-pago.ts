@@ -1,5 +1,5 @@
-import { record, type Quote } from './checkout-domain';
-import type { Preference } from './checkout-service';
+import { record, type Quote } from './checkout-domain.js';
+import type { Preference } from './checkout-service.js';
 export async function createMercadoPagoPreference(id: string, quote: Quote): Promise<Preference> {
     const token = process.env.MP_ACCESS_TOKEN;
     if (!token)
