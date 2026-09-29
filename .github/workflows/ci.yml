@@ -13,7 +13,7 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     env:
-      WEB_INVENTORY_ADMIN_SHA: 70c45e4d74b1b1941435387e3ebf5fe7dbc8fd4d
+      WEB_INVENTORY_ADMIN_SHA: 770e23d0dacf0d8d30779b67aab2e8b470afc901
       MUTTER_ADMIN_API_SOURCE: ${{ github.workspace }}/paired-admin-api
 
     steps:
