@@ -116,7 +116,8 @@ test('release/commit return active quota once but retain the hourly admission co
     expect(user?.active).toContain(third);
     expect(user?.admittedAt).toHaveLength(3);
     expect((await db.doc(`webAdmissionClaims/${first}`).get()).get('released')).toBe(true);
-});
+    // Concurrent Firestore retries use real backoff, as in the admission races above.
+}, 60000);
 
 test('six starts per rolling hour per UID; releasing immediately does not reset the rate', async () => {
     for (let index = 0; index < 6; index++) await close(await admit('user', context(), NOW + index));
