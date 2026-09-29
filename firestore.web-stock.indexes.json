@@ -1,0 +1,13 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "orders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "commerceVersion", "order": "ASCENDING" },
+        { "fieldPath": "reconciliation.nextCheckAt", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}

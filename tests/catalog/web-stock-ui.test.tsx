@@ -64,20 +64,21 @@ test('a selected variant stays selected while live holds update its stock and di
   const buy = Array.from(document.querySelectorAll('button')).find(button => button.textContent === 'SIN STOCK');
   expect(buy?.disabled).toBe(true); expect(document.body.textContent).not.toContain('Comprar ahora');
   expect(mapCatalogProduct('p', reserved).stockTotal).toBe(4);
-  const requests = vi.mocked(fetch).mock.calls.map(([, options]) => JSON.parse(String(options?.body)));
-  expect(requests.some(body => body.action === 'availability' && body.productIds[0] === 'p')).toBe(true);
-  const lastCall = vi.mocked(fetch).mock.calls.at(-1);
-  expect(lastCall?.[1]?.headers).toMatchObject({ Authorization: 'Bearer synthetic' });
+  expect(document.querySelector('[role="status"]')?.textContent).toContain('La disponibilidad mostrada ya las excluye');
+  expect(fetch).not.toHaveBeenCalled();
 });
 
-test('focus and bounded polling ask the server; client clock alone never releases a hold', async () => {
+test('focus and client clock never release a hold or amplify provider reads; trusted snapshots control availability', async () => {
   vi.useFakeTimers();
   sdk.product = { ...base, stockTotal: 1, webReservations: baseHold };
   const element = document.createElement('div'); document.body.append(element); root = createRoot(element);
   await act(async () => root?.render(<MemoryRouter initialEntries={['/product/p']}><Routes><Route path="/product/:slug" element={<ProductPage />} /></Routes></MemoryRouter>));
-  expect(fetch).toHaveBeenCalledTimes(1);
-  await act(async () => vi.advanceTimersByTimeAsync(29_999)); expect(fetch).toHaveBeenCalledTimes(1);
-  await act(async () => vi.advanceTimersByTimeAsync(1)); expect(fetch).toHaveBeenCalledTimes(2);
-  await act(async () => window.dispatchEvent(new Event('focus'))); expect(fetch).toHaveBeenCalledTimes(3);
+  expect(fetch).not.toHaveBeenCalled();
+  await act(async () => vi.advanceTimersByTimeAsync(60 * 60_000));
+  await act(async () => window.dispatchEvent(new Event('focus')));
+  expect(fetch).not.toHaveBeenCalled();
   expect(Array.from(document.querySelectorAll('button')).find(button => button.textContent === 'SIN STOCK')?.disabled).toBe(true);
+  await act(async () => sdk.listeners[0]({ metadata: { fromCache: false, hasPendingWrites: false }, exists: () => true, id: 'p', data: () => ({ ...base, stockTotal: 1 }) }));
+  expect(Array.from(document.querySelectorAll('button')).find(button => button.textContent?.includes('Comprar ahora'))?.disabled).toBe(false);
+  expect(document.querySelector('[role="status"]')).toBeNull();
 });

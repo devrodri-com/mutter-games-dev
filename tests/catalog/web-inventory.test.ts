@@ -9,6 +9,7 @@ import { getFirestore, type DocumentSnapshot, type Firestore } from 'firebase-ad
 import { getAuth } from 'firebase-admin/auth';
 import checkoutHandler from '../../api/create-mp-preference';
 import { checkout } from '../../api/_lib/checkout-service';
+import { reconcileOrder } from '../../api/_lib/order-reconciliation';
 import { createMercadoPagoPreference } from '../../api/_lib/mercado-pago';
 import { mercadoPagoGateway } from '../../api/_lib/mercado-pago-payments';
 
@@ -109,7 +110,7 @@ async function syntheticProvider(input: RequestInfo | URL, init?: RequestInit): 
     }
     throw new Error(`Unexpected synthetic provider route: ${url.pathname}`);
 }
-const options = () => ({ now: () => clock, gateway: mercadoPagoGateway });
+const options = () => ({ now: () => clock, gateway: mercadoPagoGateway, collectorId: String(collector), admission: { ipKey: 'a'.repeat(64) } });
 async function call(uid: string, input: unknown): Promise<Record<string, unknown>> {
     return record(await checkout(db, uid, input, createMercadoPagoPreference, options()));
 }
@@ -141,16 +142,20 @@ async function stock(id = 'game') {
     const data = record((await db.doc(`products/${id}`).get()).data());
     return data.stockTotal;
 }
-function expire() {
+function expire(includeGrace = true) {
     const latest = Math.max(...[...preferences.values()].map(preference => Date.parse(preference.expiration_date_to)));
-    clock = latest + 1;
+    clock = latest + (includeGrace ? 15 * 60_000 : 0) + 1;
 }
 async function observe(orderId: unknown, status: string | null, merchantStatus: 'closed' | 'opened' | 'expired') {
     if (typeof orderId !== 'string') throw new Error('Expected order id');
     const persisted = await order(orderId);
-    if (typeof persisted.preferenceId !== 'string') throw new Error('Expected preference link');
+    // A lost preference response leaves no saved preference ID. Discovery still uses
+    // the actual provider external_reference, never a fabricated stored linkage.
+    const preferenceId = typeof persisted.preferenceId === 'string' ? persisted.preferenceId :
+        [...preferences.values()].find(preference => preference.external_reference === orderId)?.id;
+    if (!preferenceId) throw new Error('Expected synthetic provider preference');
     const merchant: MerchantFixture = {
-        id: ++nextMerchantId, external_reference: orderId, preference_id: persisted.preferenceId,
+        id: ++nextMerchantId, external_reference: orderId, preference_id: preferenceId,
         collector: { id: collector }, status: merchantStatus, payments: [],
     };
     merchants.set(String(merchant.id), merchant);
@@ -171,13 +176,22 @@ async function paymentId(orderId: unknown, status = 'approved', merchantStatus: 
     if (!id) throw new Error('Expected payment');
     return id;
 }
-async function sweep() { return call('other-buyer', { action: 'availability', productIds: ['game'] }); }
+async function sweep() {
+    // Test-owned fixtures only. Exercise the actual server reconciliation entrypoint;
+    // availability intentionally performs no provider I/O in the new contract.
+    const orders = await db.collection('orders').get();
+    for (const order of orders.docs) await reconcileOrder(db, order.id, options(), 'sweep');
+}
 
 beforeEach(async () => {
     vi.restoreAllMocks();
     clock = originalNow(); posts = 0; outcome = 'normal'; failFinalization = false; nextPaymentId = 100; nextMerchantId = 300;
     preferences.clear(); payments.clear(); merchants.clear(); requestLog.length = 0;
     vi.stubEnv('MP_ACCESS_TOKEN', 'synthetic-never-real');
+    vi.stubEnv('MP_COLLECTOR_ID', String(collector));
+    vi.stubEnv('VERCEL', '1');
+    vi.stubEnv('WEB_ADMISSION_HMAC_SECRET', 'synthetic-web-inventory-admission-secret-32-plus');
+    vi.stubEnv('CRON_SECRET', 'different-synthetic-cron-secret');
     vi.spyOn(Date, 'now').mockImplementation(() => clock);
     vi.spyOn(globalThis, 'fetch').mockImplementation(syntheticProvider);
     for (const collection of await db.listCollections()) await db.recursiveDelete(collection);
@@ -200,7 +214,7 @@ test('one unit and eight concurrent buyers produce exactly one reservation and o
     }
 }, 30000);
 
-test('eight repeated approved payment reads debit once and create one durable movement', async () => {
+test('concurrent and later repeated approved payment reads debit once and create one durable movement', async () => {
     await seed('game', 5);
     expect((await quote()).items).toEqual(expect.arrayContaining([expect.objectContaining({ stock: 5 })]));
     const started = await start();
@@ -211,16 +225,23 @@ test('eight repeated approved payment reads debit once and create one durable mo
     expect((await db.collection('payments').get()).size).toBe(1);
     expect((await db.collection('inventoryMovements').get()).size).toBe(1);
     expect((await db.doc(`inventoryMovements/${started.id}:commit`).get()).exists).toBe(true);
+    const reads = requestLog.filter(path => path === `GET /v1/payments/${id}`).length;
+    clock += 60_001;
     await call('buyer', { action: 'status', orderId: started.id });
+    expect(requestLog.filter(path => path === `GET /v1/payments/${id}`).length).toBe(reads + 1);
     expect(await stock()).toBe(4);
     expect(posts).toBe(1);
 }, 30000);
 
-test.each(['rejected', null])('expired %s purchase releases only from exact expired merchant proof', async status => {
+test.each(['rejected', null])('expired %s purchase releases after grace and complete canonical payment search', async status => {
     await seed();
     const started = await start();
     await observe(started.id, status, 'expired');
     await call('buyer', { action: 'status', orderId: started.id });
+    expect(await reservationCount()).toBe(1);
+    expect(await stock()).toBe(1);
+    expire(false);
+    await sweep();
     expect(await reservationCount()).toBe(1);
     expect(await stock()).toBe(1);
     expire();
@@ -244,29 +265,45 @@ test('payment in review remains reserved after expiration', async () => {
     expect(posts).toBe(1);
 });
 
-test('expired preference and empty payment/merchant searches do not release', async () => {
+test('availability makes no MP requests; a complete empty payment search releases after deadline plus grace', async () => {
     await seed();
     await start();
     expire();
-    await sweep();
+    const requestsBeforeAvailability = [...requestLog];
+    await call('other-buyer', { action: 'availability', productIds: ['game'] });
+    expect(requestLog).toEqual(requestsBeforeAvailability);
     expect(await reservationCount()).toBe(1);
     expect(await stock()).toBe(1);
-    expect(requestLog).toContain('GET /merchant_orders/search');
+    await sweep();
+    expect(await reservationCount()).toBe(0);
+    expect(await stock()).toBe(1);
+    expect(requestLog).toContain('GET /v1/payments/search');
+    expect(requestLog.some(path => path.includes('merchant_orders'))).toBe(false);
 });
 
-test.each(['accepted-response-lost', 'request-timeout'] as const)('%s remains held and never repeats the POST', async failure => {
+test.each(['accepted-response-lost', 'request-timeout'] as const)('%s stays held until canonical recovery and never repeats the POST', async failure => {
     await seed();
     const key = randomUUID();
     const initial = await quote();
     outcome = failure;
     await expect(start('buyer', purchase(), key, initial.hash)).rejects.toMatchObject({ code: 'RECOVERY_REQUIRED' });
-    expire();
-    await sweep();
+    await expect(start('buyer', purchase(), key, initial.hash)).rejects.toMatchObject({ code: 'RECOVERY_REQUIRED' });
+    expect(posts).toBe(1);
+    expect(await reservationCount()).toBe(1);
+    const rows = await db.collection('orders').get();
+    expect(rows.size).toBe(1);
+    const orderId = rows.docs[0].id;
+    expect(rows.docs[0].get('preferenceId')).toBeUndefined();
+    await paymentId(orderId);
+    // No callback payment ID or stored preference ID: exact external_reference search recovers approval.
+    const recovered = await call('buyer', { action: 'status', orderId });
+    expect(recovered).toMatchObject({ inventoryState: 'committed', paymentStatus: 'approved' });
     await expect(start('buyer', purchase(), key, initial.hash)).rejects.toMatchObject({ code: 'RECOVERY_REQUIRED' });
     expect(posts).toBe(1);
     expect(preferences.size).toBe(1);
-    expect(await reservationCount()).toBe(1);
-    expect(await stock()).toBe(1);
+    expect(await reservationCount()).toBe(0);
+    expect(await stock()).toBe(0);
+    expect((await db.collection('inventoryMovements').get()).size).toBe(1);
 });
 
 test('failed preference finalization retains the reservation and forbids a second POST', async () => {
@@ -365,6 +402,12 @@ test.each([
     expect(await reservationCount()).toBe(1);
     expect((await db.collection('payments').get()).empty).toBe(true);
     expect((await db.collection('inventoryMovements').get()).empty).toBe(true);
+    expire();
+    await sweep();
+    expect(await reservationCount()).toBe(1);
+    expect(await stock()).toBe(5);
+    expect(record((await order(started.id)).inventory).state).toBe('reserved');
+    expect((await order(started.id)).attention).toBe('payment_identity_mismatch');
 });
 
 test('stale rejection cannot undo approval and another approved payment cannot debit twice', async () => {
@@ -379,10 +422,12 @@ test('stale rejection cannot undo approval and another approved payment cannot d
     oldPayment.status_detail = 'cc_rejected_other_reason';
     oldPayment.date_last_updated = new Date(clock - 1000).toISOString();
     oldMerchant.payments[0].status = 'rejected';
+    clock += 60_001;
     const stale = await call('buyer', { action: 'verify', orderId: started.id, paymentId: first });
     expect(stale).toMatchObject({ paymentStatus: 'approved', inventoryState: 'committed' });
     expect((await db.doc(`payments/${first}`).get()).get('status')).toBe('approved');
     expect(await stock()).toBe(4);
+    clock += 60_001;
     const second = await paymentId(started.id);
     const duplicate = await call('buyer', { action: 'verify', orderId: started.id, paymentId: second });
     expect(duplicate).toMatchObject({ paymentStatus: 'approved', inventoryState: 'attention' });
@@ -423,6 +468,7 @@ test('late approval after release and another sale does not make stock negative'
     const paidSecond = await paymentId(second.id);
     await call('second', { action: 'verify', orderId: second.id, paymentId: paidSecond });
     expect(await stock()).toBe(0);
+    clock += 60_001;
     const late = await paymentId(first.id);
     const result = await call('first', { action: 'verify', orderId: first.id, paymentId: late });
     expect(await stock()).toBe(0);
@@ -483,7 +529,8 @@ test('real handler withholds the existing payment link after actual Admin unpubl
                 setHeader() {}, status(code: number) { status = code; return response; },
                 json(value: unknown) { output = value; },
             };
-            await checkoutHandler({ method: 'POST', headers: { authorization: `Bearer ${idToken}` }, body }, response);
+            await checkoutHandler({ method: 'POST', headers: { authorization: `Bearer ${idToken}`, 'x-vercel-forwarded-for': '192.0.2.90' },
+                rawHeaders: ['authorization', `Bearer ${idToken}`, 'x-vercel-forwarded-for', '192.0.2.90'], body }, response);
             return { status, body: record(output) };
         }
         await handlerDb.doc(`products/${productId}`).set(product());

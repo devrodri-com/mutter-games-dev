@@ -8,6 +8,8 @@ export type OrderInventory = {
     reservationId: string;
     expiresAt: number;
     lines: InventoryLine[];
+    releasedAt?: number;
+    committedAt?: number;
 };
 export function readInventory(value: unknown): OrderInventory {
     const raw = record(value);
@@ -25,7 +27,9 @@ export function readInventory(value: unknown): OrderInventory {
     });
     const state = raw.state;
     if (state !== 'reserved' && state !== 'committed' && state !== 'released') throw new Error('Invalid inventory state');
-    return { state, reservationId: raw.reservationId, expiresAt: raw.expiresAt, lines };
+    return { state, reservationId: raw.reservationId, expiresAt: raw.expiresAt, lines,
+        ...(typeof raw.releasedAt === 'number' ? { releasedAt: raw.releasedAt } : {}),
+        ...(typeof raw.committedAt === 'number' ? { committedAt: raw.committedAt } : {}) };
 }
 export function inventoryForQuote(quote: Quote, reservationId: string, expiresAt: number): OrderInventory {
     const grouped = new Map<string, InventoryLine>();
@@ -110,5 +114,14 @@ export function transitionProducts(products: DocumentSnapshot[], inventory: Orde
         update.webCatalogVersion = FieldValue.delete();
         update.updatedAt = FieldValue.serverTimestamp();
         return { snapshot, update };
+    });
+}
+
+// Cleanup after a failed late paid basket; physical quantities and other reservations are unchanged.
+export function releaseOwnedProducts(products: DocumentSnapshot[], inventory: OrderInventory) {
+    return products.filter(snapshot => snapshot.exists).map(snapshot => {
+        const holds = parseReservations(snapshot.data()?.webReservations);
+        delete holds[inventory.reservationId];
+        return { snapshot, update: { webReservations: holds, webCatalogVersion: catalogVersion(snapshot) } };
     });
 }

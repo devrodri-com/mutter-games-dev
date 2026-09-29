@@ -12,21 +12,44 @@ export type VerifiedProviderPayment = {
     updatedAt: number;
     merchantOrderId?: string;
 };
+export type ProviderInspection = {
+    orderId: string;
+    preferenceId?: string;
+    collectorId: string;
+    createdAt: number;
+    expiresAt: number;
+    knownPaymentIds: string[];
+    paymentHint?: string;
+    now?: number;
+    timeoutMs?: number;
+};
 export type ProviderObservation = {
     payments: VerifiedProviderPayment[];
+    observedPaymentIds: string[];
     terminalUnpaid: boolean;
-    preferenceId: string;
+    preferenceId?: string;
     collectorId: string;
+    observedAt: number;
+    searchComplete: boolean;
+    historyWindowExceeded: boolean;
+    verificationError?: 'provider_verification_unavailable';
+    capacityExceeded?: boolean;
 };
 export type PaymentGateway = {
     readPayment(paymentId: string): Promise<VerifiedProviderPayment>;
-    inspectOrder(orderId: string, preferenceId: string, collectorId: string): Promise<ProviderObservation>;
+    inspectOrder(input: ProviderInspection): Promise<ProviderObservation>;
 };
 
 const PAGE_SIZE = 50;
 const MAX_RESULTS = 100;
-const MERCHANT_SEARCH_WINDOW_MS = 89 * 24 * 60 * 60 * 1000;
+const MAX_PROVIDER_TIMEOUT_MS = 10_000;
+const MAX_PROVIDER_REQUESTS = 20;
+// Payment Search documents twelve months and a query interval strictly below 365 days.
+// This conservative policy horizon is not an indexing-delay or retention guarantee.
+export const PAYMENT_TRACKING_HORIZON_MS = 360 * 24 * 60 * 60 * 1000;
 const terminalUnpaidStatuses = new Set(['rejected', 'cancelled']);
+
+class ProviderCapacityError extends Error {}
 
 function unverified(): never {
     throw new Error('Unverified payment provider response');
@@ -73,27 +96,35 @@ function parsePayment(value: unknown, expectedId: string): VerifiedProviderPayme
     if (!/^[A-Z]{3}$/.test(currency))
         return unverified();
     const order = payment.order == null ? undefined : record(payment.order);
+    const merchantOrderId = order?.id == null ? undefined : mercadoPagoNumericId(order.id);
     return {
         id,
         status: providerText(payment.status, 80),
-        statusDetail: providerText(payment.status_detail, 120),
+        // Missing descriptive detail cannot turn a pending or unknown status into unpaid.
+        statusDetail: payment.status_detail == null ? '' : providerText(payment.status_detail, 120),
         externalReference: providerText(payment.external_reference),
         collectorId: mercadoPagoNumericId(payment.collector_id),
         currency,
         amount: amount(payment.transaction_amount),
         liveMode: payment.live_mode,
         updatedAt: timestamp(payment.date_last_updated),
-        ...(order ? { merchantOrderId: mercadoPagoNumericId(order.id) } : {}),
+        ...(merchantOrderId ? { merchantOrderId } : {}),
     };
 }
-function getContext() {
+function getContext(timeoutMs = MAX_PROVIDER_TIMEOUT_MS) {
     const token = process.env.MP_ACCESS_TOKEN;
     if (!token)
         throw new Error('Payment configuration unavailable');
-    // One deadline covers the whole observation, including every page and exact read.
-    const signal = AbortSignal.timeout(10_000);
+    if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > MAX_PROVIDER_TIMEOUT_MS)
+        throw new Error('Invalid payment verification budget');
+    // One deadline covers every page and exact read, not a new timeout per request.
+    const signal = AbortSignal.timeout(timeoutMs);
+    let requestCount = 0;
     return async (path: string, query?: Record<string, string>): Promise<unknown> => {
         signal.throwIfAborted();
+        if (requestCount >= MAX_PROVIDER_REQUESTS)
+            throw new Error('Payment verification request budget exceeded');
+        requestCount += 1;
         const url = new URL(path, 'https://api.mercadopago.com');
         if (query)
             url.search = new URLSearchParams(query).toString();
@@ -113,21 +144,23 @@ function getContext() {
 }
 type ProviderGet = ReturnType<typeof getContext>;
 
-async function paymentSearch(get: ProviderGet, orderId: string, collectorId: string, createdAt: number): Promise<string[]> {
+async function paymentSearch(get: ProviderGet, input: ProviderInspection, now: number, observedIds: Set<string>): Promise<string[]> {
     const ids = new Set<string>();
     let offset = 0;
     let total: number | undefined;
     do {
         const result = record(await get('/v1/payments/search', {
-            external_reference: orderId, 'collector.id': collectorId,
+            external_reference: input.orderId, 'collector.id': input.collectorId,
             sort: 'id', criteria: 'asc', range: 'date_created',
-            begin_date: new Date(createdAt - 1000).toISOString(), end_date: 'NOW',
+            begin_date: new Date(input.createdAt - 1000).toISOString(), end_date: new Date(now).toISOString(),
             limit: String(PAGE_SIZE), offset: String(offset),
         }));
         const paging = record(result.paging);
         const pageTotal = nonnegativeInteger(paging.total);
         const limit = nonnegativeInteger(paging.limit);
-        if (pageTotal > MAX_RESULTS || (total !== undefined && pageTotal !== total) || paging.offset !== offset || limit < 1 || limit > PAGE_SIZE || !Array.isArray(result.results) || result.results.length > limit)
+        if (pageTotal > MAX_RESULTS)
+            throw new ProviderCapacityError('Provider result capacity exceeded');
+        if ((total !== undefined && pageTotal !== total) || paging.offset !== offset || limit < 1 || limit > PAGE_SIZE || !Array.isArray(result.results) || result.results.length > limit)
             return unverified();
         total = pageTotal;
         for (const item of result.results) {
@@ -135,6 +168,9 @@ async function paymentSearch(get: ProviderGet, orderId: string, collectorId: str
             if (ids.has(id))
                 return unverified();
             ids.add(id);
+            observedIds.add(id);
+            if (observedIds.size > MAX_RESULTS)
+                throw new ProviderCapacityError('Observed payment capacity exceeded');
         }
         if ((result.results.length === 0 && offset < total) || ids.size > total)
             return unverified();
@@ -142,123 +178,67 @@ async function paymentSearch(get: ProviderGet, orderId: string, collectorId: str
     } while (offset < total);
     return [...ids];
 }
-async function merchantOrderSearch(get: ProviderGet, orderId: string, preferenceId: string): Promise<string[]> {
-    const ids = new Set<string>();
-    let offset = 0;
-    let total: number | undefined;
-    do {
-        const result = record(await get('/merchant_orders/search', {
-            preference_id: preferenceId, external_reference: orderId,
-            limit: String(PAGE_SIZE), offset: String(offset),
-        }));
-        const pageTotal = nonnegativeInteger(result.total);
-        if (pageTotal > MAX_RESULTS || (total !== undefined && pageTotal !== total) || !Array.isArray(result.elements) || result.elements.length > PAGE_SIZE)
-            return unverified();
-        if (result.next_offset !== undefined)
-            nonnegativeInteger(result.next_offset);
-        total = pageTotal;
-        for (const item of result.elements) {
-            const id = mercadoPagoNumericId(record(item).id);
-            if (ids.has(id))
-                return unverified();
-            ids.add(id);
-        }
-        if ((result.elements.length === 0 && ids.size < total) || ids.size > total)
-            return unverified();
-        if (ids.size === total)
-            break;
-        // Mercado Pago supplies the next offset; it need not equal the number of returned elements.
-        const nextOffset = nonnegativeInteger(result.next_offset);
-        if (nextOffset <= offset)
-            return unverified();
-        offset = nextOffset;
-    } while (ids.size < total);
-    return [...ids];
-}
-type MerchantOrder = { id: string; status: string; payments: Map<string, string> };
-function parseMerchantOrder(value: unknown, id: string, orderId: string, preferenceId: string, collectorId: string): MerchantOrder {
-    const order = record(value);
-    if (mercadoPagoNumericId(order.id) !== id || order.external_reference !== orderId || order.preference_id !== preferenceId || mercadoPagoNumericId(record(order.collector).id) !== collectorId || !Array.isArray(order.payments) || order.payments.length > MAX_RESULTS)
-        return unverified();
-    const payments = new Map<string, string>();
-    for (const raw of order.payments) {
-        const payment = record(raw);
-        const paymentId = mercadoPagoNumericId(payment.id);
-        if (payments.has(paymentId))
-            return unverified();
-        payments.set(paymentId, providerText(payment.status, 80));
-    }
-    return { id, status: providerText(order.status, 80), payments };
-}
-
 async function readPayment(paymentId: string, get?: ProviderGet): Promise<VerifiedProviderPayment> {
     const id = mercadoPagoNumericId(paymentId);
     return parsePayment(await (get ?? getContext())(`/v1/payments/${id}`), id);
 }
-async function inspectOrder(orderId: string, preferenceId: string, collectorId: string): Promise<ProviderObservation> {
-    if (!/^[a-zA-Z0-9_-]{1,200}$/.test(orderId) || !/^[a-zA-Z0-9_-]{1,200}$/.test(preferenceId))
+async function inspectOrder(input: ProviderInspection): Promise<ProviderObservation> {
+    const now = input.now ?? Date.now();
+    if (!/^[a-zA-Z0-9_-]{1,200}$/.test(input.orderId)
+        || (input.preferenceId !== undefined && !/^[a-zA-Z0-9_-]{1,200}$/.test(input.preferenceId))
+        || !Number.isSafeInteger(now) || !Number.isSafeInteger(input.createdAt)
+        || input.createdAt < 1000 || input.createdAt > now
+        || !Number.isSafeInteger(input.expiresAt) || input.expiresAt <= input.createdAt
+        || !Array.isArray(input.knownPaymentIds) || input.knownPaymentIds.length > MAX_RESULTS)
         return unverified();
-    const seller = mercadoPagoNumericId(collectorId);
-    const get = getContext();
-    const now = Date.now();
-    const preference = record(await get(`/checkout/preferences/${preferenceId}`));
-    if (preference.id !== preferenceId || preference.external_reference !== orderId || mercadoPagoNumericId(preference.collector_id) !== seller || preference.expires !== true)
+    const collectorId = mercadoPagoNumericId(input.collectorId);
+    const knownIds = new Set(input.knownPaymentIds.map(mercadoPagoNumericId));
+    const requestedIds = new Set<string>();
+    if (input.paymentHint !== undefined)
+        requestedIds.add(mercadoPagoNumericId(input.paymentHint));
+    for (const id of knownIds)
+        requestedIds.add(id);
+    if (requestedIds.size > MAX_RESULTS)
         return unverified();
-    const expiresAt = timestamp(preference.expiration_date_to);
-    const createdAt = timestamp(preference.date_created);
-    // Search APIs have a finite history. Never interpret out-of-window absence as unpaid.
-    if (createdAt > now || createdAt < now - MERCHANT_SEARCH_WINDOW_MS || expiresAt <= createdAt)
-        return unverified();
-    const paymentIds = await paymentSearch(get, orderId, seller, createdAt);
-    const merchantIds = await merchantOrderSearch(get, orderId, preferenceId);
+    const get = getContext(input.timeoutMs);
     const payments = new Map<string, VerifiedProviderPayment>();
-    const merchants = new Map<string, MerchantOrder>();
+    const observedIds = new Set(knownIds);
+    const observation: ProviderObservation = {
+        payments: [], observedPaymentIds: [], collectorId, observedAt: now,
+        ...(input.preferenceId ? { preferenceId: input.preferenceId } : {}),
+        terminalUnpaid: false, searchComplete: false,
+        historyWindowExceeded: now - input.createdAt > PAYMENT_TRACKING_HORIZON_MS,
+    };
     const loadPayment = async (id: string) => {
-        const existing = payments.get(id);
-        if (existing)
-            return existing;
+        if (payments.has(id))
+            return;
         if (payments.size >= MAX_RESULTS)
-            return unverified();
-        const payment = await readPayment(id, get);
-        if (payment.externalReference !== orderId || payment.collectorId !== seller || !payment.merchantOrderId)
-            return unverified();
-        payments.set(id, payment);
-        return payment;
+            throw new ProviderCapacityError('Canonical payment capacity exceeded');
+        // The domain matches reference, seller, amount, currency and live mode before authority.
+        payments.set(id, await readPayment(id, get));
+        observedIds.add(id);
     };
-    const loadMerchant = async (id: string) => {
-        const existing = merchants.get(id);
-        if (existing)
-            return existing;
-        if (merchants.size >= MAX_RESULTS)
-            return unverified();
-        const merchant = parseMerchantOrder(await get(`/merchant_orders/${id}`), id, orderId, preferenceId, seller);
-        merchants.set(id, merchant);
-        return merchant;
-    };
-    for (const id of paymentIds) {
-        const payment = await loadPayment(id);
-        if (!payment.merchantOrderId)
-            return unverified();
-        const merchant = await loadMerchant(payment.merchantOrderId);
-        if (merchant.payments.get(id) !== payment.status)
-            return unverified();
-    }
-    for (const id of merchantIds)
-        await loadMerchant(id);
-    for (const merchant of merchants.values()) {
-        for (const [id, status] of merchant.payments) {
-            const payment = await loadPayment(id);
-            if (payment.merchantOrderId !== merchant.id || payment.status !== status)
-                return unverified();
+    try {
+        // Known pending IDs must not disappear merely because the search index omits them.
+        // A returned ID is only a hint: the canonical GET is always required.
+        for (const id of requestedIds)
+            await loadPayment(id);
+        if (!observation.historyWindowExceeded) {
+            for (const id of await paymentSearch(get, input, now, observedIds))
+                await loadPayment(id);
+            observation.searchComplete = true;
         }
+    } catch (error) {
+        // Preserve positive canonical evidence obtained before a failure, but never turn an
+        // error, malformed response or incomplete page into successful absence evidence.
+        observation.verificationError = 'provider_verification_unavailable';
+        if (error instanceof ProviderCapacityError) observation.capacityExceeded = true;
     }
-    return {
-        preferenceId,
-        collectorId: seller,
-        payments: [...payments.values()],
-        // Empty searches are not terminal evidence. Pending, unknown and refunded payments retain stock.
-        terminalUnpaid: expiresAt <= now && merchants.size > 0 && [...merchants.values()].every(order => order.status === 'expired') && [...payments.values()].every(payment => terminalUnpaidStatuses.has(payment.status)),
-    };
+    observation.payments = [...payments.values()];
+    observation.observedPaymentIds = [...observedIds];
+    observation.terminalUnpaid = observation.searchComplete && input.expiresAt <= now
+        && observation.payments.every(payment => terminalUnpaidStatuses.has(payment.status));
+    return observation;
 }
 
 export const mercadoPagoGateway: PaymentGateway = { readPayment, inspectOrder };

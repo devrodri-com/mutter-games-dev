@@ -45,8 +45,19 @@ try {
     result.passed = true;
   } else {
     assert.equal(mode, 'invoke');
-    const [artifactDirectory, handlerName, method] = args;
+    const [artifactDirectory, handlerName, method, functionKind, credentials] = args;
     assert(['GET', 'POST', 'OPTIONS'].includes(method));
+    assert(['checkout', 'reconcile'].includes(functionKind));
+    const requestHeaders = {};
+    if (functionKind === 'reconcile') {
+      assert(['missing-secret', 'empty-secret', 'missing-header', 'wrong-secret'].includes(credentials));
+      // These are local-only fixtures, not credentials read from any account.
+      if (credentials === 'empty-secret') process.env.CRON_SECRET = '';
+      else if (credentials !== 'missing-secret') process.env.CRON_SECRET = 'synthetic-packaging-secret-not-valid-remotely';
+      if (credentials === 'empty-secret') requestHeaders.authorization = 'Bearer ';
+      else if (credentials === 'missing-secret') requestHeaders.authorization = 'Bearer undefined';
+      else if (credentials !== 'missing-header') requestHeaders.authorization = 'Bearer synthetic-wrong-value';
+    }
     const artifact = await realpath(artifactDirectory);
     const handlerPath = await realpath(path.join(artifact, handlerName));
     assert(handlerPath.startsWith(`${artifact}${path.sep}`));
@@ -60,14 +71,16 @@ try {
       status(value) { status = value; return response; },
       json(value) { body = value; jsonCalls += 1; return response; },
     };
-    await loaded.default({ method, headers: {}, body: {} }, response);
-    assert.equal(status, method === 'POST' ? 401 : 405);
+    await loaded.default({ method, headers: requestHeaders, body: {} }, response);
+    assert.equal(status, functionKind === 'checkout' ? (method === 'POST' ? 401 : 405) : (method === 'GET' ? 401 : 405));
     assert.equal(headers.get('cache-control'), 'no-store');
     assert.equal(jsonCalls, 1);
-    assert.deepEqual(body, { error: method === 'POST' ? 'Iniciá sesión para continuar.' : 'Method not allowed' });
+    if (functionKind === 'checkout') assert.deepEqual(body, { error: method === 'POST' ? 'Iniciá sesión para continuar.' : 'Method not allowed' });
+    else assert.deepEqual(body, { error: method === 'GET' ? 'Unauthorized' : 'Method not allowed' });
     const require = createRequire(import.meta.url);
     const resolvedDependencies = Object.keys(require.cache);
     assert(resolvedDependencies.every(file => file.startsWith(`${artifact}${path.sep}`)), 'Runtime dependency resolved outside materialized artifact');
+    result.functionKind = functionKind; result.credentials = credentials ?? 'absent';
     result.method = method; result.status = status; result.cacheControl = headers.get('cache-control');
     result.resolvedCommonJsFiles = resolvedDependencies.length;
     result.passed = true;

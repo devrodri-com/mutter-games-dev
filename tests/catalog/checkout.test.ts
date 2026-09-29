@@ -2,14 +2,17 @@
 import { beforeEach, afterAll, test, expect, vi } from 'vitest';
 import { initializeApp, deleteApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
-import { checkout } from '../../api/_lib/checkout-service';
+import { checkout as checkoutCore, type Provider } from '../../api/_lib/checkout-service';
 import { parsePurchase, quotePurchase } from '../../api/_lib/checkout-domain';
 const host=process.env.FIRESTORE_EMULATOR_HOST;
 if(!host||!/^127\.0\.0\.1:\d+$/.test(host))throw new Error('Isolated emulator required');
 const app=initializeApp({projectId:'demo-mutter-checkout'},'checkout-regression');const db=getFirestore(app);
 const product={active:true,title:{es:'Juego',en:'Game'},priceUSD:200,stockTotal:5,variants:[{label:{es:'Color',en:'Color'},options:[{value:'Rojo',priceUSD:200,stock:5}]}]};
 const purchase={items:[{id:'test-game',variantId:'Color-Rojo',quantity:1}],shipping:{pickup:false,department:'Montevideo',name:'Synthetic',address:'Test',city:'Test',postalCode:'10000',phone:'00000000',email:'synthetic@example.invalid'}};
-let calls=0;const provider=async(id:string)=>{calls++;return {id:'pref-'+id,collectorId:'123',init_point:'https://www.mercadopago.com.uy/checkout/test'};};
+// This suite supplies the trusted server configuration directly at the service boundary.
+const options={collectorId:'200',admission:{ipKey:'b'.repeat(64)}};
+const checkout=(database:typeof db,uid:string,input:unknown,create:Provider)=>checkoutCore(database,uid,input,create,options);
+let calls=0;const provider=async(id:string)=>{calls++;return {id:'pref-'+id,collectorId:'200',init_point:'https://www.mercadopago.com.uy/checkout/test'};};
 let sequence=0;
 async function start(input:unknown=purchase){const q=await checkout(db,'synthetic-user',{action:'quote',purchase:input},provider);if(!('quote' in q))throw Error('Expected quote');return {action:'start',purchase:input,key:`synthetic-intent-${++sequence}-000000`,quoteHash:q.quote.hash};}
 beforeEach(async()=>{await fetch(`http://${host}/emulator/v1/projects/demo-mutter-checkout/databases/(default)/documents`,{method:'DELETE'});await db.collection('products').doc('test-game').set(product);});
@@ -72,7 +75,7 @@ test('foreign intent owner is denied and a failed SDK catalog read creates nothi
  await expect(checkout(db,'synthetic-user',input,provider)).rejects.toMatchObject({status:403});
  // Fault injection at the external Firestore SDK boundary, after real persistence checks above.
  const read=vi.spyOn(db,'getAll').mockRejectedValueOnce(new Error('Catalog transport unavailable'));
- try { await expect(checkout(db,'synthetic-user',{action:'quote',purchase},provider)).rejects.toThrow('Catalog transport unavailable'); }
+ try { await expect(checkout(db,'synthetic-user',{action:'quote',purchase},provider)).rejects.toMatchObject({code:'INVENTORY_READ_FAILED'}); }
  finally { read.mockRestore(); }
  expect(calls).toBe(count);expect((await db.collection('orders').get()).size).toBe(orders);
 });

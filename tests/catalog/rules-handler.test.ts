@@ -26,16 +26,19 @@ test('real Auth + checkout handler + candidate Rules persist one canonical order
       posts++; const body = object(JSON.parse(string(init?.body)));
       externalReference = string(body.external_reference);
       expect(body.items).toEqual([{ id: 'p', title: 'P', quantity: 1, unit_price: 100, currency_id: 'UYU' }]);
-      return new Response(JSON.stringify({ id: 'synthetic-preference', collector_id: 123, init_point: 'https://www.mercadopago.com.uy/checkout/v1/redirect?pref_id=synthetic', external_reference: externalReference }));
+      return new Response(JSON.stringify({ id: 'synthetic-preference', collector_id: 123, expires: true, expiration_date_to: body.expiration_date_to, init_point: 'https://www.mercadopago.com.uy/checkout/v1/redirect?pref_id=synthetic', external_reference: externalReference }));
     }
     if (!['127.0.0.1', 'localhost'].includes(url.hostname)) throw Error('Nonlocal transport blocked');
     return actualFetch(input, init);
   });
   vi.stubEnv('MP_ACCESS_TOKEN', 'synthetic-not-a-credential');
+  vi.stubEnv('MP_COLLECTOR_ID', '123');
+  vi.stubEnv('VERCEL', '1');
+  vi.stubEnv('WEB_ADMISSION_HMAC_SECRET', 'synthetic-rules-admission-key-only-123');
   async function call(body: unknown, token: string) {
     let output: unknown; let status = 0;
     const res = { setHeader() {}, status(code: number) { status = code; return res; }, json(value: unknown) { output = value; } };
-    await handler({ method: 'POST', headers: { authorization: `Bearer ${token}` }, body }, res);
+    await handler({ method: 'POST', headers: { authorization: `Bearer ${token}`, 'x-vercel-forwarded-for': '192.0.2.45' }, body }, res);
     return { status, body: object(output) };
   }
   try {
@@ -59,5 +62,9 @@ test('real Auth + checkout handler + candidate Rules persist one canonical order
     await assertSucceeds(buyer.doc(`orders/${id}`).get());
     await assertFails(buyer.doc(`orders/${id}`).update({ paymentStatus: 'paid' }));
     await assertFails(buyer.doc(`checkoutIntents/${id}`).get());
+    for (const collection of ['webAdmissionClaims', 'webAdmissionBuckets', 'webStockMaintenance']) {
+      await assertFails(buyer.collection(collection).get());
+      await assertFails(buyer.doc(`${collection}/synthetic`).set({ synthetic: true }));
+    }
   } finally { transport.mockRestore(); vi.unstubAllEnvs(); await db.terminate(); await deleteApp(app); await env.cleanup(); }
 });

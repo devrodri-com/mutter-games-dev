@@ -4,11 +4,14 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const { writeJson } = require('./artifact.cjs');
 
-async function verifyNativeProcesses(source, workspace, handler) {
+async function verifyNativeProcesses(source, workspace, entries) {
   const probe = path.join(workspace.root, 'native-probe.mjs');
   await fs.copyFile(path.join(__dirname, 'native-probe.mjs'), probe);
-  // HOME is scoped only to these child processes; the user's host HOME is unchanged.
-  const env = { PATH: `${path.dirname(process.execPath)}:/usr/bin:/bin`, HOME: path.join(workspace.root, 'child-home'), XDG_CONFIG_HOME: path.join(workspace.root, 'child-home', '.config'), LANG: 'C', LC_ALL: 'C', TZ: 'UTC' };
+  // Preserve HOME when present; never repurpose a system variable as a private
+  // sandbox directory. No business credentials or loader configuration is inherited.
+  const env = { PATH: `${path.dirname(process.execPath)}:/usr/bin:/bin`,
+    ...(typeof process.env.HOME === 'string' ? { HOME: process.env.HOME } : {}),
+    XDG_CONFIG_HOME: path.join(workspace.root, 'child-home', '.config'), LANG: 'C', LC_ALL: 'C', TZ: 'UTC' };
   const attempts = []; let selected; let parentNamespace = '';
   const candidates = [];
   if (process.platform === 'darwin') {
@@ -27,8 +30,8 @@ async function verifyNativeProcesses(source, workspace, handler) {
     candidates.push({ name: 'linux-sudo-network-namespace', command: '/usr/bin/sudo', prefix: ['-n', '/usr/bin/unshare', '--net', '--', '/usr/bin/env', '-i', ...Object.entries(env).map(([key, value]) => `${key}=${value}`), process.execPath, probe] });
   } else throw new Error('No implemented OS network isolation on this platform');
 
-  async function run(candidate, label, args) {
-    const child = spawnSync(candidate.command, [...candidate.prefix, ...args], { cwd: workspace.emitted, env, encoding: 'utf8', timeout: 15000, maxBuffer: 1024 * 1024 });
+  async function run(candidate, label, args, directory = workspace.emitted) {
+    const child = spawnSync(candidate.command, [...candidate.prefix, ...args], { cwd: directory, env, encoding: 'utf8', timeout: 15000, maxBuffer: 1024 * 1024 });
     await fs.writeFile(path.join(workspace.root, `${label}.stdout`), child.stdout ?? '', { flag: 'wx', mode: 0o600 });
     await fs.writeFile(path.join(workspace.root, `${label}.stderr`), child.stderr ?? '', { flag: 'wx', mode: 0o600 });
     let observation;
@@ -43,11 +46,20 @@ async function verifyNativeProcesses(source, workspace, handler) {
     attempts.push(result);
     if (result.passed) { selected = candidate; break; }
   }
-  await writeJson(path.join(workspace.root, 'network-isolation.json'), { attempts, selected: selected?.name ?? null, unrestrictedFallback: false, childHome: env.HOME, credentialEnvironmentInherited: false });
+  await writeJson(path.join(workspace.root, 'network-isolation.json'), { attempts, selected: selected?.name ?? null, unrestrictedFallback: false, homePreservedNotRepurposed: env.HOME === process.env.HOME, credentialEnvironmentInherited: false });
   assert(selected, 'OS denial not established; no handler was imported');
+  assert.deepEqual(entries.map(entry => entry.key), ['checkout', 'reconcile'], 'Require exactly the two prepared function artifacts');
+  const [checkout, reconcile] = entries;
   const cases = [];
-  for (const [label, method] of [['cold-get', 'GET'], ['cold-post', 'POST'], ['cold-options', 'OPTIONS'], ['restarted-post', 'POST']]) cases.push(await run(selected, label, ['invoke', workspace.emitted, handler, method]));
-  return { backend: selected.name, networkCanaries: attempts, cases, eachInvocationHasFreshProcess: true, nativeLoader: true, graphMocks: false, apiReplacements: false, credentialsInherited: false, childHome: env.HOME };
+  for (const [label, method] of [['cold-get', 'GET'], ['cold-post', 'POST'], ['cold-options', 'OPTIONS'], ['restarted-post', 'POST']]) {
+    cases.push(await run(selected, label, ['invoke', checkout.directory, checkout.handler, method, 'checkout'], checkout.directory));
+  }
+  for (const [label, method, credentials] of [
+    ['reconcile-missing-secret', 'GET', 'missing-secret'], ['reconcile-empty-secret', 'GET', 'empty-secret'],
+    ['reconcile-missing-header', 'GET', 'missing-header'], ['reconcile-wrong-secret', 'GET', 'wrong-secret'],
+    ['reconcile-method', 'POST', 'wrong-secret'], ['reconcile-restarted-get', 'GET', 'wrong-secret'],
+  ]) cases.push(await run(selected, label, ['invoke', reconcile.directory, reconcile.handler, method, 'reconcile', credentials], reconcile.directory));
+  return { backend: selected.name, networkCanaries: attempts, cases, eachInvocationHasFreshProcess: true, nativeLoader: true, graphMocks: false, apiReplacements: false, credentialsInherited: false, homePreservedNotRepurposed: env.HOME === process.env.HOME };
 }
 
 module.exports = { verifyNativeProcesses };

@@ -3,9 +3,11 @@ import { FieldValue, type Firestore } from 'firebase-admin/firestore';
 import { CheckoutError, hash, parsePurchase, quotePurchase, record, type Quote } from './checkout-domain.js';
 import { inventoryForQuote, readInventory, reserveProducts } from './inventory-transactions.js';
 import { checkoutStatus, reconcileProducts, type CheckoutOptions } from './payment-service.js';
+import { configuredCollector, initialReconciliation, PAYMENT_WINDOW_MS } from './reconciliation-policy.js';
+import { readAdmission, writeAdmission } from './web-admission.js';
 export type Preference = { id: string; init_point: string; collectorId: string };
-export type Provider = (id: string, quote: Quote, expiresAt: number) => Promise<Preference>;
-export const RESERVATION_DURATION_MS = 30 * 60 * 1000;
+export type Provider = (id: string, quote: Quote, expiresAt: number, collectorId: string) => Promise<Preference>;
+export const RESERVATION_DURATION_MS = PAYMENT_WINDOW_MS;
 export async function checkout(db: Firestore, uid: string, input: unknown, provider: Provider, options: CheckoutOptions = {}) {
     const body = record(input);
     const now = options.now ?? Date.now;
@@ -16,7 +18,7 @@ export async function checkout(db: Firestore, uid: string, input: unknown, provi
             throw new CheckoutError(400, 'INVALID_INPUT', 'Productos inválidos.');
         }
         const ids = body.productIds.filter((id): id is string => typeof id === 'string');
-        await reconcileProducts(db, ids, options);
+        await reconcileProducts(db, ids);
         return { checked: true };
     }
     if (Object.keys(body).some(k => !['action', 'purchase', 'key', 'quoteHash'].includes(k)) || !['quote', 'start'].includes(String(body.action))) {
@@ -25,7 +27,7 @@ export async function checkout(db: Firestore, uid: string, input: unknown, provi
     const purchase = parsePurchase(body.purchase);
     const productIds = [...new Set(purchase.items.map(i => i.id))];
     const productRefs = productIds.map(id => db.collection('products').doc(id));
-    await reconcileProducts(db, productIds, options);
+    await reconcileProducts(db, productIds);
     if (body.action === 'quote') {
         const docs = await db.getAll(...productRefs);
         return { quote: quotePurchase(purchase, new Map(docs.map(d => [d.id, d.data()]))) };
@@ -33,6 +35,7 @@ export async function checkout(db: Firestore, uid: string, input: unknown, provi
     if (typeof body.key !== 'string' || !/^[a-zA-Z0-9_-]{20,100}$/.test(body.key) || typeof body.quoteHash !== 'string' || !/^[a-f0-9]{64}$/.test(body.quoteHash)) {
         throw new CheckoutError(400, 'INVALID_INTENT', 'Actualizá la cotización antes de continuar.');
     }
+    const collectorId = configuredCollector(options.collectorId);
     const id = hash([uid, body.key]);
     const requestHash = hash([purchase, body.quoteHash]);
     const intent = db.collection('checkoutIntents').doc(id);
@@ -73,14 +76,20 @@ export async function checkout(db: Firestore, uid: string, input: unknown, provi
         const quote = quotePurchase(purchase, new Map(docs.map(d => [d.id, d.data()])));
         if (quote.hash !== body.quoteHash) throw new CheckoutError(409, 'QUOTE_CHANGED', 'Cambió el precio. Revisá la cotización antes de continuar.');
         if ((await tx.get(order)).exists) throw new CheckoutError(409, 'ORDER_CONFLICT', 'Este intento requiere verificación.');
-        const expiresAt = now() + RESERVATION_DURATION_MS;
+        if (!options.admission) throw new CheckoutError(503, 'ADMISSION_UNAVAILABLE', 'No pudimos validar los límites de compra.');
+        const createdAt = now();
+        const admission = await readAdmission(tx, db, uid, options.admission, id, createdAt);
+        const expiresAt = createdAt + RESERVATION_DURATION_MS;
         const inventory = inventoryForQuote(quote, reservationId, expiresAt);
         reserveProducts(tx, docs, inventory);
+        writeAdmission(tx, admission);
         tx.create(db.collection('webReservationOwners').doc(reservationId), { orderId: id });
         tx.set(lock, { orderId: id });
         tx.create(intent, { uid, requestHash, state: 'creating', commerceVersion: 2, quote, expiresAt, createdAt: FieldValue.serverTimestamp() });
         tx.create(order, {
-            uid, commerceVersion: 2, inventory,
+            uid, commerceVersion: 2, inventory, expectedCollectorId: collectorId,
+            paymentCreatedAt: createdAt, paymentDeadline: expiresAt, checkoutLockId: lock.id,
+            reconciliation: initialReconciliation(createdAt), knownPaymentIds: [],
             items: quote.items.map(line => ({ ...line, title: { es: line.title, en: line.title }, name: line.title, priceUSD: line.unitPrice, price: line.unitPrice, variantLabel: line.variantId })),
             client: { name: purchase.shipping.name, email: purchase.shipping.email, phone: purchase.shipping.phone },
             shipping: { ...purchase.shipping, state: purchase.shipping.department, country: 'UY', cost: quote.shippingCost },
@@ -93,19 +102,24 @@ export async function checkout(db: Firestore, uid: string, input: unknown, provi
     if (!acquired.quote) throw new CheckoutError(500, 'INVALID_STATE', 'No se pudo iniciar el pago.');
     // No provider request is made within a retryable transaction. Admission is durable before POST.
     try {
-        const preference = await provider(id, acquired.quote, acquired.expiresAt);
-        if (!preference.collectorId) throw new Error('Provider seller missing');
+        const preference = await provider(id, acquired.quote, acquired.expiresAt, collectorId);
+        if (preference.collectorId !== collectorId) throw new Error('Provider seller mismatch');
         await db.runTransaction(async tx => {
-            const current = await tx.get(order);
+            const [current, currentIntent] = await tx.getAll(order, intent);
             const inventory = readInventory(current.data()?.inventory);
-            if (inventory.state !== 'reserved') throw new Error('Reservation changed during preference creation');
+            if (inventory.state !== 'reserved' || currentIntent.data()?.state !== 'creating' || now() >= inventory.expiresAt) throw new Error('Reservation changed during preference creation');
             tx.update(intent, { state: 'ready', preferenceId: preference.id, preferenceCollectorId: preference.collectorId, initPoint: preference.init_point, updatedAt: FieldValue.serverTimestamp() });
             tx.update(order, { preferenceId: preference.id, preferenceCollectorId: preference.collectorId, updatedAt: FieldValue.serverTimestamp() });
         });
         return { id, init_point: preference.init_point };
     } catch {
         // Failure of this write leaves durable creating; both states forbid a second POST.
-        await intent.update({ state: 'uncertain', updatedAt: FieldValue.serverTimestamp() });
+        await db.runTransaction(async tx => {
+            const [current, currentIntent] = await tx.getAll(order, intent);
+            if (currentIntent.data()?.state === 'creating' && readInventory(current.data()?.inventory).state === 'reserved') {
+                tx.update(intent, { state: 'uncertain', updatedAt: FieldValue.serverTimestamp() });
+            }
+        });
         throw new CheckoutError(409, 'RECOVERY_REQUIRED', 'No pudimos confirmar el resultado del proveedor. El intento requiere verificación; no inicies otro pago.');
     }
 }

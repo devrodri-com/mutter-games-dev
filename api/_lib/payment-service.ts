@@ -1,53 +1,16 @@
-import { FieldValue, type DocumentSnapshot, type Firestore } from 'firebase-admin/firestore';
+import { FieldValue, type Firestore } from 'firebase-admin/firestore';
 import { CheckoutError, hash, parsePurchase, quotePurchase, record } from './checkout-domain.js';
 import { readInventory } from './inventory-transactions.js';
-import { applyProviderObservation } from './payment-transitions.js';
 import { parseReservations } from '../../src/domain/webInventory.js';
-import type { PaymentGateway } from './mercado-pago-payments.js';
-export type CheckoutOptions = { now?: () => number; gateway?: PaymentGateway };
-async function verifyOrder(db: Firestore, snapshot: DocumentSnapshot, options: CheckoutOptions, paymentId?: string): Promise<void> {
-    const order = record(snapshot.data());
-    if (order.commerceVersion !== 2) return; // Never adopt historical purchases or quantities automatically.
-    const inventory = readInventory(order.inventory);
-    if (!options.gateway) throw new CheckoutError(503, 'UNAVAILABLE', 'No pudimos verificar el pago. La reserva se conserva.');
-    if (typeof order.preferenceId !== 'string' || typeof order.preferenceCollectorId !== 'string') {
-        if (inventory.state === 'reserved') await snapshot.ref.update({ attention: 'preference_creation_uncertain' });
-        return;
-    }
+export type { CheckoutOptions } from './order-reconciliation.js';
+import { reconcileOrder, type CheckoutOptions } from './order-reconciliation.js';
+export async function reconcileProducts(db: Firestore, productIds: string[]): Promise<void> {
+    // Availability depends only on the authoritative ledger. Provider failures concern their own order.
     try {
-        const observation = await options.gateway.inspectOrder(snapshot.id, order.preferenceId, order.preferenceCollectorId);
-        if (paymentId && !observation.payments.some(payment => payment.id === paymentId)) {
-            throw new CheckoutError(409, 'PAYMENT_UNCERTAIN', 'Todavía no pudimos vincular ese pago con la compra. La reserva se conserva.');
-        }
-        await applyProviderObservation(db, snapshot, observation, (options.now ?? Date.now)());
-    } catch (error) {
-        // Persist the failure, but never transform an unavailable provider into a successful verification.
-        await db.runTransaction(async tx => {
-            const latest = await tx.get(snapshot.ref);
-            if (latest.updateTime?.isEqual(snapshot.updateTime ?? latest.updateTime)) {
-                tx.update(snapshot.ref, { attention: error instanceof CheckoutError ? error.code : 'provider_verification_unavailable', lastVerificationFailedAt: FieldValue.serverTimestamp() });
-            }
-        });
-        if (error instanceof CheckoutError) throw error;
-        throw new CheckoutError(503, 'PAYMENT_UNCERTAIN', 'No pudimos verificar el pago con Mercado Pago. La reserva se conserva.');
-    }
-}
-export async function reconcileProducts(db: Firestore, productIds: string[], options: CheckoutOptions): Promise<void> {
-    if (!options.gateway) return;
-    const now = (options.now ?? Date.now)();
-    const products = await db.getAll(...productIds.map(id => db.collection('products').doc(id)));
-    const holds = new Set(products.flatMap(product => Object.entries(parseReservations(product.data()?.webReservations))
-        .filter(([, reservation]) => reservation.expiresAt <= now).map(([id]) => id)));
-    // Bounded work per request; unresolved holds stay counted and can be checked on subsequent requests.
-    const ids = [...holds].sort();
-    // Rotate one check per request to avoid starving other holds behind a persistent provider uncertainty.
-    const selected = ids.length ? [ids[Math.floor(now / 30_000) % ids.length]] : [];
-    for (const id of selected) {
-        const owner = await db.collection('webReservationOwners').doc(id).get();
-        const orderId = owner.data()?.orderId;
-        if (typeof orderId !== 'string' || !/^[a-f0-9]{64}$/.test(orderId)) throw new CheckoutError(409, 'RECOVERY_REQUIRED', 'Una reserva requiere verificación.');
-        const order = await db.collection('orders').doc(orderId).get();
-        await verifyOrder(db, order, options);
+        const products = await db.getAll(...productIds.map(id => db.collection('products').doc(id)));
+        for (const product of products) parseReservations(product.data()?.webReservations);
+    } catch {
+        throw new CheckoutError(503, 'INVENTORY_READ_FAILED', 'No pudimos comprobar la disponibilidad. Intentá nuevamente.');
     }
 }
 async function statusView(db: Firestore, id: string, order: Record<string, unknown>, intent: Record<string, unknown>, now: number) {
@@ -79,7 +42,7 @@ async function statusView(db: Firestore, id: string, order: Record<string, unkno
         }
     }
     return { id, inventoryState: order.attention ? 'attention' as const : inventory.state, paymentStatus: String(order.paymentStatus),
-        reservedUntil: inventory.expiresAt, canRetry: inventory.state === 'released',
+        reservedUntil: inventory.expiresAt, canRetry: inventory.state === 'released' && !order.attention && order.paymentStatus !== 'approved',
         ...(reusable ? { init_point: String(intent.initPoint) } : {}) };
 }
 export async function checkoutStatus(db: Firestore, uid: string, body: Record<string, unknown>, options: CheckoutOptions) {
@@ -108,7 +71,7 @@ export async function checkoutStatus(db: Firestore, uid: string, body: Record<st
     if (!resolved) return { id, inventoryState: 'released' as const, paymentStatus: 'not_started', reservedUntil: 0, canRetry: true };
     const { snapshot, intent } = resolved;
     if (snapshot.data()?.uid !== uid || intent.data()?.uid !== uid) throw new CheckoutError(403, 'FORBIDDEN', 'No tenés acceso a esta compra.');
-    await verifyOrder(db, snapshot, options, isVerify && typeof body.paymentId === 'string' ? body.paymentId : undefined);
+    await reconcileOrder(db, id, options, 'buyer', isVerify && typeof body.paymentId === 'string' ? body.paymentId : undefined);
     const [latest, latestIntent] = await db.getAll(orderRef, intentRef);
     return statusView(db, id, record(latest.data()), record(latestIntent.data()), (options.now ?? Date.now)());
 }

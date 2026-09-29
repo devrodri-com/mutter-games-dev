@@ -1,3 +1,4 @@
+import { ProductReservationNotice } from '../components/product/ProductReservationNotice';
 //src/pages/ProductPage.tsx
 
 import { useParams, Link } from "react-router-dom";
@@ -195,6 +196,7 @@ export default function ProductPage() {
   return (
     <div className="bg-gradient-to-b from-[#fafafa] to-white min-h-[100dvh] flex flex-col">
       <div className="w-full overflow-x-hidden text-black relative z-10 flex-grow">
+        <ProductReservationNotice hasReservations={product.hasWebReservations === true} />
      {/* ================================================================== */}
      {/* === SEO / METADATOS DEL PRODUCTO (HELMET + JSON-LD) ============ */}
      {/* ================================================================== */}

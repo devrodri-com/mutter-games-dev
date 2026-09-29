@@ -55,6 +55,9 @@ jobs:
       - name: Checkout API typecheck
         run: npm run typecheck:api
 
+      - name: Stock reconciliation API typecheck
+        run: node node_modules/typescript/bin/tsc --noEmit --skipLibCheck --moduleResolution NodeNext --target ES2022 --module NodeNext --esModuleInterop api/internal/web-stock-reconcile.ts
+
       - name: Checkout exact paired Admin inventory target
         uses: actions/checkout@v4
         with:
@@ -89,7 +92,7 @@ jobs:
           JAVA_TOOL_OPTIONS: -Duser.language=en -Duser.country=US
         run: npm run test:catalog
 
-      - name: Verify checkout function packaging
+      - name: Verify checkout and stock reconciliation function packaging
         run: npm run check:checkout-packaging
 
       # CI config selects the Chrome channel for Chromium and Playwright WebKit.

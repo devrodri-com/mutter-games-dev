@@ -1,8 +1,11 @@
 import type { VercelRequest } from '@vercel/node';
-import { cert, getApps, initializeApp } from 'firebase-admin/app';
+import { adminApp } from './_lib/firebase-server.js';
+import { adminOrders } from './_lib/admin-orders.js';
+import { requestAdmissionContext } from './_lib/web-admission.js';
+import type { DecodedIdToken } from 'firebase-admin/auth';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
-import { CheckoutError } from './_lib/checkout-domain.js';
+import { CheckoutError, record } from './_lib/checkout-domain.js';
 import { checkout } from './_lib/checkout-service.js';
 import { createMercadoPagoPreference } from './_lib/mercado-pago.js';
 import { mercadoPagoGateway } from './_lib/mercado-pago-payments.js';
@@ -11,7 +14,7 @@ type Response = {
     status(code: number): Response;
     json(body: unknown): unknown;
 };
-export default async function handler(req: Pick<VercelRequest, 'method' | 'headers' | 'body'>, res: Response) {
+export default async function handler(req: Pick<VercelRequest, 'method' | 'headers' | 'body'> & { rawHeaders?: string[] }, res: Response) {
     res.setHeader('Cache-Control', 'no-store');
     if (req.method !== 'POST')
         return res.status(405).json({ error: 'Method not allowed' });
@@ -19,10 +22,10 @@ export default async function handler(req: Pick<VercelRequest, 'method' | 'heade
     if (typeof header !== 'string' || !header.startsWith('Bearer '))
         return res.status(401).json({ error: 'Iniciá sesión para continuar.' });
     try {
-        const app = getApps().find(app => app.name === 'catalog-checkout') ?? initializeApp({ credential: cert({ projectId: process.env.FIREBASE_PROJECT_ID, clientEmail: process.env.FIREBASE_CLIENT_EMAIL, privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n') }) }, 'catalog-checkout');
-        let uid: string;
+        const app = adminApp();
+        let claims: DecodedIdToken;
         try {
-            uid = (await getAuth(app).verifyIdToken(header.slice(7), true)).uid;
+            claims = await getAuth(app).verifyIdToken(header.slice(7), true);
         }
         catch {
             return res.status(401).json({ error: 'La sesión no es válida. Volvé a intentarlo.' });
@@ -34,7 +37,15 @@ export default async function handler(req: Pick<VercelRequest, 'method' | 'heade
         catch {
             return res.status(400).json({ error: 'Datos inválidos.' });
         }
-        return res.status(200).json(await checkout(getFirestore(app), uid, body, createMercadoPagoPreference, { gateway: mercadoPagoGateway }));
+        const input = record(body);
+        const db = getFirestore(app);
+        if (input.action === 'admin_orders' || input.action === 'admin_order') {
+            return res.status(200).json(await adminOrders(db, claims, input));
+        }
+        return res.status(200).json(await checkout(db, claims.uid, body, createMercadoPagoPreference, {
+            gateway: mercadoPagoGateway,
+            ...(input.action === 'start' ? { admission: requestAdmissionContext(req.headers, req.rawHeaders) } : {}),
+        }));
     }
     catch (error: unknown) {
         if (error instanceof CheckoutError)

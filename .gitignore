@@ -32,5 +32,8 @@ backend/
 api/*
 !api/create-mp-preference.ts
 !api/_lib/
+!api/internal/
+api/internal/*
+!api/internal/web-stock-reconcile.ts
 functions/node_modules/
 node_modules/
