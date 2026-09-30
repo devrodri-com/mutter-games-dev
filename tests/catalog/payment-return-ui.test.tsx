@@ -26,6 +26,7 @@ test('forged approved return is a hint and cannot display confirmation or clear 
   localStorage.setItem('mutter-cart:return-owner', 'later-cart');
   await mount('?external_reference=order&payment_id=99&status=approved');
   expect(document.body.textContent).toContain('Tu pago aún no está confirmado'); expect(document.body.textContent).not.toContain('¡Pago confirmado!');
+  expect(document.querySelector('button')?.classList.contains('text-gray-200')).toBe(true);
   expect(JSON.parse(String(vi.mocked(fetch).mock.calls[0][1]?.body))).toEqual({ action: 'verify', orderId: 'order', paymentId: '99' });
   expect(localStorage.getItem('mutter-cart:return-owner')).toBe('later-cart');
 });
@@ -59,6 +60,7 @@ test('missing order never makes a verification request', async () => {
 test('provider or authorization error stays unconfirmed', async () => {
   vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ code: 'FORBIDDEN', error: 'Denied' }), { status: 403 })));
   await mount('?orderId=other-owner'); expect(document.body.textContent).not.toContain('¡Pago confirmado!'); expect(document.body.textContent).toContain('no vuelvas a pagar');
+  expect(document.querySelector('button')?.classList.contains('text-gray-200')).toBe(true);
 });
 test('UID changes invalidate a late verification response', async () => {
   let resolve: ((response: Response) => void) | undefined;
