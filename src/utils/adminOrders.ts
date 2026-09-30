@@ -1,5 +1,5 @@
 import { auth } from '../firebase';
-import { parseAdminOrderDetail, parseAdminOrderPage, type AdminOrderDetail, type AdminOrderPage } from '../domain/adminOrders';
+import { parseAdminOrderDetail, parseAdminOrderPage, type AdminOrderCursor, type AdminOrderDetail, type AdminOrderPage, type AdminOrderSection } from '../domain/adminOrders';
 
 async function request(body: Record<string, unknown>, signal?: AbortSignal): Promise<Record<string, unknown>> {
   const user = auth.currentUser;
@@ -14,8 +14,8 @@ async function request(body: Record<string, unknown>, signal?: AbortSignal): Pro
   if (!response.ok) throw new Error(typeof result.error === 'string' ? result.error : 'No pudimos leer los pedidos. Reintentá la consulta.');
   return result;
 }
-export async function readAdminOrders(cursor?: string, signal?: AbortSignal): Promise<AdminOrderPage> {
-  return parseAdminOrderPage(await request({ action: 'admin_orders', limit: 20, ...(cursor ? { cursor } : {}) }, signal));
+export async function readAdminOrders(section: AdminOrderSection, cursor?: AdminOrderCursor, signal?: AbortSignal): Promise<AdminOrderPage> {
+  return parseAdminOrderPage(await request({ action: 'admin_orders', section, limit: 20, ...(cursor ? { cursor } : {}) }, signal));
 }
 export async function readAdminOrder(orderId: string, signal?: AbortSignal): Promise<AdminOrderDetail> {
   const result = await request({ action: 'admin_order', orderId }, signal);

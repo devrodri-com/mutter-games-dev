@@ -45,8 +45,9 @@ const SuccessPage = () => {
   // Do not clear a cart here: this return may belong to an earlier/different purchase.
   return (
     <div className="min-h-screen flex flex-col items-center justify-center text-center px-4">
-      <h1 className={`text-3xl md:text-5xl font-bold mb-4 ${committed ? 'text-green-600' : 'text-gray-800'}`}>{title}</h1>
-      {!loading && <p role={error ? 'alert' : 'status'} className="text-lg md:text-xl mb-6 text-gray-700">{message}</p>}
+      <h1 className={`text-3xl md:text-5xl font-bold mb-4 ${committed ? 'text-green-600' : 'text-gray-100'}`}>{title}</h1>
+      {!loading && <p role={error ? 'alert' : 'status'} className="text-lg md:text-xl mb-6 text-gray-200">{message}</p>}
+      {!loading && committed && status.verificationPending && <p role="status" className="text-gray-200 mb-6">El pago sigue confirmado. Una comprobación adicional está pendiente; no vuelvas a pagar.</p>}
       {!loading && !committed && !released && <button type="button" onClick={() => setRevision(value => value + 1)} className="underline mb-6">Volver a verificar</button>}
       <Link to="/shop" className="px-6 py-2 bg-[#FF2D55] text-white rounded hover:bg-[#e0264c] transition">Volver a la tienda</Link>
     </div>

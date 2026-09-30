@@ -42,6 +42,9 @@ export async function checkout(db: Firestore, uid: string, input: unknown, provi
     const order = db.collection('orders').doc(id);
     const lock = db.collection('webCheckoutLocks').doc(hash([uid, purchase]));
     const reservationId = randomUUID();
+    // One whole-second window survives transaction retries and the later provider response.
+    const createdAt = Math.floor(now() / 1000) * 1000;
+    const expiresAt = createdAt + RESERVATION_DURATION_MS;
     const acquired = await db.runTransaction(async tx => {
         const existing = await tx.get(intent);
         if (existing.exists) {
@@ -77,9 +80,7 @@ export async function checkout(db: Firestore, uid: string, input: unknown, provi
         if (quote.hash !== body.quoteHash) throw new CheckoutError(409, 'QUOTE_CHANGED', 'Cambió el precio. Revisá la cotización antes de continuar.');
         if ((await tx.get(order)).exists) throw new CheckoutError(409, 'ORDER_CONFLICT', 'Este intento requiere verificación.');
         if (!options.admission) throw new CheckoutError(503, 'ADMISSION_UNAVAILABLE', 'No pudimos validar los límites de compra.');
-        const createdAt = now();
-        const admission = await readAdmission(tx, db, uid, options.admission, id, createdAt);
-        const expiresAt = createdAt + RESERVATION_DURATION_MS;
+        const admission = await readAdmission(tx, db, uid, options.admission, id, now());
         const inventory = inventoryForQuote(quote, reservationId, expiresAt);
         reserveProducts(tx, docs, inventory);
         writeAdmission(tx, admission);

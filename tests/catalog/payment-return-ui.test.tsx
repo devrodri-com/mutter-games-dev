@@ -34,6 +34,25 @@ test('only server-committed inventory displays the confirmed sale', async () => 
   await mount('?orderId=order'); expect(document.body.textContent).toContain('¡Pago confirmado!');
   expect(JSON.parse(String(vi.mocked(fetch).mock.calls[0][1]?.body))).toEqual({ action: 'status', orderId: 'order' });
 });
+test('R1-B confirmed sale survives an additional pending verification, including reload', async () => {
+  response = { ...response, inventoryState: 'committed', paymentStatus: 'approved', verificationPending: true };
+  localStorage.setItem('mutter-cart:return-owner', 'later-cart');
+  await mount('?orderId=order');
+  expect(document.body.textContent).toContain('¡Pago confirmado!');
+  expect(document.body.textContent?.toLowerCase()).toContain('comprobación adicional');
+  expect(document.body.textContent).not.toContain('Tu pago aún no está confirmado');
+  await act(async () => root?.unmount()); root = undefined; document.body.innerHTML = '';
+  await mount('?external_reference=order&payment_id=99&status=pending');
+  expect(document.body.textContent).toContain('¡Pago confirmado!');
+  expect(localStorage.getItem('mutter-cart:return-owner')).toBe('later-cart');
+});
+test.each(['duplicate_approved_payment', 'approved_without_stock', 'payment_identity_mismatch', 'payment_requires_attention'])(
+  'R1-B actual commercial attention %s remains unconfirmed despite the additional-check marker', async attention => {
+    response = { ...response, inventoryState: 'attention', paymentStatus: 'approved', attention, verificationPending: true };
+    await mount('?orderId=order');
+    expect(document.body.textContent).not.toContain('¡Pago confirmado!');
+    expect(document.body.textContent).toContain('Tu pago aún no está confirmado');
+  });
 test('missing order never makes a verification request', async () => {
   await mount('?status=approved'); expect(fetch).not.toHaveBeenCalled(); expect(document.body.textContent).toContain('No pudimos identificar');
 });

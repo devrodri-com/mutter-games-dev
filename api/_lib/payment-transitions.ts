@@ -5,6 +5,8 @@ import type { ProviderObservation, VerifiedProviderPayment } from './mercado-pag
 import { followingCheck, knownPaymentIds, PAYMENT_WINDOW_MS, readReconciliation, RECONCILIATION_GRACE_MS } from './reconciliation-policy.js';
 import { readQuotaRelease, writeQuotaRelease } from './web-admission.js';
 
+export type ReconciliationOutcome = 'verified' | 'unverified' | 'deferred';
+
 const reviewStates = new Set(['pending', 'in_process', 'authorized', 'in_mediation']);
 const unpaidStates = new Set(['rejected', 'cancelled']);
 function paymentMatches(payment: VerifiedProviderPayment, orderId: string, order: Record<string, unknown>): boolean {
@@ -14,15 +16,15 @@ function paymentMatches(payment: VerifiedProviderPayment, orderId: string, order
         Math.round(payment.amount * 100) === Math.round(order.total * 100);
 }
 export async function applyProviderObservation(db: Firestore, observedOrder: DocumentSnapshot, observation: ProviderObservation,
-    now: number, leaseOwner?: string): Promise<void> {
+    now: number, leaseOwner?: string): Promise<ReconciliationOutcome> {
     const orderRef = observedOrder.ref;
-    await db.runTransaction(async tx => {
+    return db.runTransaction(async tx => {
         const snapshot = await tx.get(orderRef);
         const order = record(snapshot.data());
         const inventory = readInventory(order.inventory);
         const createdAt = typeof order.paymentCreatedAt === 'number' ? order.paymentCreatedAt : inventory.expiresAt - PAYMENT_WINDOW_MS;
         const reconciliation = readReconciliation(order.reconciliation, createdAt);
-        if (leaseOwner && reconciliation.leaseOwner !== leaseOwner) return;
+        if (leaseOwner && reconciliation.leaseOwner !== leaseOwner) return 'deferred';
         const sameBase = snapshot.updateTime?.isEqual(observedOrder.updateTime ?? snapshot.updateTime) === true;
         const valid = observation.payments.filter(p => paymentMatches(p, orderRef.id, order));
         const intentRef = db.collection('checkoutIntents').doc(orderRef.id);
@@ -51,19 +53,26 @@ export async function applyProviderObservation(db: Firestore, observedOrder: Doc
             p.collectorId !== (order.expectedCollectorId ?? order.preferenceCollectorId)).map(p => p.id));
         const seenIds = [...new Set([...knownPaymentIds(order.knownPaymentIds), ...observation.observedPaymentIds])].filter(id => !foreignIds.has(id));
         const overflow = seenIds.length > 100 || observation.capacityExceeded === true || order.paymentTrackingOverflow === true;
-        const partial = !observation.searchComplete || Boolean(observation.verificationError) || overflow;
+        const resolvedAllKnown = seenIds.every(id => observation.payments.some(p => p.id === id));
+        const partial = !observation.searchComplete || Boolean(observation.verificationError) || overflow ||
+            observation.historyWindowExceeded === true || !resolvedAllKnown;
+        const commercialAttention = typeof order.attention === 'string' && order.attention !== 'reservation_reconciliation_failed' ? order.attention : undefined;
+        const cleanAttention = commercialAttention ?? FieldValue.delete();
+        const retainedCommercial = commercialAttention && !['awaiting_provider_evidence', 'payment_tracking_capacity_exceeded',
+            'provider_history_window_exceeded'].includes(commercialAttention) ? commercialAttention : undefined;
         const update: Record<string, unknown> = {
-            ...(observation.searchComplete || valid.length ? { lastVerifiedAt: FieldValue.serverTimestamp() } : { lastVerificationFailedAt: FieldValue.serverTimestamp() }),
+            ...(!partial ? { lastVerifiedAt: FieldValue.serverTimestamp() } : { lastVerificationFailedAt: FieldValue.serverTimestamp() }),
             knownPaymentIds: seenIds.slice(0, 100), ...(overflow ? { paymentTrackingOverflow: true } : {}),
         };
-        const finish = (state: string, extra: Record<string, unknown>) => tx.update(orderRef, {
-            ...update, reconciliation: followingCheck(reconciliation, state, now, createdAt, partial), ...extra,
-        });
+        const finish = (state: string, extra: Record<string, unknown>): ReconciliationOutcome => {
+            tx.update(orderRef, { ...update, reconciliation: followingCheck(reconciliation, state, now, createdAt, partial), ...extra });
+            return partial ? 'unverified' : 'verified';
+        };
         let reason: string | undefined;
         if (order.commerceVersion !== 2 || observation.collectorId !== (order.expectedCollectorId ?? order.preferenceCollectorId) ||
             observation.preferenceId !== order.preferenceId) reason = 'payment_identity_mismatch';
         if (stored.some(p => p.exists && p.data()?.orderId !== orderRef.id)) reason = 'payment_already_linked';
-        if (reason) { finish(inventory.state, { attention: reason }); return; }
+        if (reason) return finish(inventory.state, { attention: reason });
         // Foreign/wrong-amount payments never gain ownership of a ledger ID or a valid-payment state.
         const identityMismatch = valid.length !== observation.payments.length;
         const effective = valid.map((payment, index) => {
@@ -86,7 +95,8 @@ export async function applyProviderObservation(db: Firestore, observedOrder: Doc
             if (inventory.state !== 'committed' || !movement.exists) reason = 'inventory_ledger_mismatch';
             if (approved.some(p => p.id !== order.approvedPaymentId)) reason = 'duplicate_approved_payment';
             if (exceptional) reason = 'payment_requires_attention';
-            finish(inventory.state, { ...(reason ? { attention: reason } : {}) }); return;
+            if (identityMismatch) reason = 'payment_identity_mismatch';
+            return finish(inventory.state, { ...(reason ? { attention: reason } : !partial ? { attention: cleanAttention } : {}) });
         }
         if (selected) {
             let writes: ReturnType<typeof transitionProducts>;
@@ -95,38 +105,36 @@ export async function applyProviderObservation(db: Firestore, observedOrder: Doc
                 // A late paid basket is all-or-nothing. Clear only its remaining holds, never another buyer's.
                 for (const { snapshot: product, update: change } of releaseOwnedProducts(products, inventory)) tx.update(product.ref, change);
                 close();
-                finish('released', { inventory: { ...inventory, state: 'released', releasedAt: now },
+                return finish('released', { inventory: { ...inventory, state: 'released', releasedAt: now },
                     paymentStatus: 'approved', approvedPaymentId: selected.id, attention: 'approved_without_stock' });
-                return;
             }
             for (const { snapshot: product, update: change } of writes) tx.update(product.ref, change);
             tx.create(movementRef, { orderId: orderRef.id, paymentId: selected.id, reservationId: inventory.reservationId,
                 kind: 'web_sale', lines: inventory.lines, createdAt: FieldValue.serverTimestamp() });
             close();
-            finish('committed', { inventory: { ...inventory, state: 'committed', committedAt: now }, paymentStatus: 'approved', approvedPaymentId: selected.id,
-                attention: approved.length > 1 ? 'duplicate_approved_payment' : FieldValue.delete() }); return;
+            return finish('committed', { inventory: { ...inventory, state: 'committed', committedAt: now }, paymentStatus: 'approved', approvedPaymentId: selected.id,
+                attention: approved.length > 1 ? 'duplicate_approved_payment' : identityMismatch ? 'payment_identity_mismatch' : retainedCommercial ?? FieldValue.delete() });
         }
         if (order.paymentStatus === 'approved' || typeof order.approvedPaymentId === 'string') {
-            finish(inventory.state, { attention: order.attention ?? 'approved_payment_requires_attention' }); return;
+            return finish(inventory.state, { attention: order.attention ?? 'approved_payment_requires_attention' });
         }
         if (inventory.state === 'released') {
-            finish('released', { ...(inReview || exceptional ? { attention: 'late_payment_requires_attention' } : {}) }); return;
+            return finish('released', { ...(inReview || exceptional ? { attention: 'late_payment_requires_attention' } : {}) });
         }
         if (inReview) {
-            finish('reserved', { paymentStatus: 'in_review', attention: partial ? 'reservation_reconciliation_failed' : FieldValue.delete() }); return;
+            return finish('reserved', { paymentStatus: 'in_review', attention: retainedCommercial ?? (identityMismatch ? 'payment_identity_mismatch' : partial ? 'reservation_reconciliation_failed' : FieldValue.delete()) });
         }
-        const resolvedAllKnown = seenIds.every(id => observation.payments.some(p => p.id === id));
         if (!exceptional && !identityMismatch && !partial && !observation.historyWindowExceeded && resolvedAllKnown && sameBase &&
             now >= inventory.expiresAt + RECONCILIATION_GRACE_MS && effective.every(p => unpaidStates.has(p.status))) {
             let writes: ReturnType<typeof transitionProducts>;
             try { writes = transitionProducts(products, inventory, false); }
-            catch { finish('reserved', { attention: 'reservation_ledger_mismatch' }); return; }
+            catch { return finish('reserved', { attention: 'reservation_ledger_mismatch' }); }
             for (const { snapshot: product, update: change } of writes) tx.update(product.ref, change);
             close();
-            finish('released', { inventory: { ...inventory, state: 'released', releasedAt: now }, paymentStatus: 'expired',
-                attention: identityMismatch ? 'payment_identity_mismatch' : FieldValue.delete() }); return;
+            return finish('released', { inventory: { ...inventory, state: 'released', releasedAt: now }, paymentStatus: 'expired',
+                attention: identityMismatch ? 'payment_identity_mismatch' : retainedCommercial ?? FieldValue.delete() });
         }
-        finish('reserved', {
+        return finish('reserved', {
             ...(effective.length && effective.every(p => unpaidStates.has(p.status)) ? { paymentStatus: 'rejected' } : {}),
             attention: overflow ? 'payment_tracking_capacity_exceeded' : observation.historyWindowExceeded ? 'provider_history_window_exceeded' :
                 partial ? 'reservation_reconciliation_failed' : identityMismatch ? 'payment_identity_mismatch' :

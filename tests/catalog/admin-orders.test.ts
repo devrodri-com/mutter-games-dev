@@ -27,7 +27,7 @@ const fixture: Record<string, Record<string, unknown>> = {
 };
 beforeAll(async () => {
   const old = await db.collection('orders').get(); await Promise.all(old.docs.map(doc => doc.ref.delete()));
-  await Promise.all(Object.entries(fixture).map(([id, data]) => db.collection('orders').doc(id).set(data)));
+  await Promise.all(Object.entries(fixture).map(([id, data], index) => db.collection('orders').doc(id).set({ ...data, ...(data.createdAt ? { createdAt: Timestamp.fromMillis(7000 - index * 1000) } : {}) })));
 });
 afterAll(async () => { await db.terminate(); await deleteApp(app); });
 
@@ -42,7 +42,7 @@ test('R1-5 rejects non-admin and client role claims before any order read', asyn
 test('R1-5 verified Admin claims read bounded pages without a Rules permissions document', async () => {
   const one = await adminOrders(db, { admin: true }, { action: 'admin_orders', limit: 2 });
   if (!('orders' in one)) throw new Error('Expected list');
-  expect(one.orders.map(order => order.id)).toEqual(['a_paid', 'b_reserved']); expect(one.nextCursor).toBe('b_reserved');
+  expect(one.orders.map(order => order.id)).toEqual(['a_paid', 'b_reserved']); expect(one.nextCursor).toEqual({ section: 'recent', id: 'b_reserved', createdAt: { seconds: 6, nanoseconds: 0 } });
   const two = await adminOrders(db, { superadmin: true }, { action: 'admin_orders', limit: 2, cursor: one.nextCursor });
   if (!('orders' in two)) throw new Error('Expected list');
   expect(two.orders.map(order => order.id)).toEqual(['c_released', 'd_late']);
@@ -69,7 +69,7 @@ test('R1-5 details expose canonical attention, release and delivery without chan
 });
 
 test('R1-5 historical records without a date remain visible and never become verified from legacy status', async () => {
-  const page = await adminOrders(db, { admin: true }, { action: 'admin_orders', cursor: 'f_review' });
+  const page = await adminOrders(db, { admin: true }, { action: 'admin_orders', section: 'undated', limit: 50 });
   expect(page).toMatchObject({ orders: [{ id: 'z_historical', historical: true, paymentStatus: 'historical_unverified', inventoryState: 'historical', createdAt: null, currency: null }], nextCursor: null });
 });
 

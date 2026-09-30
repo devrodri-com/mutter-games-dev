@@ -41,7 +41,12 @@ async function statusView(db: Firestore, id: string, order: Record<string, unkno
             reusable = false;
         }
     }
-    return { id, inventoryState: order.attention ? 'attention' as const : inventory.state, paymentStatus: String(order.paymentStatus),
+    const confirmed = inventory.state === 'committed' && order.paymentStatus === 'approved';
+    const technicalAttention = order.attention === 'reservation_reconciliation_failed';
+    const needsAttention = Boolean(order.attention) && !(confirmed && technicalAttention);
+    const reconciliation = record(order.reconciliation ?? {});
+    return { id, inventoryState: needsAttention ? 'attention' as const : inventory.state, paymentStatus: String(order.paymentStatus),
+        ...(reconciliation.lastError || technicalAttention ? { verificationPending: true } : {}),
         reservedUntil: inventory.expiresAt, canRetry: inventory.state === 'released' && !order.attention && order.paymentStatus !== 'approved',
         ...(reusable ? { init_point: String(intent.initPoint) } : {}) };
 }
@@ -71,7 +76,17 @@ export async function checkoutStatus(db: Firestore, uid: string, body: Record<st
     if (!resolved) return { id, inventoryState: 'released' as const, paymentStatus: 'not_started', reservedUntil: 0, canRetry: true };
     const { snapshot, intent } = resolved;
     if (snapshot.data()?.uid !== uid || intent.data()?.uid !== uid) throw new CheckoutError(403, 'FORBIDDEN', 'No tenés acceso a esta compra.');
-    await reconcileOrder(db, id, options, 'buyer', isVerify && typeof body.paymentId === 'string' ? body.paymentId : undefined);
+    let technicalFailure = false;
+    try {
+        await reconcileOrder(db, id, options, 'buyer', isVerify && typeof body.paymentId === 'string' ? body.paymentId : undefined);
+    } catch (error) {
+        if (!(error instanceof CheckoutError) || error.code !== 'RESERVATION_RECONCILIATION_FAILED') throw error;
+        // A follow-up outage cannot invalidate a previously verified, durably committed sale.
+        const preserved = record((await orderRef.get()).data());
+        if (readInventory(preserved.inventory).state !== 'committed' || preserved.paymentStatus !== 'approved') throw error;
+        technicalFailure = true;
+    }
     const [latest, latestIntent] = await db.getAll(orderRef, intentRef);
-    return statusView(db, id, record(latest.data()), record(latestIntent.data()), (options.now ?? Date.now)());
+    const view = await statusView(db, id, record(latest.data()), record(latestIntent.data()), (options.now ?? Date.now)());
+    return { ...view, ...(technicalFailure ? { verificationPending: true } : {}) };
 }

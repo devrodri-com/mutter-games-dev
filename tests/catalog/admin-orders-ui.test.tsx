@@ -23,7 +23,7 @@ import OrderAdmin from '../../src/components/admin/OrderAdmin';
 let root: ReturnType<typeof createRoot> | undefined;
 const summary = (id: string, paymentStatus: string, inventoryState: string, attention: string | null = null) => ({
   id, historical: false, customer: { name: id, email: `${id}@example.invalid`, phone: '123' },
-  createdAt: 1000, total: 100, currency: 'UYU', paymentStatus, inventoryState, reservedUntil: 2000,
+  createdAt: 1000, createdAtState: 'verified', total: 100, currency: 'UYU', paymentStatus, inventoryState, reservedUntil: 2000,
   releasedAt: null, committedAt: null, lastVerifiedAt: 1000, nextCheckAt: null, attention,
   delivery: 'pickup',
 });
@@ -34,7 +34,9 @@ const duplicate = summary('duplicate', 'approved', 'committed', 'duplicate_appro
 const review = summary('review', 'in_review', 'reserved', 'provider_verification_unavailable');
 const released = { ...summary('released', 'expired', 'released'), releasedAt: 3000 };
 const historical = { ...summary('old', 'historical_unverified', 'historical'), historical: true };
-const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+const response = (body: Record<string, unknown>, status = 200) => new Response(JSON.stringify({
+  ...(Array.isArray(body.orders) ? { section: 'recent', scannedCount: body.orders.length } : {}), ...body,
+}), { status, headers: { 'Content-Type': 'application/json' } });
 async function mount() {
   const element = document.createElement('div'); document.body.append(element); root = createRoot(element);
   await act(async () => { root?.render(<OrderAdmin />); await new Promise(resolve => setTimeout(resolve, 20)); });
@@ -66,7 +68,7 @@ test('R1-5 permission denied is visible and not a successful empty history', asy
 });
 
 test('R1-5 pagination failure retains current page and shows the error', async () => {
-  const fetchMock = vi.fn().mockResolvedValueOnce(response({ orders: [paid], nextCursor: 'paid' }))
+  const fetchMock = vi.fn().mockResolvedValueOnce(response({ orders: [paid], nextCursor: { section: 'recent', id: 'paid', createdAt: { seconds: 1, nanoseconds: 0 } } }))
     .mockResolvedValueOnce(response({ code: 'UNAVAILABLE', error: 'No pudimos leer los pedidos.' }, 503));
   vi.stubGlobal('fetch', fetchMock);
   await mount();
@@ -114,4 +116,42 @@ test('R1-5 malformed detail stays an explicit error with retry, without fabricat
   expect(dialog?.querySelector('[role="alert"]')?.textContent).toContain('Respuesta de pedidos inválida');
   expect(dialog?.textContent).toContain('Reintentar detalle');
   expect(dialog?.textContent).not.toContain('Total registrado:');
+});
+
+test('R1-D undated section remains browsable after an empty scanned page and follows recent orders', async () => {
+  const undated = { ...historical, id: 'no-date', createdAt: null, createdAtState: 'missing' };
+  const fetchMock = vi.fn().mockResolvedValueOnce(response({ section: 'recent', scannedCount: 1, orders: [paid], nextCursor: null }))
+    .mockResolvedValueOnce(response({ section: 'undated', scannedCount: 20, orders: [], nextCursor: { section: 'undated', id: 'scanned-20' } }))
+    .mockResolvedValueOnce(response({ section: 'undated', scannedCount: 1, orders: [undated], nextCursor: null }));
+  vi.stubGlobal('fetch', fetchMock);
+  await mount();
+  const open = [...document.querySelectorAll('button')].find(button => button.textContent === 'Consultar pedidos sin fecha');
+  expect(open).toBeTruthy();
+  await act(async () => { open?.click(); await new Promise(resolve => setTimeout(resolve, 10)); });
+  expect(document.body.textContent).toContain('Quedan registros por revisar');
+  const next = [...document.querySelectorAll('button')].find(button => button.textContent === 'Revisar más registros sin fecha');
+  expect(next).toBeTruthy();
+  await act(async () => { next?.click(); await new Promise(resolve => setTimeout(resolve, 10)); });
+  expect(document.body.textContent).toContain('Fecha ausente');
+  const sections = [...document.querySelectorAll('section')];
+  expect(sections[0].textContent).toContain('paid');
+  expect(sections[1].textContent).toContain('no-date');
+  expect(fetchMock.mock.calls[2][1]).toMatchObject({ body: JSON.stringify({ action: 'admin_orders', section: 'undated', limit: 20, cursor: { section: 'undated', id: 'scanned-20' } }) });
+});
+
+test('R1-B committed sale retains confirmation and neutral technical detail while real attention stays visible', async () => {
+  const technical = { ...paid, attention: 'reservation_reconciliation_failed' };
+  const detail = { ...technical, paymentDeadline: 2000, paymentId: 'approved-payment', lastVerificationFailedAt: 4000,
+    shipping: { address: '', address2: '', city: '', department: '', postalCode: '' }, shippingCost: 0, items: [], itemsTruncated: false,
+    reconciliation: { state: 'review', lastProgressAt: 4000, lastError: 'reservation_reconciliation_failed', coverageUntil: 8000 } };
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(response({ orders: [technical, duplicate], nextCursor: null }))
+    .mockResolvedValueOnce(response({ order: detail })));
+  await mount();
+  expect(document.body.textContent).toContain('Pagada y stock descontado');
+  expect(document.body.textContent).toContain('Pago duplicado');
+  expect(document.body.textContent).not.toContain('reservation_reconciliation_failed');
+  const open = [...document.querySelectorAll('button')].find(button => button.textContent === 'Ver detalle');
+  await act(async () => { open?.click(); await new Promise(resolve => setTimeout(resolve, 10)); });
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain('La venta está confirmada');
+  expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain('pago no confirmado');
 });

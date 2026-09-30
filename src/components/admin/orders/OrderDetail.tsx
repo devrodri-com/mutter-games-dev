@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { adminAttentionLabel, adminDate, adminInventoryLabel, adminMoney, adminOrderLabel, adminPaymentLabel, type AdminOrderDetail } from '../../../domain/adminOrders';
+import { adminAttentionLabel, adminCommercialAttention, adminDate, adminInventoryLabel, adminMoney, adminOrderDateLabel, adminOrderLabel, adminPaymentLabel, type AdminOrderDetail } from '../../../domain/adminOrders';
 import { printOrderLabel } from './orderLabel';
 
 type Props = { id: string; order: AdminOrderDetail | null; loading: boolean; error: string | null; onClose: () => void; onRetry: () => void };
@@ -35,15 +35,16 @@ export function OrderDetail({ id, order, loading, error, onClose, onRetry }: Pro
       {order && <>
         <section className="my-4 space-y-1" aria-label="Estado del pago y del stock">
           <p className="font-semibold">{adminOrderLabel(order)}</p>
+          <p>Fecha del pedido: {adminOrderDateLabel(order)}</p>
           <p>{adminPaymentLabel(order)}</p><p>{adminInventoryLabel(order.inventoryState)}</p>
-          {order.attention && <p className="text-amber-800">{adminAttentionLabel(order.attention)}</p>}
+          {adminCommercialAttention(order) && order.attention && <p className="text-amber-800">{adminAttentionLabel(order.attention, order)}</p>}
           {order.historical ? <p>Este pedido es histórico: no se verificó su pago ni se descontó stock automáticamente.</p> : <>
             <p>Plazo de pago: {adminDate(order.paymentDeadline ?? order.reservedUntil)}</p>
             <p>Reserva hasta: {adminDate(order.reservedUntil)}</p>
             <p>Liberación: {adminDate(order.releasedAt)}</p><p>Descuento de stock: {adminDate(order.committedAt)}</p>
             <p>Última verificación: {adminDate(order.lastVerifiedAt)}</p><p>Próxima comprobación: {adminDate(order.nextCheckAt)}</p>
             {order.paymentId && <p>Pago aprobado verificado: {order.paymentId}</p>}
-            {order.reconciliation.lastError && <p className="text-amber-800">{adminAttentionLabel(order.reconciliation.lastError)}</p>}
+            {order.reconciliation.lastError && <p className={order.reconciliation.lastError === 'reservation_reconciliation_failed' && order.inventoryState === 'committed' && order.paymentStatus === 'approved' ? 'text-gray-600' : 'text-amber-800'}>{adminAttentionLabel(order.reconciliation.lastError, order)}</p>}
             {order.inventoryState === 'reserved' && <p>Las unidades de esta reserva siguen comprometidas. Los ajustes de stock conservan esa protección.</p>}
           </>}
         </section>

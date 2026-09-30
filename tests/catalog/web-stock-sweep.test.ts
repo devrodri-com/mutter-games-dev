@@ -131,17 +131,19 @@ test('real bounded query advances forty due rows in two batches of twenty with s
     const reconcile = vi.fn(async (_db: typeof db, id: string, _options: CheckoutOptions, _trigger?: 'buyer' | 'sweep') => {
         seen.push(id);
         await db.doc(`orders/${id}`).update({ 'reconciliation.nextCheckAt': NOW + 60_000 });
-        return 'checked' as const;
+        return 'verified' as const;
     });
     const first = await runWebStockSweep(db, options, { reconcile });
-    expect(first).toMatchObject({ selected: 20, attempted: 20, processed: 20, failed: 0, remaining: 0 });
+    expect(first).toMatchObject({ selected: 20, attempted: 20, processed: 20, verified: 20, failed: 0, unattemptedInBatch: 0, moreDue: true });
     expect([...seen].sort()).toEqual(Array.from({ length: 20 }, (_, index) => idFor(index)));
     const second = await runWebStockSweep(db, options, { reconcile });
-    expect(second).toMatchObject({ selected: 20, attempted: 20, processed: 20, failed: 0 });
+    expect(second).toMatchObject({ selected: 20, attempted: 20, processed: 20, failed: 0, moreDue: false });
     expect(new Set(seen).size).toBe(40);
     const maintenance = (await db.doc('webStockMaintenance/reconciliation').get()).data();
     expect(maintenance).toMatchObject({ selected: 20, processed: 20, state: 'completed' });
-    expect(Object.keys(maintenance ?? {}).sort()).toEqual(['attempted', 'deadlineReached', 'deferred', 'durationMs', 'failed', 'lastFinishedAt', 'lastStartedAt', 'processed', 'remaining', 'runId', 'selected', 'state'].sort());
+    expect(Object.keys(maintenance ?? {}).sort()).toEqual(['attempted', 'deadlineReached', 'deferred', 'durationMs', 'failed', 'failureTypes',
+        'lastFinishedAt', 'lastStartedAt', 'measuredAt', 'moreDue', 'oldestDueLagMs', 'processed', 'runId', 'selected', 'state',
+        'unattemptedInBatch', 'unverified', 'verified'].sort());
     expect(reconcile.mock.calls.every(call => call[3] === 'sweep')).toBe(true);
 });
 test('orchestration never runs more than two rows concurrently', async () => {
@@ -158,7 +160,7 @@ test('orchestration never runs more than two rows concurrently', async () => {
         if (active === 2) notifyTwo?.();
         await gate;
         active--;
-        return 'checked';
+        return 'verified';
     } });
     await twoStarted;
     expect(active).toBe(2);
@@ -169,9 +171,9 @@ test('orchestration never runs more than two rows concurrently', async () => {
 test('monotonic wall deadline stops admission while unfinished rows stay due', async () => {
     await queue(20);
     let wall = 0;
-    const reconcile = vi.fn(async () => { wall = 38_000; return 'checked' as const; });
+    const reconcile = vi.fn(async () => { wall = 38_000; return 'verified' as const; });
     const result = await runWebStockSweep(db, options, { wallNow: () => wall, reconcile });
-    expect(result).toMatchObject({ selected: 20, attempted: 1, processed: 1, remaining: 19, deadlineReached: true });
+    expect(result).toMatchObject({ selected: 20, attempted: 1, processed: 1, unattemptedInBatch: 19, deadlineReached: true });
     expect(reconcile).toHaveBeenCalledTimes(1);
     expect((await db.doc('orders/row-019').get()).data()?.reconciliation.nextCheckAt).toBe(NOW);
 });
@@ -179,9 +181,9 @@ test('failure of one row does not starve remaining rows in the finite batch', as
     await queue(20);
     const reconcile = vi.fn(async (_db: typeof db, id: string, _options: CheckoutOptions, _trigger?: 'buyer' | 'sweep') => {
         if (id === idFor(0)) throw new Error('Synthetic poison row');
-        return 'checked' as const;
+        return 'verified' as const;
     });
-    expect(await runWebStockSweep(db, options, { reconcile })).toMatchObject({ attempted: 20, processed: 19, failed: 1, remaining: 0 });
+    expect(await runWebStockSweep(db, options, { reconcile })).toMatchObject({ attempted: 20, processed: 19, failed: 1, unattemptedInBatch: 0 });
     expect(reconcile).toHaveBeenCalledTimes(20);
     expect((await db.doc('webStockMaintenance/reconciliation').get()).data()?.state).toBe('partial');
 });

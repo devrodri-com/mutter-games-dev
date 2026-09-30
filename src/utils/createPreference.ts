@@ -65,18 +65,20 @@ export type CheckoutStatus = {
     paymentStatus: string;
     reservedUntil: number;
     canRetry: boolean;
+    verificationPending?: boolean;
     url?: string;
 };
 function checkoutStatus(data: Record<string, unknown>): CheckoutStatus {
     if (typeof data.id !== 'string' || !data.id.trim() ||
         typeof data.paymentStatus !== 'string' || typeof data.reservedUntil !== 'number' || !Number.isFinite(data.reservedUntil) ||
         typeof data.canRetry !== 'boolean') throw new Error('No pudimos verificar el estado de la compra.');
+    if (data.verificationPending !== undefined && typeof data.verificationPending !== 'boolean') throw new Error('Estado de verificación inválido.');
     const inventoryState = data.inventoryState;
     if (inventoryState !== 'reserved' && inventoryState !== 'committed' && inventoryState !== 'released' && inventoryState !== 'attention')
         throw new Error('Estado de inventario inválido.');
     if (data.canRetry && inventoryState !== 'released') throw new Error('La compra requiere verificación.');
     if (data.init_point !== undefined && typeof data.init_point !== 'string') throw new Error('Destino de pago inválido.');
-    return { id: data.id, inventoryState, paymentStatus: data.paymentStatus, reservedUntil: data.reservedUntil, canRetry: data.canRetry,
+    return { ...(typeof data.verificationPending === 'boolean' ? { verificationPending: data.verificationPending } : {}), id: data.id, inventoryState, paymentStatus: data.paymentStatus, reservedUntil: data.reservedUntil, canRetry: data.canRetry,
         ...(typeof data.init_point === 'string' ? { url: paymentUrl(data.init_point) } : {}) };
 }
 export async function requestCheckoutStatus(identity: { key: string } | { orderId: string }): Promise<CheckoutStatus> {

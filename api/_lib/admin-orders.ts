@@ -1,6 +1,6 @@
 import { FieldPath, Timestamp, type Firestore } from 'firebase-admin/firestore';
 import { CheckoutError } from './checkout-domain.js';
-import type { AdminOrderDetail, AdminOrderPage, AdminOrderSummary } from '../../src/domain/adminOrders.js';
+import { ADMIN_ORDER_TIMESTAMP_RANGE, adminCommercialAttention, parseAdminOrderCursor, type AdminOrderCursor, type AdminOrderDetail, type AdminOrderPage, type AdminOrderSummary } from '../../src/domain/adminOrders.js';
 
 function object(value: unknown): Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -33,13 +33,16 @@ export function projectAdminOrder(id: string, value: unknown): AdminOrderSummary
   const inventoryState = historical ? 'historical' : state === 'reserved' || state === 'released' || state === 'committed' ? state : 'unknown';
   const shipping = object(order.shipping ?? order.shippingInfo);
   return {
-    id, historical, customer: customer(order), createdAt: time(order.createdAt), total: amount(order.total, order.totalAmount),
+    id, historical, customer: customer(order), createdAt: order.createdAt instanceof Timestamp ? order.createdAt.toMillis() : null,
+    createdAtState: order.createdAt instanceof Timestamp ? 'verified' : !Object.hasOwn(order, 'createdAt') ? 'missing' : order.createdAt === null ? 'null' : 'invalid',
+    total: amount(order.total, order.totalAmount),
     currency: typeof order.currency === 'string' && /^[A-Z]{3}$/.test(order.currency) ? order.currency : null,
     paymentStatus: historical ? 'historical_unverified' : text(order.paymentStatus) || 'unknown', inventoryState,
     reservedUntil: historical ? null : time(inventory.expiresAt), releasedAt: historical ? null : time(inventory.releasedAt),
     committedAt: historical ? null : time(inventory.committedAt), lastVerifiedAt: historical ? null : time(order.lastVerifiedAt),
     nextCheckAt: historical ? null : time(reconciliation.nextCheckAt),
-    attention: historical ? null : text(order.attention) || (inventoryState === 'unknown' ? 'inventory_state_unavailable' : null),
+    attention: historical ? null : adminCommercialAttention({ inventoryState, paymentStatus: text(order.paymentStatus),
+      attention: text(order.attention) || (inventoryState === 'unknown' ? 'inventory_state_unavailable' : null) }),
     delivery: shipping.pickup === true ? 'pickup' : shipping.pickup === false ? 'shipping' : 'unknown',
   };
 }
@@ -83,13 +86,40 @@ export async function adminOrders(db: Firestore, verifiedClaims: Record<string, 
     if (!snapshot.exists) throw new CheckoutError(404, 'ORDER_NOT_FOUND', 'No encontramos este pedido.');
     return { order: projectAdminOrderDetail(snapshot.id, snapshot.data()) };
   }
-  if (body.action !== 'admin_orders' || Object.keys(body).some(key => !['action', 'limit', 'cursor'].includes(key)) ||
+  if (body.action !== 'admin_orders' || Object.keys(body).some(key => !['action', 'limit', 'cursor', 'section'].includes(key)) ||
     (body.limit !== undefined && (typeof body.limit !== 'number' || !Number.isInteger(body.limit) || body.limit < 1 || body.limit > 50)) ||
-    (body.cursor !== undefined && !validId(body.cursor))) throw new CheckoutError(400, 'INVALID_INPUT', 'Página de pedidos inválida.');
+    (body.section !== undefined && body.section !== 'recent' && body.section !== 'undated')) throw new CheckoutError(400, 'INVALID_INPUT', 'Página de pedidos inválida.');
   const pageSize = typeof body.limit === 'number' ? body.limit : 20;
-  // Document-ID pagination includes historical records without createdAt and needs no new composite index.
-  const base = db.collection('orders').orderBy(FieldPath.documentId(), 'asc');
-  const page = await (typeof body.cursor === 'string' ? base.startAfter(body.cursor) : base).limit(pageSize + 1).get();
+  const section = body.section === 'undated' ? 'undated' : 'recent';
+  let cursor: AdminOrderCursor | undefined;
+  if (body.cursor !== undefined) {
+    try { cursor = parseAdminOrderCursor(body.cursor); }
+    catch { throw new CheckoutError(400, 'INVALID_INPUT', 'Cursor de pedidos inválido.'); }
+    if (cursor.section !== section) throw new CheckoutError(400, 'INVALID_INPUT', 'Cursor de pedidos inválido.');
+  }
+  // Timestamp bounds exclude other Firestore types. Same-direction ID tie-break uses
+  // the normal descending createdAt index, preserving the full timestamp cursor.
+  const base = section === 'recent'
+    ? db.collection('orders').where('createdAt', '>=', new Timestamp(ADMIN_ORDER_TIMESTAMP_RANGE.minSeconds, 0))
+      .where('createdAt', '<=', new Timestamp(ADMIN_ORDER_TIMESTAMP_RANGE.maxSeconds, ADMIN_ORDER_TIMESTAMP_RANGE.maxNanoseconds))
+      .orderBy('createdAt', 'desc').orderBy(FieldPath.documentId(), 'desc')
+    : db.collection('orders').orderBy(FieldPath.documentId(), 'asc');
+  const query = !cursor ? base : cursor.section === 'recent'
+    ? base.startAfter(new Timestamp(cursor.createdAt.seconds, cursor.createdAt.nanoseconds), cursor.id)
+    : base.startAfter(cursor.id);
+  const page = await query.limit(pageSize + 1).get();
   const selected = page.docs.slice(0, pageSize);
-  return { orders: selected.map(snapshot => projectAdminOrder(snapshot.id, snapshot.data())), nextCursor: page.size > pageSize ? selected[selected.length - 1].id : null };
+  const projected = selected.map(snapshot => projectAdminOrder(snapshot.id, snapshot.data()));
+  const last = selected[selected.length - 1];
+  let nextCursor: AdminOrderCursor | null = null;
+  if (page.size > pageSize && last) {
+    const createdAt: unknown = last.get('createdAt');
+    if (section === 'recent') {
+      if (!(createdAt instanceof Timestamp)) throw new Error('La consulta de pedidos devolvió una fecha inválida.');
+      nextCursor = { section, id: last.id, createdAt: { seconds: createdAt.seconds, nanoseconds: createdAt.nanoseconds } };
+    } else nextCursor = { section, id: last.id };
+  }
+  // An empty filtered page is not the end: advance using the last inspected ID.
+  return { section, scannedCount: selected.length,
+    orders: section === 'recent' ? projected : projected.filter(order => order.createdAtState !== 'verified'), nextCursor };
 }
