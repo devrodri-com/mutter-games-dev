@@ -1,12 +1,13 @@
 // scripts/setAdminRole.ts
 
-import admin from 'firebase-admin';
+import { cert, getApps, initializeApp } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
 // Inicializar la app de Firebase Admin usando variables de entorno
-if (!admin.apps.length) {
+if (!getApps().length) {
   const projectId = process.env.FIREBASE_PROJECT_ID;
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
   const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
@@ -17,8 +18,8 @@ if (!admin.apps.length) {
     );
   }
 
-  admin.initializeApp({
-    credential: admin.credential.cert({
+  initializeApp({
+    credential: cert({
       projectId,
       clientEmail,
       privateKey,
@@ -37,14 +38,14 @@ export async function setAdminRole(email: string, isSuperAdmin: boolean): Promis
       throw new Error('Email inválido');
     }
 
-    const user = await admin.auth().getUserByEmail(email);
+    const user = await getAuth().getUserByEmail(email);
     
     const customClaims = {
       admin: true,
       superadmin: isSuperAdmin,
     };
 
-    await admin.auth().setCustomUserClaims(user.uid, customClaims);
+    await getAuth().setCustomUserClaims(user.uid, customClaims);
     
     const roleText = isSuperAdmin ? 'superadmin' : 'admin';
     console.log(`✅ Usuario ${email} (UID: ${user.uid}) ahora tiene rol: ${roleText}`);

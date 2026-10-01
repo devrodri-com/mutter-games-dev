@@ -1,9 +1,8 @@
 // src/admin/TiptapEditor.tsx
-import React from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
-import TextStyle from '@tiptap/extension-text-style';
+import { TextStyle } from '@tiptap/extension-text-style';
 import Color from '@tiptap/extension-color';
 
 type Props = {
@@ -18,7 +17,9 @@ export default function TiptapEditor({
   withDefaultStyles = false,
 }: Props) {
   const editor = useEditor({
-    extensions: [StarterKit, Underline, TextStyle, Color],
+    // Preserve the existing HTML schema and keyboard behavior across StarterKit 3.
+    extensions: [StarterKit.configure({ link: false, underline: false, trailingNode: false, listKeymap: false }), Underline, TextStyle, Color],
+    shouldRerenderOnTransaction: true,
     content,
     editorProps: {
       attributes: {

@@ -71,7 +71,9 @@ beforeEach(async () => {
 });
 afterEach(async () => {
     await act(async () => root?.unmount()); root = undefined;
-    document.body.innerHTML = ''; vi.restoreAllMocks(); vi.unstubAllGlobals(); localStorage.clear();
+    // Happy DOM Storage is a Proxy: Vitest 4 descriptor restoration alone
+    // cannot remove an injected method. Reset its implementation first.
+    document.body.innerHTML = ''; vi.resetAllMocks(); vi.restoreAllMocks(); vi.unstubAllGlobals(); localStorage.clear();
     Object.defineProperty(window, 'location', { configurable: true, value: originalLocation });
 });
 
@@ -218,7 +220,7 @@ test.each(['last-order-write', 'navigation', 'lost-retry'])('a durable received 
     }
     expect(stored().receivedOrderId).toBe(`order-${String(starts[0].key)}`); expect(checkout.recovery).toBe(false);
     expect(toast.error).toHaveBeenCalled(); const before = starts.length;
-    vi.restoreAllMocks(); assign.mockReset();
+    vi.resetAllMocks(); vi.restoreAllMocks(); assign.mockReset();
     await basket('b'); await reviewThenStart(); expect(starts).toHaveLength(before + 1); expect(starts[before].key).not.toBe(starts[0].key);
 });
 

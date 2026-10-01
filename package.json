@@ -20,7 +20,9 @@
     "test:catalog": "firebase emulators:exec --only firestore,auth --project demo-mutter-r1 --config firebase.catalog-emulators.json \"npm run test:catalog:run\"",
     "typecheck:api": "tsc --noEmit --skipLibCheck --moduleResolution NodeNext --target ES2022 --module NodeNext --esModuleInterop api/create-mp-preference.ts",
     "test:catalog:browser": "firebase emulators:exec --only firestore,auth --project demo-mutter-r1 --config firebase.catalog-emulators.json \"node scripts/run-catalog-browser.mjs\"",
-    "check:checkout-packaging": "node scripts/verify-checkout-packaging.cjs"
+    "check:checkout-packaging": "node scripts/verify-checkout-packaging.cjs",
+    "audit:prod": "npm audit --omit=dev --audit-level=moderate",
+    "audit:all": "npm audit --audit-level=high"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -29,32 +31,29 @@
     "@headlessui/react": "^2.2.4",
     "@heroicons/react": "^2.2.0",
     "@react-google-maps/api": "^2.20.7",
-    "@tiptap/extension-color": "^2.14.0",
-    "@tiptap/extension-text-style": "^2.14.0",
-    "@tiptap/extension-underline": "^2.14.0",
-    "@tiptap/react": "^2.14.0",
-    "@tiptap/starter-kit": "^2.14.0",
+    "@tiptap/extension-color": "3.30.5",
+    "@tiptap/extension-text-style": "3.30.5",
+    "@tiptap/extension-underline": "3.30.5",
+    "@tiptap/react": "3.30.5",
+    "@tiptap/starter-kit": "3.30.5",
     "@types/jspdf": "^1.3.3",
     "@use-gesture/react": "^10.3.1",
     "class-variance-authority": "^0.7.1",
-    "cloudinary": "^2.6.0",
     "clsx": "^2.1.1",
     "connect-history-api-fallback": "^2.0.0",
     "cors": "^2.8.5",
     "crypto-js": "^4.2.0",
     "dotenv": "^16.5.0",
-    "express": "^4.21.2",
+    "express": "4.22.3",
     "firebase": "^11.6.1",
-    "firebase-admin": "^13.4.0",
+    "firebase-admin": "14.4.0",
     "framer-motion": "^12.7.2",
     "i18next": "^25.2.1",
     "i18next-browser-languagedetector": "^8.1.0",
-    "imagekit": "^6.0.0",
     "imagekit-javascript": "^4.0.1",
-    "jspdf": "^3.0.1",
+    "jspdf": "4.2.1",
     "keen-slider": "^6.8.6",
     "lucide-react": "^0.488.0",
-    "mercadopago": "^2.4.0",
     "qrcode": "^1.5.4",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
@@ -63,13 +62,12 @@
     "react-hot-toast": "^2.5.2",
     "react-i18next": "^15.5.2",
     "react-icons": "^5.5.0",
-    "react-quill": "^2.0.0",
-    "react-router-dom": "^7.5.0",
+    "react-router-dom": "7.18.2",
     "react-sortablejs": "^6.1.4",
     "react-swipeable": "^7.0.2",
     "react-toastify": "^11.0.5",
     "sortablejs": "^1.15.6",
-    "swiper": "^11.2.6",
+    "swiper": "12.1.2",
     "tailwind-merge": "^3.2.0",
     "tailwindcss-animate": "^1.0.7"
   },
@@ -89,29 +87,69 @@
     "@types/react-swipeable": "^4.3.0",
     "@types/swiper": "^5.4.3",
     "@types/uuid": "^10.0.0",
-    "@vercel/node": "^5.3.0",
+    "@vercel/node": "5.10.2",
     "@vitejs/plugin-react": "^4.3.4",
-    "@vitest/ui": "^2.1.8",
     "autoprefixer": "^10.4.21",
     "esbuild": "^0.25.2",
     "eslint": "^9.21.0",
     "eslint-plugin-react-hooks": "^5.1.0",
     "eslint-plugin-react-refresh": "^0.4.19",
-    "firebase-tools": "^14.26.0",
+    "firebase-tools": "15.31.0",
     "globals": "^15.15.0",
-    "happy-dom": "^15.11.7",
-    "next": "15.3.6",
-    "postcss": "^8.5.3",
+    "happy-dom": "20.8.9",
+    "postcss": "8.5.23",
     "tailwindcss": "^3.4.17",
     "ts-node": "^10.9.2",
     "typescript": "~5.7.2",
     "typescript-eslint": "^8.24.1",
-    "vite": "^6.2.0",
-    "vitest": "^2.1.8"
+    "vite": "6.4.3",
+    "vitest": "4.1.11",
+    "@vitest/ui": "4.1.11"
   },
   "description": "Mutter Games - Consolas, videojuegos y coleccionables en Uruguay",
   "main": "eslint.config.js",
   "keywords": [],
   "author": "",
-  "license": "ISC"
+  "license": "ISC",
+  "overrides": {
+    "@vercel/node": {
+      "undici": "6.28.1",
+      "path-to-regexp": "6.3.0",
+      "tsx": "4.22.0"
+    },
+    "@vercel/static-config": {
+      "ajv": "8.20.0"
+    },
+    "@tiptap/react": {
+      "@tiptap/extension-bubble-menu": "3.30.5",
+      "@tiptap/extension-floating-menu": "3.30.5"
+    },
+    "gaxios": {
+      "uuid": "11.1.1"
+    },
+    "vitest": {
+      "vite": "$vite"
+    },
+    "@firebase/firestore": {
+      "@grpc/grpc-js": "1.13.6"
+    },
+    "get-uri": {
+      "basic-ftp": "6.2.1"
+    },
+    "@google-cloud/pubsub": {
+      "@opentelemetry/core": "2.8.0"
+    },
+    "vite": {
+      "tsx": "4.22.0"
+    },
+    "micromatch": {
+      "picomatch": "2.3.2"
+    },
+    "anymatch": {
+      "picomatch": "2.3.2"
+    },
+    "readdirp": {
+      "picomatch": "2.3.2"
+    }
+  }
 }
