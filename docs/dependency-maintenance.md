@@ -79,8 +79,10 @@ the compatibility regression explicitly imports the TypeScript operation.
 Browser regressions retain every diagnostic. A WebKit network message is classified
 as document-unload cancellation only for the local demo Firestore stream when the
 same session first returned HTTP 200 with the expected CORS headers, then failed
-with `cancelled` beside an actual `pagehide`. This behavior also reproduces with
-the previous emulator. Application errors, promise rejections and unmatched
+with exactly `cancelled` (macOS) or `Load request cancelled` (Linux CI) beside an
+actual `pagehide`. Both native labels were observed with the full correlation;
+similar strings remain failures. The macOS behavior also reproduces with the
+previous emulator. Application errors, promise rejections and unmatched
 page errors still fail; negative tests enforce that boundary.
 
 Independent dependency/consumer review, stock publication configuration,

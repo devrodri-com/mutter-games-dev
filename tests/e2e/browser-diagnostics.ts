@@ -19,7 +19,7 @@ export function isDocumentUnloadDiagnostic(event: Diagnostic, events: Diagnostic
   const match = event.message?.match(/^\/127\.0\.0\.1:8188\/google\.firestore\.v1\.Firestore\/Listen\/channel\?(.+) due to access control checks\.$/);
   const session = match ? listenSession(`http://127.0.0.1:8188${channelPath}?${match[1]}`) : null;
   const cancelled = session && events.some(item => item.kind === 'request-failed' &&
-    listenSession(item.url) === session && item.message === 'cancelled' && Math.abs(item.at - event.at) < 1000);
+    listenSession(item.url) === session && (item.message === 'cancelled' || item.message === 'Load request cancelled') && Math.abs(item.at - event.at) < 1000);
   const response = session && events.some(item => item.kind === 'listen-response' &&
     listenSession(item.url) === session && item.status === 200 && item.at <= event.at &&
     item.headers?.['access-control-allow-origin'] === localOrigin && item.headers?.['access-control-allow-credentials'] === 'true');

@@ -17,6 +17,19 @@ describe('strict local WebKit document-unload diagnostic classification', () => 
       expect(isDocumentUnloadDiagnostic(diagnostic, evidence.filter(event => event.kind !== missing), 'webkit')).toBe(false);
     }
   });
+  it('recognizes the exact Linux WebKit cancellation observed in CI with the same required evidence', () => {
+    const linuxEvidence = evidence.map(event => event.kind === 'request-failed' ? { ...event, message: 'Load request cancelled' } : event);
+    expect(isDocumentUnloadDiagnostic(diagnostic, linuxEvidence, 'webkit')).toBe(true);
+    for (const missing of ['listen-response', 'request-failed', 'pagehide']) {
+      expect(isDocumentUnloadDiagnostic(diagnostic, linuxEvidence.filter(event => event.kind !== missing), 'webkit')).toBe(false);
+    }
+  });
+  it('does not accept merely similar cancellation messages', () => {
+    for (const message of ['Load request cancelled by policy', 'request cancelled', 'cancelled: network failure', 'Load request canceled', 'Cancelled', ' Load request cancelled']) {
+      const similar = evidence.map(event => event.kind === 'request-failed' ? { ...event, message } : event);
+      expect(isDocumentUnloadDiagnostic(diagnostic, similar, 'webkit')).toBe(false);
+    }
+  });
   it('does not classify failed responses, broken CORS or unrelated sessions', () => {
     expect(isDocumentUnloadDiagnostic(diagnostic, evidence.map(event => event.kind === 'listen-response' ? { ...event, status: 500 } : event), 'webkit')).toBe(false);
     expect(isDocumentUnloadDiagnostic(diagnostic, evidence.map(event => event.kind === 'listen-response' ? { ...event, headers: {} } : event), 'webkit')).toBe(false);
