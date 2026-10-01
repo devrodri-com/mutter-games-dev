@@ -75,6 +75,10 @@ export async function collectBrowserDiagnostics(page: Page) {
     const output = testInfo.outputPath('browser-diagnostics.json');
     await writeFile(output, JSON.stringify({ events, classifiedDocumentUnloads: classified, unexpected, nativeErrors, reactErrors }, null, 2));
     await testInfo.attach('browser-diagnostics.json', { path: output, contentType: 'application/json' });
+    if (nativeErrors.length || reactErrors.length || unexpected.length) {
+      // Failed CI jobs may retain logs without uploading the local Playwright attachment.
+      console.error('SYNTHETIC_BROWSER_DIAGNOSTICS', JSON.stringify({ events, classifiedDocumentUnloads: classified, unexpected, nativeErrors, reactErrors }));
+    }
     expect(nativeErrors, 'Application ErrorEvent/unhandledrejection').toEqual([]);
     expect(reactErrors, 'React/editor diagnostics').toEqual([]);
     expect(unexpected, 'Unclassified Playwright pageerrors').toEqual([]);
