@@ -5,8 +5,10 @@ import { adminApp } from '../_lib/firebase-server.js';
 import { mercadoPagoGateway } from '../_lib/mercado-pago-payments.js';
 import type { CheckoutOptions } from '../_lib/order-reconciliation.js';
 import { runWebStockSweep } from '../_lib/web-stock-sweep.js';
+import { handleReleaseAttestation } from '../_lib/release-attestation.js';
+import { assertCutoverOpen } from '../_lib/release-cutover.js';
 
-export const config = { maxDuration: 60 };
+export const config = { maxDuration: 60, architecture: 'x86_64' };
 type Response = {
     setHeader(name: string, value: string): unknown;
     status(code: number): Response;
@@ -27,6 +29,7 @@ function authorized(header: unknown, secret: unknown): boolean {
 }
 export function createSweepHandler(dependencies: Dependencies) {
     return async function handler(req: Pick<VercelRequest, 'method' | 'headers'>, res: Response) {
+        if (handleReleaseAttestation(req, res, 'reconcile')) return;
         res.setHeader('Cache-Control', 'no-store');
         if (req.method !== 'GET') {
             res.setHeader('Allow', 'GET');
@@ -36,7 +39,9 @@ export function createSweepHandler(dependencies: Dependencies) {
             return res.status(401).json({ error: 'Unauthorized' });
         try {
             // Authentication precedes Firebase initialization and every business read/write.
-            const result = await runWebStockSweep(dependencies.getDatabase(), dependencies.options());
+            const db = dependencies.getDatabase();
+            await assertCutoverOpen(db, 'reconcile');
+            const result = await runWebStockSweep(db, dependencies.options());
             return res.status(200).json(result);
         } catch {
             return res.status(503).json({ error: 'Stock reconciliation unavailable' });

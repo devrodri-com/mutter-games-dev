@@ -8,7 +8,7 @@ import handler from '../../api/create-mp-preference';
 if(!/^127\.0\.0\.1:\d+$/.test(process.env.FIRESTORE_EMULATOR_HOST??''))throw Error('Emulator required');
 const app=initializeApp({projectId:'demo-mutter-handler'},'catalog-checkout');const db=getFirestore(app);
 function response(){return {statusCode:0,body:undefined as unknown,setHeader(){},status(code:number){this.statusCode=code;return this;},json(body:unknown){this.body=body;return this;}};}
-beforeAll(async()=>{await db.collection('products').doc('p').set({active:true,title:'P',stockTotal:2,priceUSD:100});});
+beforeAll(async()=>{await db.doc('operations/webStockCutover').set({schema:1,state:'open',revision:'synthetic-open-handler',updatedAt:new Date()});await db.collection('products').doc('p').set({active:true,title:'P',stockTotal:2,priceUSD:100});});
 afterAll(async()=>{vi.unstubAllEnvs();await db.terminate();await deleteApp(app);});
 test('missing and invalid bearer tokens create no intent or order',async()=>{
  for(const authorization of [undefined,'Basic invalid','Bearer bad']){

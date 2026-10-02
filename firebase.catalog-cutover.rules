@@ -1,0 +1,103 @@
+// Firestore rules
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---- helpers ----
+    function isAuthed() { return request.auth != null; }
+    function isAdmin() {
+      return isAuthed()
+    && request.auth.token.email != null
+    && exists(/databases/$(database)/documents/adminUsers/$(request.auth.token.email));
+}
+
+    // Prepared cutover variant only. Apply under a separately authorized release.
+    // Admin SDK bypasses Rules and must also use the server admission guard.
+    function cutoverOpen() {
+      let control = get(/databases/$(database)/documents/operations/webStockCutover).data;
+      return control.schema == 1 && control.state == 'open'
+        && control.revision is string && control.revision.matches('[a-zA-Z0-9_-]{16,100}')
+        && control.updatedAt is timestamp;
+    }
+    match /operations/{document=**} { allow read, write: if false; }
+
+    // ---- catálogo público ----
+    match /products/{id} {
+      allow read: if true;
+      // 👉 Crear, editar o borrar solo admins
+      allow create, update, delete: if cutoverOpen() && isAdmin();
+    }
+    match /categories/{id} {
+      allow read: if true;
+      allow create, update, delete: if cutoverOpen() && isAdmin();
+    }
+    match /categories/{id}/subcategories/{sid} {
+      allow read: if true;
+      allow create, update, delete: if cutoverOpen() && isAdmin();
+    }
+
+    // ---- carrito (doc id = UID) ----
+    match /carts/{cartId} {
+      allow read: if isAuthed() && request.auth.uid == cartId;
+      allow write: if cutoverOpen() && isAuthed() && request.auth.uid == cartId;
+    }
+
+    // ---- órdenes ----
+match /orders/{orderId} {
+  // R1B candidate, NOT DEPLOYED: commercial records are server-owned.
+  allow create: if false;
+
+  // leer: dueño o admin
+  allow read: if isAuthed() && (
+    resource.data.uid == request.auth.uid || isAdmin()
+  );
+
+  // actualizar: (si no lo usás, lo dejamos cerrado)
+  allow update: if false;
+
+  // R1B: no browser may remove the durable commercial record.
+  allow delete: if false;
+}
+
+    // Real R1 private intent path; Admin SDK handlers bypass client Rules.
+    match /checkoutIntents/{intentId} { allow read, write: if false; }
+
+    // ---- adminUsers (para validar admin) ----
+    match /adminUsers/{id} {
+  allow read: if isAuthed();   // o if isAdmin() → tu panel lo usa para traer la lista
+  allow write: if false;       // nadie escribe desde front — solo backend o consola
+}
+
+    // ---- clients (para el panel “Clientes”) ----
+    match /clients/{id} {
+      // crear su ficha si el id es su UID o su EMAIL
+      allow create: if cutoverOpen() && isAuthed() && (
+        id == request.auth.uid ||
+        (request.auth.token.email != null && id == request.auth.token.email)
+      );
+
+      // leer/actualizar: el dueño o cualquier admin
+      allow read: if isAuthed() && (
+        isAdmin() || id == request.auth.uid ||
+        (request.auth.token.email != null && id == request.auth.token.email)
+      );
+      allow update: if cutoverOpen() && isAuthed() && (
+        isAdmin() ||
+        id == request.auth.uid ||
+        (request.auth.token.email != null && id == request.auth.token.email)
+      );
+
+      // borrar: solo admin
+      allow delete: if cutoverOpen() && isAdmin();
+    }
+
+    // ---- usuarios (legacy) ----
+    match /usuarios/{uid} {
+      allow read: if isAuthed() && request.auth.uid == uid;
+      allow write: if cutoverOpen() && isAuthed() && request.auth.uid == uid;
+    }
+
+    // ---- bloqueo por defecto ----
+    match /{document=**} { allow read, write: if false; }
+  }
+}

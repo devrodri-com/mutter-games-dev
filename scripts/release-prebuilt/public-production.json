@@ -1,0 +1,9 @@
+{
+  "VITE_FIREBASE_API_KEY": "AIzaSyAESHeAWAug3kZ7kPjLFcw8us6Fk5X24-Q",
+  "VITE_FIREBASE_AUTH_DOMAIN": "mutter-games.firebaseapp.com",
+  "VITE_FIREBASE_PROJECT_ID": "mutter-games",
+  "VITE_FIREBASE_STORAGE_BUCKET": "mutter-games.firebasestorage.app",
+  "VITE_FIREBASE_MESSAGING_SENDER_ID": "26777776532",
+  "VITE_FIREBASE_APP_ID": "1:26777776532:web:0154bd9503e24aea12df81",
+  "VITE_ADMIN_API_URL": "https://mutter-games-admin-api-prod.vercel.app"
+}

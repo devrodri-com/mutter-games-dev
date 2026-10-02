@@ -70,6 +70,7 @@ function responseRecorder() {
 beforeEach(async () => {
     const response = await originalFetch(`http://${host}/emulator/v1/projects/demo-mutter-stock-sweep/databases/(default)/documents`, { method: 'DELETE' });
     if (!response.ok) throw new Error('Cannot reset isolated test database');
+    await db.doc('operations/webStockCutover').set({schema:1,state:'open',revision:'synthetic-open-sweep',updatedAt:new Date()});
     vi.stubEnv('MP_ACCESS_TOKEN', 'synthetic-no-real-credential');
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.restoreAllMocks(); });
@@ -235,6 +236,7 @@ test('overlapping real sweeps use the per-order lease for at most one provider o
 test.each(['approved-before-expiry', 'abandoned', 'late-approved'])(
     'authorized server endpoint handles %s without buyer return or product visits', async scenario => {
         const harness = await createHarness();
+        await harness.db.doc('operations/webStockCutover').set({schema:1,state:'open',revision:'synthetic-recovery-open',updatedAt:new Date()});
         const handlerApp = initializeApp({ projectId: 'demo-mutter-stock-recovery' }, 'catalog-checkout');
         vi.stubEnv('CRON_SECRET', secret);
         const invoke = async () => {

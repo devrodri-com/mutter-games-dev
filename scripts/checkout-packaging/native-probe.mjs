@@ -44,12 +44,12 @@ try {
     result.denialCode = errorCode;
     result.passed = true;
   } else {
-    assert.equal(mode, 'invoke');
+    assert(['invoke', 'attest', 'smoke'].includes(mode));
     const [artifactDirectory, handlerName, method, functionKind, credentials] = args;
     assert(['GET', 'POST', 'OPTIONS'].includes(method));
     assert(['checkout', 'reconcile'].includes(functionKind));
     const requestHeaders = {};
-    if (functionKind === 'reconcile') {
+    if (mode === 'invoke' && functionKind === 'reconcile') {
       assert(['missing-secret', 'empty-secret', 'missing-header', 'wrong-secret'].includes(credentials));
       // These are local-only fixtures, not credentials read from any account.
       if (credentials === 'empty-secret') process.env.CRON_SECRET = '';
@@ -58,6 +58,28 @@ try {
       else if (credentials === 'missing-secret') requestHeaders.authorization = 'Bearer undefined';
       else if (credentials !== 'missing-header') requestHeaders.authorization = 'Bearer synthetic-wrong-value';
     }
+    const releaseSecret = 'synthetic_release_secret_1234567890';
+    const businessCanary = 'synthetic_business_secret_never_returned';
+    if (mode === 'attest' || mode === 'smoke') {
+      assert((mode === 'smoke' ? ['array-quote', 'array-availability']
+        : ['missing-secret', 'empty-secret', 'short-secret', 'missing-header', 'wrong-secret', 'wrong-action', 'method', 'authorized', 'retry', 'missing-undici']).includes(credentials));
+      requestHeaders['x-mutter-release-action'] = mode === 'smoke' ? 'read-smoke' : credentials === 'wrong-action' ? 'unknown' : 'runtime-attestation';
+      if (credentials !== 'missing-secret') process.env.RELEASE_ATTESTATION_SECRET = credentials === 'empty-secret' ? '' : credentials === 'short-secret' ? 'short' : releaseSecret;
+      if (credentials !== 'missing-header') requestHeaders.authorization = `Bearer ${credentials === 'wrong-secret' ? 'incorrect_release_secret_1234567890' : releaseSecret}`;
+      process.env.MP_ACCESS_TOKEN = businessCanary;
+      process.env.FIREBASE_PRIVATE_KEY = businessCanary;
+      process.env.CRON_SECRET = businessCanary;
+      process.env.VERCEL_DEPLOYMENT_ID = 'dpl_SyntheticNative123';
+      process.env.VERCEL_URL = 'synthetic-native-candidate.vercel.app';
+      process.env.VERCEL_ENV = 'preview';
+      process.env.VERCEL_REGION = 'iad1';
+      if (credentials === 'missing-undici') {
+        const descriptor = Object.getOwnPropertyDescriptor(process.versions, 'undici');
+        assert(descriptor, 'The positive runtime must expose its native Undici');
+        Object.defineProperty(process.versions, 'undici', { ...descriptor, value: undefined });
+        result.nativeUndiciRemovedForNegativeControl = true;
+      }
+    }
     const artifact = await realpath(artifactDirectory);
     const handlerPath = await realpath(path.join(artifact, handlerName));
     assert(handlerPath.startsWith(`${artifact}${path.sep}`));
@@ -65,18 +87,65 @@ try {
     assert.equal(metadata.type, 'module');
     const loaded = await import(pathToFileURL(handlerPath).href);
     assert.equal(typeof loaded.default, 'function', 'Emitted module must export the real handler');
+    const artifactRequire = createRequire(handlerPath);
+    const { getApps } = artifactRequire('firebase-admin/app');
+    assert.equal(getApps().length, 0, 'Import initialized Firebase');
     const headers = new Map(); let status; let body; let jsonCalls = 0;
     const response = {
       setHeader(name, value) { headers.set(name.toLowerCase(), value); return response; },
       status(value) { status = value; return response; },
       json(value) { body = value; jsonCalls += 1; return response; },
     };
-    await loaded.default({ method, headers: requestHeaders, body: {} }, response);
-    assert.equal(status, functionKind === 'checkout' ? (method === 'POST' ? 401 : 405) : (method === 'GET' ? 401 : 405));
+    const requestBody = mode !== 'smoke' ? {} : { action: [credentials === 'array-quote' ? 'quote' : 'availability'],
+      purchase: { items: [{ id: 'p', quantity: 1 }], shipping: { pickup: true, department: '', name: 'Synthetic',
+        address: '', city: '', postalCode: '', phone: '123', email: 'test@example.invalid' } },
+      key: 'synthetic-native-smoke-0001', quoteHash: 'a'.repeat(64) };
+    await loaded.default({ method, headers: requestHeaders, body: requestBody }, response);
     assert.equal(headers.get('cache-control'), 'no-store');
     assert.equal(jsonCalls, 1);
-    if (functionKind === 'checkout') assert.deepEqual(body, { error: method === 'POST' ? 'Iniciá sesión para continuar.' : 'Method not allowed' });
-    else assert.deepEqual(body, { error: method === 'GET' ? 'Unauthorized' : 'Method not allowed' });
+    if (mode === 'invoke') {
+      assert.equal(status, functionKind === 'checkout' ? (method === 'POST' ? 401 : 405) : (method === 'GET' ? 401 : 405));
+      if (functionKind === 'checkout') assert.deepEqual(body, { error: method === 'POST' ? 'Iniciá sesión para continuar.' : 'Method not allowed' });
+      else assert.deepEqual(body, { error: method === 'GET' ? 'Unauthorized' : 'Method not allowed' });
+    } else if (mode === 'smoke') {
+      assert.equal(status, 400);
+      assert.equal(body.code, 'INVALID_RELEASE_SMOKE');
+      assert(!JSON.stringify(body).includes(releaseSecret));
+    } else {
+      const successful = ['authorized', 'retry', 'missing-undici'].includes(credentials);
+      assert.equal(status, successful ? 200 : credentials === 'method' ? 405 : credentials === 'wrong-action' ? 400 : 401);
+      const serialized = JSON.stringify(body);
+      for (const excluded of [releaseSecret, businessCanary, 'RELEASE_ATTESTATION_SECRET', 'MP_ACCESS_TOKEN', artifact]) assert(!serialized.includes(excluded), 'Attestation leaked private data');
+      if (successful) {
+        const expectedBuild = JSON.parse(args[5]);
+        assert.equal(body.schemaVersion, 1);
+        assert.equal(body.handler, functionKind);
+        assert.equal(body.node, process.version);
+        assert.equal(body.node, 'v22.23.3');
+        assert.equal(body.nativeUndici, credentials === 'missing-undici' ? null : '6.28.1');
+        assert.deepEqual(body.buildIdentity, expectedBuild);
+        assert.equal(body.deployment.id, process.env.VERCEL_DEPLOYMENT_ID);
+        assert.equal(body.deployment.url, process.env.VERCEL_URL);
+        const { verifyReleaseAttestation } = await import(pathToFileURL(path.join(artifact, 'api/_lib/release-attestation.js')).href);
+        const expectation = { handler: functionKind, deploymentId: process.env.VERCEL_DEPLOYMENT_ID, deploymentUrl: process.env.VERCEL_URL,
+          head: expectedBuild?.head ?? 'a'.repeat(40), tree: expectedBuild?.tree ?? 'b'.repeat(40), buildId: expectedBuild?.buildId ?? 'c'.repeat(64),
+          node: 'v22.23.3', nativeUndici: '6.28.1' };
+        result.verification = verifyReleaseAttestation(body, expectation);
+        assert.equal(result.verification.status, !expectedBuild || credentials === 'missing-undici' ? 'NOT_VERIFIED' : 'VERIFIED');
+        result.receipt = body;
+        if (credentials === 'retry') {
+          const first = body;
+          jsonCalls = 0;
+          await loaded.default({ method, headers: requestHeaders, body: {} }, response);
+          assert.equal(status, 200); assert.equal(jsonCalls, 1);
+          assert.equal(body.coldStartId, first.coldStartId);
+          assert.notEqual(body.invocationId, first.invocationId);
+          assert.deepEqual(body.buildIdentity, first.buildIdentity);
+          result.retryInvocationId = body.invocationId;
+        }
+      } else assert.deepEqual(body, { error: credentials === 'method' ? 'Method not allowed' : credentials === 'wrong-action' ? 'Invalid release action' : 'Unauthorized' });
+    }
+    assert.equal(getApps().length, 0, 'Handler initialized Firebase in a no-I/O invocation');
     const require = createRequire(import.meta.url);
     const resolvedDependencies = Object.keys(require.cache);
     assert(resolvedDependencies.every(file => file.startsWith(`${artifact}${path.sep}`)), 'Runtime dependency resolved outside materialized artifact');
@@ -93,7 +162,7 @@ try {
 // No forced successful exit: delayed I/O stays observable. Lingering handles
 // cause the parent timeout to fail, rather than hiding a scheduled request.
 process.once('beforeExit', () => {
-  if (mode === 'invoke' && Object.values(network).some(value => value > 0)) {
+  if (['invoke', 'attest', 'smoke'].includes(mode) && Object.values(network).some(value => value > 0)) {
     result.passed = false;
     result.failure = { code: 'UNEXPECTED_NETWORK_ATTEMPT', message: 'Passive observation detected I/O even if its error was caught' };
     process.exitCode = 1;

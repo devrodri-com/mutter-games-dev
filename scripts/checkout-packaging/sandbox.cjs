@@ -4,7 +4,21 @@ const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const { writeJson } = require('./artifact.cjs');
 
-async function verifyNativeProcesses(source, workspace, entries) {
+const checkoutCases = Object.freeze([['cold-get', 'GET'], ['cold-post', 'POST'], ['cold-options', 'OPTIONS'], ['restarted-post', 'POST']]);
+const reconcileCases = Object.freeze([
+  ['reconcile-missing-secret', 'GET', 'missing-secret'], ['reconcile-empty-secret', 'GET', 'empty-secret'],
+  ['reconcile-missing-header', 'GET', 'missing-header'], ['reconcile-wrong-secret', 'GET', 'wrong-secret'],
+  ['reconcile-method', 'POST', 'wrong-secret'], ['reconcile-restarted-get', 'GET', 'wrong-secret'],
+]);
+const attestationCases = Object.freeze(['missing-secret', 'empty-secret', 'short-secret', 'missing-header', 'wrong-secret', 'wrong-action', 'method', 'authorized', 'retry', 'missing-undici']);
+const smokeCases = Object.freeze(['array-quote', 'array-availability']);
+const EXPECTED_NATIVE_CASE_LABELS = Object.freeze([
+  ...checkoutCases.map(([label]) => label), ...reconcileCases.map(([label]) => label),
+  ...['checkout', 'reconcile'].flatMap(key => attestationCases.map(credentials => `attestation-${key}-${credentials}`)),
+  ...smokeCases.map(credentials => `smoke-checkout-${credentials}`),
+]);
+
+async function verifyNativeProcesses(source, workspace, entries, options = {}) {
   const probe = path.join(workspace.root, 'native-probe.mjs');
   await fs.copyFile(path.join(__dirname, 'native-probe.mjs'), probe);
   // Preserve HOME when present; never repurpose a system variable as a private
@@ -51,15 +65,26 @@ async function verifyNativeProcesses(source, workspace, entries) {
   assert.deepEqual(entries.map(entry => entry.key), ['checkout', 'reconcile'], 'Require exactly the two prepared function artifacts');
   const [checkout, reconcile] = entries;
   const cases = [];
-  for (const [label, method] of [['cold-get', 'GET'], ['cold-post', 'POST'], ['cold-options', 'OPTIONS'], ['restarted-post', 'POST']]) {
+  for (const [label, method] of checkoutCases) {
     cases.push(await run(selected, label, ['invoke', checkout.directory, checkout.handler, method, 'checkout'], checkout.directory));
   }
-  for (const [label, method, credentials] of [
-    ['reconcile-missing-secret', 'GET', 'missing-secret'], ['reconcile-empty-secret', 'GET', 'empty-secret'],
-    ['reconcile-missing-header', 'GET', 'missing-header'], ['reconcile-wrong-secret', 'GET', 'wrong-secret'],
-    ['reconcile-method', 'POST', 'wrong-secret'], ['reconcile-restarted-get', 'GET', 'wrong-secret'],
-  ]) cases.push(await run(selected, label, ['invoke', reconcile.directory, reconcile.handler, method, 'reconcile', credentials], reconcile.directory));
-  return { backend: selected.name, networkCanaries: attempts, cases, eachInvocationHasFreshProcess: true, nativeLoader: true, graphMocks: false, apiReplacements: false, credentialsInherited: false, homePreservedNotRepurposed: env.HOME === process.env.HOME };
+  for (const [label, method, credentials] of reconcileCases) cases.push(await run(selected, label, ['invoke', reconcile.directory, reconcile.handler, method, 'reconcile', credentials], reconcile.directory));
+  const attestationIdentity = options.attestationIdentity ?? null;
+  for (const entry of entries) {
+    const method = entry.key === 'checkout' ? 'POST' : 'GET';
+    for (const credentials of attestationCases) {
+      const requestMethod = credentials === 'method' ? (method === 'GET' ? 'POST' : 'GET') : method;
+      cases.push(await run(selected, `attestation-${entry.key}-${credentials}`, ['attest', entry.directory, entry.handler, requestMethod, entry.key, credentials, JSON.stringify(attestationIdentity)], entry.directory));
+    }
+    const first = cases.find(row => row.label === `attestation-${entry.key}-authorized`);
+    const restarted = cases.find(row => row.label === `attestation-${entry.key}-retry`);
+    if (first.passed && restarted.passed) assert.notEqual(first.observation.receipt.coldStartId, restarted.observation.receipt.coldStartId, 'Fresh processes reused a cold-start identity');
+  }
+  for (const credentials of smokeCases) {
+    cases.push(await run(selected, `smoke-checkout-${credentials}`, ['smoke', checkout.directory, checkout.handler, 'POST', 'checkout', credentials], checkout.directory));
+  }
+  assert.deepEqual(cases.map(row => row.label), EXPECTED_NATIVE_CASE_LABELS, 'Native case matrix drifted');
+  return { backend: selected.name, networkCanaries: attempts, cases, attestationIdentity, eachInvocationHasFreshProcess: true, nativeLoader: true, graphMocks: false, apiReplacements: false, credentialsInherited: false, homePreservedNotRepurposed: env.HOME === process.env.HOME };
 }
 
-module.exports = { verifyNativeProcesses };
+module.exports = { verifyNativeProcesses, EXPECTED_NATIVE_CASE_LABELS };

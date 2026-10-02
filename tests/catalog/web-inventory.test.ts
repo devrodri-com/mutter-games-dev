@@ -512,6 +512,7 @@ test('real handler withholds the existing payment link after actual Admin unpubl
     let createdOrderId: string | undefined;
     let reservationId: string | undefined;
     try {
+        await handlerDb.doc('operations/webStockCutover').set({schema:1,state:'open',revision:'synthetic-coupled-handler-open',updatedAt:new Date()});
         await auth.createUser({ uid });
         authCreated = true;
         const token = await auth.createCustomToken(uid);

@@ -50,6 +50,17 @@ async function emitFunction(source, workspace, definition, context) {
   const output = built.output;
   assert.equal(output.handler, definition.handler);
   assert.equal(output.runtime, 'nodejs22.x');
+  const runtimeConfiguration = { runtime: output.runtime, handler: output.handler, architecture: output.architecture, launcherType: output.launcherType,
+    shouldAddHelpers: output.shouldAddHelpers, shouldAddSourcemapSupport: output.shouldAddSourcemapSupport,
+    maxDuration: output.maxDuration ?? null };
+  assert.equal(runtimeConfiguration.launcherType, 'Nodejs');
+  assert.equal(runtimeConfiguration.shouldAddHelpers, true);
+  assert.equal(runtimeConfiguration.shouldAddSourcemapSupport, true);
+  assert.equal(runtimeConfiguration.architecture, 'x86_64');
+  assert.deepEqual(output.environment, {}, 'Official function must not embed environment values');
+  assert.equal(output.awsLambdaHandler, '', 'Official builder must use its normal Node handler');
+  for (const key of ['regions', 'useWebApi', 'supportsResponseStreaming'])
+    assert(output[key] === undefined, `Unreviewed official function setting: ${key}`);
   if (definition.maxDuration !== undefined) assert.equal(output.maxDuration, definition.maxDuration, `Unexpected emitted duration for ${definition.key}`);
   for (const name of definition.requiredModules) assert(output.files[name], `Missing ${definition.key} traced module ${name}`);
   assert(output.files['package.json'], 'Builder omitted real package scope; do not fabricate it');
@@ -91,7 +102,7 @@ async function emitFunction(source, workspace, definition, context) {
     const metadata = JSON.parse(await fs.readFile(path.join(directory, entry.path), 'utf8'));
     scopes.push({ path: entry.path, sha256: entry.sha256, name: metadata.name ?? null, version: metadata.version ?? null, type: metadata.type ?? 'commonjs-default' });
   }
-  const metadata = { key: definition.key, entrypoint: definition.entrypoint, handler: output.handler, runtime: output.runtime, maxDuration: output.maxDuration ?? null, directory, builder: require('@vercel/node/package.json').version, typescript: require('typescript/package.json').version, node: process.version, config: builderConfig, meta: { isDev: false, skipDownload: true, runNpmInstallSet: [packagePath] }, installPrerequisite: 'Repository npm ci from unchanged lockfile, verified by caller/CI', packageScopeSource: 'Exact builder output; root bytes matched source', sourceHashes, tracedFiles: manifest.length, packageScopes: scopes, files: manifest };
+  const metadata = { key: definition.key, entrypoint: definition.entrypoint, handler: output.handler, runtime: output.runtime, maxDuration: output.maxDuration ?? null, runtimeConfiguration, directory, builder: require('@vercel/node/package.json').version, typescript: require('typescript/package.json').version, node: process.version, config: builderConfig, meta: { isDev: false, skipDownload: true, runNpmInstallSet: [packagePath] }, installPrerequisite: 'Repository npm ci from unchanged lockfile, verified by caller/CI', packageScopeSource: 'Exact builder output; root bytes matched source', sourceHashes, tracedFiles: manifest.length, packageScopes: scopes, files: manifest };
   const manifestPath = path.join(workspace.root, `output-manifest-${definition.key}.json`);
   await writeJson(manifestPath, metadata);
   return { key: definition.key, entrypoint: definition.entrypoint, handler: output.handler, runtime: output.runtime, maxDuration: metadata.maxDuration, directory, builder: metadata.builder, typescript: metadata.typescript, tracedFiles: manifest.length, packageScopes: scopes.length, manifestPath, manifestSha256: digest(await fs.readFile(manifestPath)), packageScopeSha256: digest(packageBytes) };
@@ -102,11 +113,11 @@ async function buildArtifact(source, workspace) {
   const definitions = [
     {
       key: 'checkout', entrypoint: 'api/create-mp-preference.ts', handler: 'api/create-mp-preference.js',
-      requiredModules: ['api/create-mp-preference.js', 'api/_lib/admin-orders.js', 'api/_lib/checkout-service.js', 'api/_lib/checkout-domain.js', 'api/_lib/mercado-pago.js', 'api/_lib/mercado-pago-payments.js', 'api/_lib/payment-service.js', 'api/_lib/payment-transitions.js', 'api/_lib/inventory-transactions.js', 'src/domain/webInventory.js'],
+      requiredModules: ['api/create-mp-preference.js', 'api/_lib/admin-orders.js', 'api/_lib/checkout-service.js', 'api/_lib/checkout-domain.js', 'api/_lib/mercado-pago.js', 'api/_lib/mercado-pago-payments.js', 'api/_lib/payment-service.js', 'api/_lib/payment-transitions.js', 'api/_lib/inventory-transactions.js', 'src/domain/webInventory.js', 'api/_lib/release-attestation.js', 'api/_lib/release-attestation-verifier.js', 'api/_lib/release-build-identity.js', 'api/_lib/release-build-identity.json'],
     },
     {
       key: 'reconcile', entrypoint: 'api/internal/web-stock-reconcile.ts', handler: 'api/internal/web-stock-reconcile.js', maxDuration: 60,
-      requiredModules: ['api/internal/web-stock-reconcile.js', 'api/_lib/web-stock-sweep.js'],
+      requiredModules: ['api/internal/web-stock-reconcile.js', 'api/_lib/web-stock-sweep.js', 'api/_lib/release-attestation.js', 'api/_lib/release-attestation-verifier.js', 'api/_lib/release-build-identity.js', 'api/_lib/release-build-identity.json'],
     },
   ];
   const config = JSON.parse(await fs.readFile(path.join(source, 'vercel.json'), 'utf8'));
@@ -122,10 +133,10 @@ async function buildArtifact(source, workspace) {
   const pkg = JSON.parse(packageBytes);
   assert.equal(pkg.type, 'module', 'Preserve the real ESM package scope');
   assert(!pkg.scripts?.['vercel-build'] && !pkg.scripts?.['now-build'], 'Unexpected builder lifecycle script');
-  for (const key of ['FIREBASE_PRIVATE_KEY', 'MP_ACCESS_TOKEN', 'IMAGEKIT_PRIVATE_KEY', 'GOOGLE_APPLICATION_CREDENTIALS', 'CRON_SECRET', 'WEB_ADMISSION_HMAC_SECRET']) {
-    assert(!process.env[key], `Credential environment is forbidden: ${key}`);
+  for (const key of ['FIREBASE_PRIVATE_KEY', 'MP_ACCESS_TOKEN', 'MP_COLLECTOR_ID', 'IMAGEKIT_PRIVATE_KEY', 'GOOGLE_APPLICATION_CREDENTIALS', 'CRON_SECRET', 'WEB_ADMISSION_HMAC_SECRET', 'RELEASE_ATTESTATION_SECRET']) {
+    assert(process.env[key] === undefined, `Credential environment is forbidden: ${key}`);
   }
-  const files = { ...await glob('api/**/*.ts', source), ...await glob('src/domain/**/*.ts', source) };
+  const files = { ...await glob('api/**/*.ts', source), ...await glob('api/_lib/release-build-identity.json', source), ...await glob('src/domain/**/*.ts', source) };
   const sourceHashes = {};
   for (const name of ['package.json', 'package-lock.json', 'tsconfig.json', 'vercel.json', ...Object.keys(files).sort()]) sourceHashes[name] = digest(await fs.readFile(path.join(source, name)));
   // npm ci precedes this gate. Reuse the builder's installation deduplication;

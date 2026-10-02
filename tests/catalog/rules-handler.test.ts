@@ -43,6 +43,7 @@ test('real Auth + checkout handler + candidate Rules persist one canonical order
   }
   try {
     await env.clearFirestore();
+    await db.doc('operations/webStockCutover').set({schema:1,state:'open',revision:'synthetic-open-rules-handler',updatedAt:new Date()});
     await auth.createUser({ uid: 'handler-buyer' });
     const custom = await auth.createCustomToken('handler-buyer');
     const signed = await fetch('http://127.0.0.1:9198/identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=synthetic', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: custom, returnSecureToken: true }) });

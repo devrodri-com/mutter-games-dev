@@ -16,7 +16,7 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     env:
-      WEB_INVENTORY_ADMIN_SHA: 770e23d0dacf0d8d30779b67aab2e8b470afc901
+      WEB_INVENTORY_ADMIN_SHA: 34cf17cfb5a849300786f35ecd4efa268fad8b5a
       MUTTER_ADMIN_API_SOURCE: ${{ github.workspace }}/paired-admin-api
       EDGE_TOOLING_EVIDENCE_DIR: ${{ github.workspace }}/../mutter-edge-controls-${{ github.run_id }}-${{ github.run_attempt }}
       CHECKOUT_PACKAGING_EVIDENCE_DIR: ${{ github.workspace }}/../mutter-edge-controls-${{ github.run_id }}-${{ github.run_attempt }}/emitted-functions
@@ -26,6 +26,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
+          persist-credentials: false
 
       - name: Verify event checkout identity
         env:
@@ -84,6 +85,38 @@ jobs:
 
       - name: Stock reconciliation API typecheck
         run: node node_modules/typescript/bin/tsc --noEmit --skipLibCheck --moduleResolution NodeNext --target ES2022 --module NodeNext --esModuleInterop api/internal/web-stock-reconcile.ts
+
+      - name: Prebuilt control regressions
+        run: npm run test:prebuilt
+
+      - name: Cutover control regressions
+        run: npm run test:release-cutover
+
+      - name: Build complete isolated prebuilt from exact clean source
+        run: node scripts/release-prebuilt/ci.cjs build "$RUNNER_TEMP/mutter-prebuilt"
+
+      - name: Verify complete prebuilt
+        run: node scripts/release-prebuilt/ci.cjs verify "$RUNNER_TEMP/mutter-prebuilt"
+
+      - name: Prebuilt negative output regressions
+        run: node scripts/release-prebuilt/ci.cjs negative "$RUNNER_TEMP/mutter-prebuilt"
+
+      - name: Independently rebuild exact prebuilt
+        run: node scripts/release-prebuilt/ci.cjs build "$RUNNER_TEMP/mutter-prebuilt-repeat"
+
+      - name: Compare every deployable byte
+        run: node scripts/release-prebuilt/ci.cjs compare "$RUNNER_TEMP/mutter-prebuilt" "$RUNNER_TEMP/mutter-prebuilt-repeat"
+
+      - name: Archive complete prebuilt without deployment
+        run: tar -czf "$RUNNER_TEMP/mutter-prebuilt.tar.gz" -C "$RUNNER_TEMP/mutter-prebuilt" .
+
+      - name: Preserve complete prebuilt and provenance
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutter-stock-prebuilt
+          path: ${{ runner.temp }}/mutter-prebuilt.tar.gz
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Checkout exact paired Admin inventory target
         uses: actions/checkout@v4

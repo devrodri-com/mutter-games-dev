@@ -1,13 +1,15 @@
 // Test-only host: real SPA + real checkout handler, isolated Auth/Firestore and a synthetic MP HTTP boundary.
 import { createServer } from 'vite';
 import { initializeApp } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
 if (process.env.FIRESTORE_EMULATOR_HOST !== '127.0.0.1:8188' || process.env.FIREBASE_AUTH_EMULATOR_HOST !== '127.0.0.1:9198' || process.env.VITE_FIREBASE_PROJECT_ID !== 'demo-mutter-r1') {
   throw new Error('Exact local demo emulators required');
 }
 for (const key of ['FIREBASE_PRIVATE_KEY', 'FIREBASE_CLIENT_EMAIL', 'GOOGLE_APPLICATION_CREDENTIALS', 'MP_ACCESS_TOKEN', 'IMAGEKIT_PRIVATE_KEY', 'WEB_ADMISSION_HMAC_SECRET', 'CRON_SECRET']) {
   if (process.env[key]) throw new Error(`Credential environment forbidden: ${key}`);
 }
-initializeApp({ projectId: 'demo-mutter-r1' }, 'catalog-checkout');
+const app = initializeApp({ projectId: 'demo-mutter-r1' }, 'catalog-checkout');
+await getFirestore(app).doc('operations/webStockCutover').set({schema:1,state:'open',revision:'synthetic-browser-open',updatedAt:new Date()});
 process.env.MP_ACCESS_TOKEN = 'synthetic-browser-only';
 process.env.MP_COLLECTOR_ID = '200';
 process.env.VERCEL = '1';
