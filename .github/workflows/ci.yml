@@ -18,8 +18,8 @@ jobs:
     env:
       WEB_INVENTORY_ADMIN_SHA: 770e23d0dacf0d8d30779b67aab2e8b470afc901
       MUTTER_ADMIN_API_SOURCE: ${{ github.workspace }}/paired-admin-api
-      EDGE_TOOLING_EVIDENCE_DIR: ${{ runner.temp }}/mutter-edge-controls
-      CHECKOUT_PACKAGING_EVIDENCE_DIR: ${{ runner.temp }}/mutter-edge-controls/emitted-functions
+      EDGE_TOOLING_EVIDENCE_DIR: ${{ github.workspace }}/../mutter-edge-controls-${{ github.run_id }}-${{ github.run_attempt }}
+      CHECKOUT_PACKAGING_EVIDENCE_DIR: ${{ github.workspace }}/../mutter-edge-controls-${{ github.run_id }}-${{ github.run_attempt }}/emitted-functions
 
     steps:
       - name: Checkout
@@ -71,7 +71,7 @@ jobs:
 
       - name: Edge control positive and negative regressions
         env:
-          EDGE_CONTROL_TEST_EVIDENCE_DIR: ${{ runner.temp }}/mutter-edge-controls/guard-observations
+          EDGE_CONTROL_TEST_EVIDENCE_DIR: ${{ env.EDGE_TOOLING_EVIDENCE_DIR }}/guard-observations
         run: |
           mkdir -p "$EDGE_TOOLING_EVIDENCE_DIR"
           npm run test:edge-tooling
