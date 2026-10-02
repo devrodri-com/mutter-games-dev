@@ -132,11 +132,15 @@ jobs:
           CATALOG_WEBKIT: '1'
         run: npm run test:catalog:browser
 
+      - name: Archive Edge control execution and emitted evidence
+        if: always()
+        run: tar -czf "$RUNNER_TEMP/edge-tooling-controls.tar.gz" -C "$EDGE_TOOLING_EVIDENCE_DIR" .
+
       - name: Preserve Edge control execution and emitted evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: edge-tooling-controls
-          path: ${{ env.EDGE_TOOLING_EVIDENCE_DIR }}
+          path: ${{ runner.temp }}/edge-tooling-controls.tar.gz
           if-no-files-found: error
           retention-days: 14
