@@ -1,0 +1,595 @@
+{
+  "schemaVersion": 1,
+  "exceptionId": "R1-PDEP1-EDGE-UNDICI",
+  "decision": {
+    "status": "OWNER_ACCEPTED_TOOLING_ONLY_WITH_CONDITIONS",
+    "date": "2026-10-01",
+    "embeddedBytesPatched": false,
+    "scope": "Mutter storefront dependency tooling only; presence installed is accepted, loading or emission is not.",
+    "exceptionTo": "An unresolved embedded advisory risk may remain installed only under these explicit exposure controls.",
+    "rationale": "Preserve the official Node builder without a fork, hidden patch or an unrelated dependency upgrade.",
+    "allowed": [
+      "Exact listed tooling packages and bytes installed",
+      "Vite development and observed SPA compilation",
+      "Official Node builder build() for checkout and reconciliation with no prohibited module loaded"
+    ],
+    "prohibited": [
+      "vercel dev",
+      "startDevServer",
+      "Edge VM or Edge runtime execution",
+      "Loading the accepted Edge path during authorized compilation",
+      "Including accepted Edge bytes or packages in publishable artifacts"
+    ],
+    "notCovered": [
+      "Other projects or versions",
+      "npm Undici",
+      "Node native fetch",
+      "Unattested remote Node runtime or platform rebuild",
+      "Any future advisory automatically"
+    ],
+    "reviewTriggers": [
+      "Any identity, bytes, version or dependency-chain change",
+      "New consumer or Edge/dev-server use",
+      "Observed prohibited load or emission",
+      "Missing required inspection evidence",
+      "New evidence that materially changes risk"
+    ],
+    "reviewAction": "Suspend control validity and review the change; never auto-refresh permitted hashes or treat a new advisory as accepted."
+  },
+  "locks": [
+    {
+      "path": "package-lock.json",
+      "sha256": "9ab6cf65985335684c18fb30731250df6c373974b72217daa74c3f2c3157f994"
+    },
+    {
+      "path": "functions/package-lock.json",
+      "sha256": "d4d1062403e5a92958974295e6c44c44d17faf83724cc6ec6de91b2298c7170f"
+    }
+  ],
+  "packages": [
+    {
+      "name": "@edge-runtime/format",
+      "path": "node_modules/@edge-runtime/format",
+      "version": "2.2.1",
+      "resolved": "https://registry.npmjs.org/@edge-runtime/format/-/format-2.2.1.tgz",
+      "integrity": "sha512-JQTRVuiusQLNNLe2W9tnzBlV/GvSVcozLl4XZHk5swnRZ/v6jp8TqR8P7sqmJsQqblDZ3EztcWmLDbhRje/+8g==",
+      "packageSha256": "584997612b39781bdaea5f3a44a569ef65127460449defc0f7aebba024577e4f"
+    },
+    {
+      "name": "@edge-runtime/node-utils",
+      "path": "node_modules/@edge-runtime/node-utils",
+      "version": "2.3.0",
+      "resolved": "https://registry.npmjs.org/@edge-runtime/node-utils/-/node-utils-2.3.0.tgz",
+      "integrity": "sha512-uUtx8BFoO1hNxtHjp3eqVPC/mWImGb2exOfGjMLUoipuWgjej+f4o/VP4bUI8U40gu7Teogd5VTeZUkGvJSPOQ==",
+      "packageSha256": "32a1eee355cf33c4f6bb8499c2efe818fa71eca1c46655221eda2b6972aceeec"
+    },
+    {
+      "name": "@edge-runtime/ponyfill",
+      "path": "node_modules/@edge-runtime/ponyfill",
+      "version": "2.4.2",
+      "resolved": "https://registry.npmjs.org/@edge-runtime/ponyfill/-/ponyfill-2.4.2.tgz",
+      "integrity": "sha512-oN17GjFr69chu6sDLvXxdhg0Qe8EZviGSuqzR9qOiKh4MhFYGdBBcqRNzdmYeAdeRzOW2mM9yil4RftUQ7sUOA==",
+      "packageSha256": "d239711a2b2d754e5029cbb45ec75d8328cb7108a4668bf0e9acda639bf15058"
+    },
+    {
+      "name": "@edge-runtime/primitives",
+      "path": "node_modules/@edge-runtime/primitives",
+      "version": "4.1.0",
+      "resolved": "https://registry.npmjs.org/@edge-runtime/primitives/-/primitives-4.1.0.tgz",
+      "integrity": "sha512-Vw0lbJ2lvRUqc7/soqygUX216Xb8T3WBZ987oywz6aJqRxcwSVWwr9e+Nqo2m9bxobA9mdbWNNoRY6S9eko1EQ==",
+      "packageSha256": "5ce0af01a5ff3a45eb5e5fcd0e1748cc7b51bb867b1644ee616619be868fea13"
+    },
+    {
+      "name": "@edge-runtime/vm",
+      "path": "node_modules/@edge-runtime/vm",
+      "version": "3.2.0",
+      "resolved": "https://registry.npmjs.org/@edge-runtime/vm/-/vm-3.2.0.tgz",
+      "integrity": "sha512-0dEVyRLM/lG4gp1R/Ik5bfPl/1wX00xFwd5KcNH602tzBa09oF7pbTKETEhR1GjZ75K6OJnYFu8II2dyMhONMw==",
+      "packageSha256": "9ed10b304e50e13b81a1acd09f9836335e93ca98893b5aa96a2de19080ae145b"
+    },
+    {
+      "name": "@vercel/node",
+      "path": "node_modules/@vercel/node",
+      "version": "5.10.2",
+      "resolved": "https://registry.npmjs.org/@vercel/node/-/node-5.10.2.tgz",
+      "integrity": "sha512-YBXcoQVOh5O2ySXvzE+POhPEQEPMJJo4ctlMMdp5why/NIoa8m6gotv14j8Uo6D5qyZsnc+0+++JgUiV4mYB6w==",
+      "packageSha256": "3e52daed383c8f6e035a821b582f312cbaa8d03ffddec58013d91b5f439c1cb8"
+    },
+    {
+      "name": "edge-runtime",
+      "path": "node_modules/edge-runtime",
+      "version": "2.5.9",
+      "resolved": "https://registry.npmjs.org/edge-runtime/-/edge-runtime-2.5.9.tgz",
+      "integrity": "sha512-pk+k0oK0PVXdlT4oRp4lwh+unuKB7Ng4iZ2HB+EZ7QCEQizX360Rp/F4aRpgpRgdP2ufB35N+1KppHmYjqIGSg==",
+      "packageSha256": "2e1d8eab6aa8431068867033ac4dd89dfe3fe6902ecdcd88aa6c040b85412af8"
+    }
+  ],
+  "dependencyChain": [
+    {
+      "from": ".",
+      "kind": "devDependencies",
+      "to": "@vercel/node",
+      "range": "5.10.2",
+      "optionalPeer": false
+    },
+    {
+      "from": "node_modules/@edge-runtime/vm",
+      "kind": "dependencies",
+      "to": "@edge-runtime/primitives",
+      "range": "4.1.0",
+      "optionalPeer": false
+    },
+    {
+      "from": "node_modules/@vercel/node",
+      "kind": "dependencies",
+      "to": "@edge-runtime/node-utils",
+      "range": "2.3.0",
+      "optionalPeer": false
+    },
+    {
+      "from": "node_modules/@vercel/node",
+      "kind": "dependencies",
+      "to": "@edge-runtime/primitives",
+      "range": "4.1.0",
+      "optionalPeer": false
+    },
+    {
+      "from": "node_modules/@vercel/node",
+      "kind": "dependencies",
+      "to": "@edge-runtime/vm",
+      "range": "3.2.0",
+      "optionalPeer": false
+    },
+    {
+      "from": "node_modules/@vercel/node",
+      "kind": "dependencies",
+      "to": "edge-runtime",
+      "range": "2.5.9",
+      "optionalPeer": false
+    },
+    {
+      "from": "node_modules/edge-runtime",
+      "kind": "dependencies",
+      "to": "@edge-runtime/format",
+      "range": "2.2.1",
+      "optionalPeer": false
+    },
+    {
+      "from": "node_modules/edge-runtime",
+      "kind": "dependencies",
+      "to": "@edge-runtime/ponyfill",
+      "range": "2.4.2",
+      "optionalPeer": false
+    },
+    {
+      "from": "node_modules/edge-runtime",
+      "kind": "dependencies",
+      "to": "@edge-runtime/vm",
+      "range": "3.2.0",
+      "optionalPeer": false
+    },
+    {
+      "from": "node_modules/vitest",
+      "kind": "peerDependencies",
+      "to": "@edge-runtime/vm",
+      "range": "*",
+      "optionalPeer": true
+    }
+  ],
+  "files": [
+    {
+      "path": "node_modules/@edge-runtime/primitives/dist/fetch.js.text.js",
+      "bytes": 601884,
+      "sha256": "9b01ff5b2e9dd7a08c52d68a6143ae894fa4be65c59b0dd4ea13a55118647e39"
+    },
+    {
+      "path": "node_modules/@edge-runtime/primitives/dist/load.js",
+      "bytes": 8137,
+      "sha256": "6bf4c97f3057b09e3c8bea204e5d39a5099fc49506695389bffe3df7eeba12e5"
+    },
+    {
+      "path": "node_modules/@edge-runtime/vm/dist/edge-vm.js",
+      "bytes": 11844,
+      "sha256": "be1829f5c9ee7b4cc97718a717d706e1c6dfc5c999c76cc0bb26ec65f4a0640e"
+    },
+    {
+      "path": "node_modules/@vercel/node/dist/index.js",
+      "bytes": 2901699,
+      "sha256": "273c3ce584bfeca5765553ad2e711cf58559f81d868543360fabf074e9bad77c"
+    },
+    {
+      "path": "node_modules/@vercel/node/dist/dev-server.mjs",
+      "bytes": 44781,
+      "sha256": "7b6bc2957a7e75b5034681f3012e6f6abfe2c495b25a33b206e821578fecdc0f"
+    }
+  ],
+  "embeddedUndiciVersion": "5.23.0",
+  "advisorySnapshot": {
+    "observedAt": "2026-10-01T23:43:00Z",
+    "source": "GitHub Advisory Database; independent audit received with owner contract",
+    "evidenceSha256": "4149b1945de416c6b0c7d6fd8d26ce24488b7b403645ab04e42ee303525e82a1",
+    "diagnosisSha256": "7cc3db21168e2abe54ff16e319588ffc424b1cd0529465a420012bccf55573d2",
+    "note": "19 semver matches at this dated consultation, not a permanent exhaustive list and not an exploitability claim.",
+    "advisories": [
+      {
+        "ghsa": "GHSA-r53p-7pc4-xj5r",
+        "severity": "low",
+        "summary": "undici vulnerable to downstream response splitting via retry interceptor",
+        "cve": "CVE-2026-18540",
+        "published": "2026-09-29T18:22:07Z",
+        "ranges": [
+          "< 6.28.1",
+          ">= 7.0.0, < 7.29.1",
+          ">= 8.0.0, < 8.10.2"
+        ],
+        "patched": [
+          "6.28.1",
+          "7.29.1",
+          "8.10.2"
+        ],
+        "url": "https://github.com/advisories/GHSA-r53p-7pc4-xj5r",
+        "mechanism": "retry interceptor response splitting",
+        "preconditions": "Requires interceptors.retry(); this interceptor is absent in the inspected Undici 5.23.0 embed. Semver match alone does not establish exploitability.",
+        "embedMechanism": "absent"
+      },
+      {
+        "ghsa": "GHSA-m8rv-5g2x-5cg5",
+        "severity": "medium",
+        "summary": "undici vulnerable to CRLF Injection via blob-like body 'type' property",
+        "cve": "CVE-2026-15157",
+        "published": "2026-08-03T19:33:53Z",
+        "ranges": [
+          "< 6.28.0",
+          ">= 7.0.0, < 7.29.0",
+          ">= 8.0.0, < 8.9.0"
+        ],
+        "patched": [
+          "6.28.0",
+          "7.29.0",
+          "8.9.0"
+        ],
+        "url": "https://github.com/advisories/GHSA-m8rv-5g2x-5cg5",
+        "mechanism": "blob-like body type CRLF",
+        "preconditions": "Requires untrusted blob-like type passed to request/dispatch; those APIs are not the usual Web fetch surface exposed by EdgeVM.",
+        "embedMechanism": "dispatcher present; reachability conditional"
+      },
+      {
+        "ghsa": "GHSA-v3r7-h72x-cjcm",
+        "severity": "medium",
+        "summary": "undici vulnerable to cookie attribute injection via unsanitized domain and unparsed setCookie fields",
+        "cve": "CVE-2026-16729",
+        "published": "2026-08-03T19:30:52Z",
+        "ranges": [
+          "< 6.28.0",
+          ">= 7.0.0, < 7.29.0",
+          ">= 8.0.0, < 8.9.0"
+        ],
+        "patched": [
+          "6.28.0",
+          "7.29.0",
+          "8.9.0"
+        ],
+        "url": "https://github.com/advisories/GHSA-v3r7-h72x-cjcm",
+        "mechanism": "cookie attribute injection",
+        "preconditions": "Requires untrusted cookie domain or unparsed setCookie fields reaching the affected cookie helpers.",
+        "embedMechanism": "cookie-related code; reachability conditional"
+      },
+      {
+        "ghsa": "GHSA-8xcm-r25x-g524",
+        "severity": "medium",
+        "summary": "undici vulnerable to downstream response desynchronization via retry interceptor",
+        "cve": "CVE-2026-16728",
+        "published": "2026-08-03T19:24:33Z",
+        "ranges": [
+          "< 6.28.0",
+          ">= 7.0.0, < 7.29.0",
+          ">= 8.0.0, < 8.9.0"
+        ],
+        "patched": [
+          "6.28.0",
+          "7.29.0",
+          "8.9.0"
+        ],
+        "url": "https://github.com/advisories/GHSA-8xcm-r25x-g524",
+        "mechanism": "retry interceptor response desynchronization",
+        "preconditions": "Requires interceptors.retry(); this interceptor is absent in the inspected Undici 5.23.0 embed. Semver match alone does not establish exploitability.",
+        "embedMechanism": "absent"
+      },
+      {
+        "ghsa": "GHSA-g8m3-5g58-fq7m",
+        "severity": "low",
+        "summary": "undici vulnerable to Set-Cookie SameSite attribute downgrade via permissive substring matching",
+        "cve": "CVE-2026-11525",
+        "published": "2026-06-19T14:34:46Z",
+        "ranges": [
+          "< 6.27.0",
+          ">= 7.0.0, < 7.28.0",
+          ">= 8.0.0, < 8.5.0"
+        ],
+        "patched": [
+          "6.27.0",
+          "7.28.0",
+          "8.5.0"
+        ],
+        "url": "https://github.com/advisories/GHSA-g8m3-5g58-fq7m",
+        "mechanism": "SameSite downgrade",
+        "preconditions": "Requires affected parsing of untrusted Set-Cookie attributes.",
+        "embedMechanism": "cookie-related code; reachability conditional"
+      },
+      {
+        "ghsa": "GHSA-vxpw-j846-p89q",
+        "severity": "high",
+        "summary": "undici WebSocket client vulnerable to denial of service via fragment count bypass",
+        "cve": "CVE-2026-12151",
+        "published": "2026-06-19T14:22:01Z",
+        "ranges": [
+          "< 6.27.0",
+          ">= 7.0.0, < 7.28.0",
+          ">= 8.0.0, < 8.5.0"
+        ],
+        "patched": [
+          "6.27.0",
+          "7.28.0",
+          "8.5.0"
+        ],
+        "url": "https://github.com/advisories/GHSA-vxpw-j846-p89q",
+        "mechanism": "WebSocket fragment limit bypass",
+        "preconditions": "Requires EdgeVM to open WebSocket to a hostile peer; the WebSocket code is embedded, but not used by the inspected Node handlers.",
+        "embedMechanism": "present"
+      },
+      {
+        "ghsa": "GHSA-p88m-4jfj-68fv",
+        "severity": "medium",
+        "summary": "undici vulnerable to HTTP header injection via Set-Cookie percent-decoding",
+        "cve": "CVE-2026-9679",
+        "published": "2026-06-19T14:21:30Z",
+        "ranges": [
+          "< 6.27.0",
+          ">= 7.0.0, < 7.28.0",
+          ">= 8.0.0, < 8.5.0"
+        ],
+        "patched": [
+          "6.27.0",
+          "7.28.0",
+          "8.5.0"
+        ],
+        "url": "https://github.com/advisories/GHSA-p88m-4jfj-68fv",
+        "mechanism": "Set-Cookie percent-decoding header injection",
+        "preconditions": "Requires parsing attacker-controlled Set-Cookie content through the affected client helpers.",
+        "embedMechanism": "cookie-related code; reachability conditional"
+      },
+      {
+        "ghsa": "GHSA-35p6-xmwp-9g52",
+        "severity": "low",
+        "summary": "undici vulnerable to HTTP response queue poisoning via keep-alive socket reuse",
+        "cve": "CVE-2026-6733",
+        "published": "2026-06-19T14:19:13Z",
+        "ranges": [
+          "< 6.27.0",
+          ">= 7.0.0, < 7.28.0",
+          ">= 8.0.0, < 8.5.0"
+        ],
+        "patched": [
+          "6.27.0",
+          "7.28.0",
+          "8.5.0"
+        ],
+        "url": "https://github.com/advisories/GHSA-35p6-xmwp-9g52",
+        "mechanism": "keep-alive response queue poisoning",
+        "preconditions": "Requires client/pool keep-alive reuse against a malicious or compromised peer.",
+        "embedMechanism": "present"
+      },
+      {
+        "ghsa": "GHSA-vrm6-8vpv-qv8q",
+        "severity": "high",
+        "summary": "Undici has Unbounded Memory Consumption in WebSocket permessage-deflate Decompression",
+        "cve": "CVE-2026-1526",
+        "published": "2026-03-13T20:41:56Z",
+        "ranges": [
+          "< 6.24.0",
+          ">= 7.0.0, < 7.24.0"
+        ],
+        "patched": [
+          "6.24.0",
+          "7.24.0"
+        ],
+        "url": "https://github.com/advisories/GHSA-vrm6-8vpv-qv8q",
+        "mechanism": "WebSocket unbounded decompression",
+        "preconditions": "Requires EdgeVM WebSocket communication with a hostile peer using permessage-deflate.",
+        "embedMechanism": "present"
+      },
+      {
+        "ghsa": "GHSA-v9p9-hfj2-hcw8",
+        "severity": "high",
+        "summary": "Undici has Unhandled Exception in WebSocket Client Due to Invalid server_max_window_bits Validation",
+        "cve": "CVE-2026-2229",
+        "published": "2026-03-13T20:41:41Z",
+        "ranges": [
+          "< 6.24.0",
+          ">= 7.0.0, < 7.24.0"
+        ],
+        "patched": [
+          "6.24.0",
+          "7.24.0"
+        ],
+        "url": "https://github.com/advisories/GHSA-v9p9-hfj2-hcw8",
+        "mechanism": "WebSocket invalid server_max_window_bits",
+        "preconditions": "Requires EdgeVM WebSocket communication with a hostile peer negotiating permessage-deflate.",
+        "embedMechanism": "present"
+      },
+      {
+        "ghsa": "GHSA-4992-7rv2-5pvq",
+        "severity": "medium",
+        "summary": "Undici has CRLF Injection in undici via `upgrade` option",
+        "cve": "CVE-2026-1527",
+        "published": "2026-03-13T20:41:26Z",
+        "ranges": [
+          "< 6.24.0",
+          ">= 7.0.0, < 7.24.0"
+        ],
+        "patched": [
+          "6.24.0",
+          "7.24.0"
+        ],
+        "url": "https://github.com/advisories/GHSA-4992-7rv2-5pvq",
+        "mechanism": "upgrade option CRLF",
+        "preconditions": "Requires attacker-controlled upgrade in client.request(); EdgeVM exposes Web fetch/WebSocket rather than this API directly.",
+        "embedMechanism": "client code present; reachability conditional"
+      },
+      {
+        "ghsa": "GHSA-2mjp-6q6p-2qxm",
+        "severity": "medium",
+        "summary": "Undici has an HTTP Request/Response Smuggling issue",
+        "cve": "CVE-2026-1525",
+        "published": "2026-03-13T20:07:03Z",
+        "ranges": [
+          "< 6.24.0",
+          ">= 7.0.0, < 7.24.0"
+        ],
+        "patched": [
+          "6.24.0",
+          "7.24.0"
+        ],
+        "url": "https://github.com/advisories/GHSA-2mjp-6q6p-2qxm",
+        "mechanism": "duplicate Content-Length request smuggling",
+        "preconditions": "Requires controlled header arrays with differently cased duplicate Content-Length reaching Edge fetch/dispatcher.",
+        "embedMechanism": "present"
+      },
+      {
+        "ghsa": "GHSA-g9mf-h72j-4rw9",
+        "severity": "medium",
+        "summary": "Undici has an unbounded decompression chain in HTTP responses on Node.js Fetch API via Content-Encoding leads to resource exhaustion",
+        "cve": "CVE-2026-22036",
+        "published": "2026-01-14T21:06:08Z",
+        "ranges": [
+          ">= 7.0.0, < 7.18.2",
+          "< 6.23.0"
+        ],
+        "patched": [
+          "7.18.2",
+          "6.23.0"
+        ],
+        "url": "https://github.com/advisories/GHSA-g9mf-h72j-4rw9",
+        "mechanism": "unbounded Content-Encoding chain",
+        "preconditions": "Requires Edge fetch to process a malicious origin response with chained content encodings.",
+        "embedMechanism": "present"
+      },
+      {
+        "ghsa": "GHSA-cxrh-j4jr-qwg3",
+        "severity": "low",
+        "summary": "undici Denial of Service attack via bad certificate data",
+        "cve": "CVE-2025-47279",
+        "published": "2025-05-15T14:15:06Z",
+        "ranges": [
+          "< 5.29.0",
+          ">= 6.0.0, < 6.21.2",
+          ">= 7.0.0, < 7.5.0"
+        ],
+        "patched": [
+          "5.29.0",
+          "6.21.2",
+          "7.5.0"
+        ],
+        "url": "https://github.com/advisories/GHSA-cxrh-j4jr-qwg3",
+        "mechanism": "TLS certificate memory denial of service",
+        "preconditions": "Requires repeated client requests to an attacker-controlled origin with invalid certificate data.",
+        "embedMechanism": "present"
+      },
+      {
+        "ghsa": "GHSA-c76h-2ccp-4975",
+        "severity": "medium",
+        "summary": "Use of Insufficiently Random Values in undici",
+        "cve": "CVE-2025-22150",
+        "published": "2025-01-21T21:10:47Z",
+        "ranges": [
+          ">= 4.5.0, < 5.28.5",
+          ">= 6.0.0, < 6.21.1",
+          ">= 7.0.0, < 7.2.3"
+        ],
+        "patched": [
+          "5.28.5",
+          "6.21.1",
+          "7.2.3"
+        ],
+        "url": "https://github.com/advisories/GHSA-c76h-2ccp-4975",
+        "mechanism": "predictable multipart boundary",
+        "preconditions": "Requires Edge fetch sending FormData with a boundary derived from Math.random().",
+        "embedMechanism": "present"
+      },
+      {
+        "ghsa": "GHSA-9qxr-qj54-h672",
+        "severity": "low",
+        "summary": "Undici's fetch with integrity option is too lax when algorithm is specified but hash value is in incorrect",
+        "cve": "CVE-2024-30261",
+        "published": "2024-04-04T14:20:54Z",
+        "ranges": [
+          "< 5.28.4",
+          ">= 6.0.0, < 6.11.1"
+        ],
+        "patched": [
+          "5.28.4",
+          "6.11.1"
+        ],
+        "url": "https://github.com/advisories/GHSA-9qxr-qj54-h672",
+        "mechanism": "lax fetch integrity",
+        "preconditions": "Requires fetch integrity validation with an algorithm and an invalid hash value.",
+        "embedMechanism": "fetch surface present; precondition required"
+      },
+      {
+        "ghsa": "GHSA-m4v8-wqvr-p9f7",
+        "severity": "low",
+        "summary": "Undici's Proxy-Authorization header not cleared on cross-origin redirect for dispatch, request, stream, pipeline",
+        "cve": "CVE-2024-30260",
+        "published": "2024-04-04T14:20:39Z",
+        "ranges": [
+          "< 5.28.4",
+          ">= 6.0.0, < 6.11.1"
+        ],
+        "patched": [
+          "5.28.4",
+          "6.11.1"
+        ],
+        "url": "https://github.com/advisories/GHSA-m4v8-wqvr-p9f7",
+        "mechanism": "Proxy-Authorization redirect retention",
+        "preconditions": "Requires dispatch/request/stream/pipeline forwarding a Proxy-Authorization header across origins.",
+        "embedMechanism": "dispatcher code present; precondition required"
+      },
+      {
+        "ghsa": "GHSA-3787-6prv-h9w3",
+        "severity": "low",
+        "summary": "Undici proxy-authorization header not cleared on cross-origin redirect in fetch",
+        "cve": "CVE-2024-24758",
+        "published": "2024-02-16T16:02:52Z",
+        "ranges": [
+          "<= 5.28.2",
+          ">= 6.0.0, <= 6.6.0"
+        ],
+        "patched": [
+          "5.28.3",
+          "6.6.1"
+        ],
+        "url": "https://github.com/advisories/GHSA-3787-6prv-h9w3",
+        "mechanism": "fetch Proxy-Authorization redirect retention",
+        "preconditions": "Requires fetch following a cross-origin redirect while carrying Proxy-Authorization.",
+        "embedMechanism": "fetch surface present; precondition required"
+      },
+      {
+        "ghsa": "GHSA-wqq4-5wpv-mx2g",
+        "severity": "low",
+        "summary": "Undici's cookie header not cleared on cross-origin redirect in fetch",
+        "cve": "CVE-2023-45143",
+        "published": "2023-10-16T14:05:37Z",
+        "ranges": [
+          "< 5.26.2"
+        ],
+        "patched": [
+          "5.26.2"
+        ],
+        "url": "https://github.com/advisories/GHSA-wqq4-5wpv-mx2g",
+        "mechanism": "fetch Cookie redirect retention",
+        "preconditions": "Requires fetch following a cross-origin redirect while carrying a Cookie header.",
+        "embedMechanism": "fetch surface present; precondition required"
+      }
+    ]
+  }
+}

@@ -18,6 +18,8 @@ jobs:
     env:
       WEB_INVENTORY_ADMIN_SHA: 770e23d0dacf0d8d30779b67aab2e8b470afc901
       MUTTER_ADMIN_API_SOURCE: ${{ github.workspace }}/paired-admin-api
+      EDGE_TOOLING_EVIDENCE_DIR: ${{ runner.temp }}/mutter-edge-controls
+      CHECKOUT_PACKAGING_EVIDENCE_DIR: ${{ runner.temp }}/mutter-edge-controls/emitted-functions
 
     steps:
       - name: Checkout
@@ -63,6 +65,16 @@ jobs:
 
       - name: Audit all functions dependencies
         run: npm run audit:all --prefix functions
+
+      - name: Verify installed Edge exception and operational boundaries
+        run: npm run check:edge-tooling
+
+      - name: Edge control positive and negative regressions
+        env:
+          EDGE_CONTROL_TEST_EVIDENCE_DIR: ${{ runner.temp }}/mutter-edge-controls/guard-observations
+        run: |
+          mkdir -p "$EDGE_TOOLING_EVIDENCE_DIR"
+          npm run test:edge-tooling
 
       - name: Build
         run: npm run build
@@ -119,3 +131,12 @@ jobs:
           JAVA_TOOL_OPTIONS: -Duser.language=en -Duser.country=US
           CATALOG_WEBKIT: '1'
         run: npm run test:catalog:browser
+
+      - name: Preserve Edge control execution and emitted evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: edge-tooling-controls
+          path: ${{ env.EDGE_TOOLING_EVIDENCE_DIR }}
+          if-no-files-found: error
+          retention-days: 14

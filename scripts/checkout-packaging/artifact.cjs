@@ -3,8 +3,6 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
 const { createHash } = require('node:crypto');
-const { build } = require('@vercel/node');
-const { glob, download } = require('@vercel/build-utils');
 
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const inside = (root, candidate) => candidate === root || candidate.startsWith(`${root}${path.sep}`);
@@ -40,6 +38,9 @@ async function createWorkspace(source) {
 }
 
 async function emitFunction(source, workspace, definition, context) {
+  // Load the official builder only inside the observed build process.
+  const { build } = require('@vercel/node');
+  const { download } = require('@vercel/build-utils');
   const { files, packagePath, packageBytes, sourceHashes, builderConfig } = context;
   const directory = path.join(workspace.emitted, definition.key);
   await fs.mkdir(directory, { mode: 0o700 });
@@ -97,6 +98,7 @@ async function emitFunction(source, workspace, definition, context) {
 }
 
 async function buildArtifact(source, workspace) {
+  const { glob } = require('@vercel/build-utils');
   const definitions = [
     {
       key: 'checkout', entrypoint: 'api/create-mp-preference.ts', handler: 'api/create-mp-preference.js',

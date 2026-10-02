@@ -34,7 +34,7 @@ payment adapters remain unchanged.
 
 | Consumer chain | Pin | Reason and exercised boundary |
 | --- | --- | --- |
-| `@vercel/node → undici` | 6.28.1 | Corrected npm HTTP implementation; buffer and stream dev-server paths |
+| `@vercel/node → undici` | 6.28.1 | Corrected npm HTTP implementation; buffer/stream paths exercised in historical P-DEP-1 evidence. Dev-server use is now prohibited by the Edge exception controls below. |
 | `@vercel/node → path-to-regexp` | 6.3.0 | Same-major corrected route parser |
 | `@vercel/node` and `vite → tsx` | 4.22.0 | Corrected esbuild chain; actual tsx runner |
 | `@vercel/static-config → ajv` | 8.20.0 | Corrected URI chain; actual static configuration parser |
@@ -57,11 +57,13 @@ The thresholds do not accept lesser findings. Keep the full reports and assess
 embedded dependencies independently of npm's package inventory.
 
 `@edge-runtime/primitives@4.1.0`, retained inside the builder tooling, embeds
-Undici 5.23.0. npm overrides do not rewrite that bundle. The inspected newer
-upstream primitives also embed an affected Undici version. This residual is
-open, with no owner waiver; it is absent from the two emitted Node handlers and
-the emitted browser chunks examined for this preparation. Passing CI does not
-declare P-DEP-1 closed.
+Undici 5.23.0. npm overrides do not rewrite that bundle. **These bytes remain
+unpatched.** On 2026-10-01 the owner accepted their installed presence only,
+subject to the [controlled tooling exception](edge-tooling-exception.md).
+Its single identity manifest, required build/load/emission gates and review
+triggers apply to this exact tooling graph. Prior dated `OPEN_NO_WAIVER`
+reports remain historical evidence and are not rewritten by this decision.
+Passing CI does not declare P-DEP-1 closed or authorize publication.
 
 Native Node fetch is separate from npm Undici. Local final runtime tests and the
 frontend CI pin use Node 22.23.3 with built-in Undici 6.28.1. Before any later publication, verify the

@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "node scripts/verify-edge-tooling.cjs build",
+    "check:edge-tooling": "node scripts/verify-edge-tooling.cjs inventory",
+    "test:edge-tooling": "node --test scripts/edge-tooling/tests/*.check.cjs",
     "lint": "eslint .",
     "preview": "vite preview",
     "backend": "ts-node backend/server.cjs.ts",
