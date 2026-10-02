@@ -42,7 +42,14 @@ function isolatedCiEnvironment(input, publicConfig) {
   // The workflow envelope may carry platform credentials needed by other steps.
   // They never enter the builder. Do not extend this list to business credentials.
   const removed = CI_INFRASTRUCTURE_TOKENS.filter(name => Object.hasOwn(input, name));
-  const rest = Object.fromEntries(Object.entries(input).filter(([name]) => !CI_INFRASTRUCTURE_TOKENS.includes(name)));
+  if (Object.hasOwn(input, 'AZURE_EXTENSION_DIR')) {
+    // Official ubuntu24/20260927.320 install-azure-devops-cli.sh sets this
+    // literal tooling path. It is not an Azure credential or a build input.
+    assert(input.GITHUB_ACTIONS === 'true' && input.RUNNER_OS === 'Linux'
+      && input.AZURE_EXTENSION_DIR === '/opt/az/azcliextensions', 'Unreviewed CI Azure tooling directory');
+    removed.push('AZURE_EXTENSION_DIR');
+  }
+  const rest = Object.fromEntries(Object.entries(input).filter(([name]) => !removed.includes(name)));
   // All remaining private names are checked BEFORE the process allowlist drops
   // unrelated runner metadata. A business credential must fail, not disappear.
   return { env: buildEnvironment(rest, publicConfig), removedInfrastructureNames: removed };

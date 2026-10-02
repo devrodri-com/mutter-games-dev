@@ -16,7 +16,7 @@ test('builder receives only allowed process keys and the explicit public configu
   assert.equal(env.NODE_ENV, 'production');
 });
 for (const key of ['MP_ACCESS_TOKEN', 'FIREBASE_PRIVATE_KEY', 'FIREBASE_PROJECT_ID', 'GOOGLE_APPLICATION_CREDENTIALS',
-  'RELEASE_ATTESTATION_SECRET', 'CRON_SECRET', 'WEB_ADMISSION_HMAC_SECRET', 'GITHUB_TOKEN', 'AWS_SECRET_ACCESS_KEY', 'DATABASE_PASSWORD']) {
+  'RELEASE_ATTESTATION_SECRET', 'CRON_SECRET', 'WEB_ADMISSION_HMAC_SECRET', 'GITHUB_TOKEN', 'AWS_SECRET_ACCESS_KEY', 'DATABASE_PASSWORD', 'AZURE_EXTENSION_DIR']) {
   test(`build rejects ${key}, even an empty value`, () => {
     assert.throws(() => buildEnvironment({ [key]: '' }, publicConfig), /Forbidden build environment variable/);
     assert.throws(() => buildEnvironment({ [key]: 'SYNTHETIC_TEST_ONLY' }, publicConfig), /Forbidden build environment variable/);
@@ -36,6 +36,30 @@ test('CI infrastructure tokens are removed before the strict builder process', (
   assert(!JSON.stringify(boundary).includes('synthetic-infrastructure-token'));
   assert(!JSON.stringify(boundary).includes('synthetic-oidc-token'));
   assert.doesNotThrow(() => buildEnvironment(boundary.env, publicConfig));
+});
+test('the exact GitHub Linux Azure CLI tooling directory is removed before build', () => {
+  const input = { PATH: '/bin', GITHUB_ACTIONS: 'true', RUNNER_OS: 'Linux', AZURE_EXTENSION_DIR: '/opt/az/azcliextensions' };
+  assert.throws(() => buildEnvironment(input, publicConfig), /Forbidden build environment variable: AZURE_EXTENSION_DIR/);
+  const boundary = isolatedCiEnvironment(input, publicConfig);
+  assert.deepEqual(boundary.removedInfrastructureNames, ['AZURE_EXTENSION_DIR']);
+  assert.equal(boundary.env.AZURE_EXTENSION_DIR, undefined);
+  assert(!JSON.stringify(boundary.env).includes('/opt/az/azcliextensions'));
+  assert.doesNotThrow(() => buildEnvironment(boundary.env, publicConfig));
+});
+test('Azure tooling path removal rejects other values and non-GitHub Linux envelopes', () => {
+  const input = { GITHUB_ACTIONS: 'true', RUNNER_OS: 'Linux', AZURE_EXTENSION_DIR: '/opt/az/azcliextensions' };
+  for (const patch of [{ AZURE_EXTENSION_DIR: '' }, { AZURE_EXTENSION_DIR: '/tmp/unreviewed' },
+    { AZURE_EXTENSION_DIR: '/opt/az/azcliextensions/../private' }, { AZURE_EXTENSION_DIR: 'synthetic-private-value' },
+    { GITHUB_ACTIONS: undefined }, { GITHUB_ACTIONS: 'false' }, { RUNNER_OS: undefined }, { RUNNER_OS: 'macOS' }])
+    assert.throws(() => isolatedCiEnvironment({ ...input, ...patch }, publicConfig));
+});
+test('reviewed Azure tooling metadata cannot hide Azure or business credentials', () => {
+  for (const name of ['AZURE_CLIENT_SECRET', 'AZURE_CLIENT_ID', 'AZURE_TENANT_ID', 'AZURE_ACCESS_TOKEN',
+    'AZURE_CLIENT_CERTIFICATE_PATH', 'MP_ACCESS_TOKEN', 'FIREBASE_PRIVATE_KEY', 'RELEASE_ATTESTATION_SECRET']) {
+    for (const value of ['', 'synthetic-private-value']) assert.throws(() => isolatedCiEnvironment({
+      GITHUB_ACTIONS: 'true', RUNNER_OS: 'Linux', AZURE_EXTENSION_DIR: '/opt/az/azcliextensions', [name]: value,
+    }, publicConfig), error => error.message.includes(`Forbidden build environment variable: ${name}`));
+  }
 });
 test('CI cannot hide business or additional private credentials behind infrastructure tokens', () => {
   for (const name of ['MP_ACCESS_TOKEN', 'FIREBASE_PRIVATE_KEY', 'RELEASE_ATTESTATION_SECRET', 'GITHUB_TOKEN', 'ACTIONS_UNREVIEWED_TOKEN'])
