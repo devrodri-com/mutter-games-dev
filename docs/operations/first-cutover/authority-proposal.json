@@ -1,0 +1,83 @@
+{
+  "schema": 1,
+  "status": "PROPOSAL_ONLY_NOT_APPLIED",
+  "project": "mutter-games",
+  "projectNumber": "26777776532",
+  "candidate": {
+    "email": "mutter-stock-runtime-v1@mutter-games.iam.gserviceaccount.com",
+    "status": "PLANNED_NOT_CREATED"
+  },
+  "deny": {
+    "displayName": "Mutter first cutover legacy containment",
+    "rules": [
+      {
+        "denyRule": {
+          "deniedPrincipals": [
+            "principal://iam.googleapis.com/projects/-/serviceAccounts/firebase-adminsdk-fbsvc@mutter-games.iam.gserviceaccount.com",
+            "principal://iam.googleapis.com/projects/-/serviceAccounts/mutter-games@appspot.gserviceaccount.com"
+          ],
+          "deniedPermissions": [
+            "datastore.googleapis.com/entities.create",
+            "datastore.googleapis.com/entities.update",
+            "datastore.googleapis.com/entities.delete",
+            "iam.googleapis.com/serviceAccounts.getAccessToken",
+            "iam.googleapis.com/serviceAccounts.getOpenIdToken",
+            "iam.googleapis.com/serviceAccounts.signBlob",
+            "iam.googleapis.com/serviceAccounts.signJwt",
+            "iam.googleapis.com/serviceAccounts.implicitDelegation",
+            "iam.googleapis.com/serviceAccounts.actAs",
+            "iam.googleapis.com/serviceAccountKeys.create",
+            "iam.googleapis.com/serviceAccounts.setIamPolicy",
+            "iam.googleapis.com/serviceAccounts.create",
+            "cloudresourcemanager.googleapis.com/projects.setIamPolicy",
+            "iam.googleapis.com/roles.create",
+            "iam.googleapis.com/roles.update",
+            "iam.googleapis.com/roles.undelete"
+          ]
+        }
+      }
+    ]
+  },
+  "attachmentPoint": "cloudresourcemanager.googleapis.com/projects/26777776532",
+  "policyId": "mutter-first-cutover-legacy",
+  "customRoles": [
+    {
+      "name": "projects/mutter-games/roles/mutterLegacyReadOnly",
+      "title": "Mutter legacy read only",
+      "stage": "GA",
+      "includedPermissions": [
+        "datastore.entities.get",
+        "datastore.entities.list",
+        "datastore.databases.get",
+        "firebaseauth.users.get"
+      ]
+    },
+    {
+      "name": "projects/mutter-games/roles/mutterStockRuntime",
+      "title": "Mutter stock runtime",
+      "stage": "GA",
+      "includedPermissions": [
+        "datastore.entities.get",
+        "datastore.entities.list",
+        "datastore.databases.get",
+        "firebaseauth.users.get",
+        "datastore.entities.create",
+        "datastore.entities.update",
+        "datastore.entities.delete",
+        "firebaseauth.users.create",
+        "firebaseauth.users.update",
+        "firebaseauth.users.delete"
+      ]
+    }
+  ],
+  "requiredOrder": [
+    "deny-delegation-and-data-write",
+    "remove-legacy-elevated-allows",
+    "verify-no-inherited-or-resource-escape",
+    "create-candidate-without-keys-or-authority",
+    "restrict-candidate-resource-policy",
+    "grant-exact-runtime-role",
+    "configure-audited-deployments"
+  ],
+  "note": "Removing Editor/SDK/Auth-write/TokenCreator is required, not optional: it closes service launch and permissions outside deny support. Preserve only the exact reader role. No Google service agent is a deny principal."
+}

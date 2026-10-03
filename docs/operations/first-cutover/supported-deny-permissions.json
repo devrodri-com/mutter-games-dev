@@ -1,0 +1,22 @@
+{
+  "source": "https://docs.cloud.google.com/iam/docs/deny-permissions-support",
+  "verifiedAt": "2026-10-03T04:06:06.659929+00:00",
+  "permissions": [
+    "datastore.googleapis.com/entities.create",
+    "datastore.googleapis.com/entities.update",
+    "datastore.googleapis.com/entities.delete",
+    "iam.googleapis.com/serviceAccounts.getAccessToken",
+    "iam.googleapis.com/serviceAccounts.getOpenIdToken",
+    "iam.googleapis.com/serviceAccounts.signBlob",
+    "iam.googleapis.com/serviceAccounts.signJwt",
+    "iam.googleapis.com/serviceAccounts.implicitDelegation",
+    "iam.googleapis.com/serviceAccounts.actAs",
+    "iam.googleapis.com/serviceAccountKeys.create",
+    "iam.googleapis.com/serviceAccounts.setIamPolicy",
+    "iam.googleapis.com/serviceAccounts.create",
+    "cloudresourcemanager.googleapis.com/projects.setIamPolicy",
+    "iam.googleapis.com/roles.create",
+    "iam.googleapis.com/roles.update",
+    "iam.googleapis.com/roles.undelete"
+  ]
+}

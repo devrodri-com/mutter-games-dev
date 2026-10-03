@@ -1,0 +1,39 @@
+import { readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { demand } from './common.mjs';
+import { containmentProposal, legacyAllowProposal } from './authority.mjs';
+import { loadBackup, privateDirectory } from './backup.mjs';
+import { compare, proposeRepair } from './recovery.mjs';
+import { localFirestore, restoreLocal } from './local-firestore.mjs';
+import { evaluateFirstCutover, verifyReceiptFiles } from './policy.mjs';
+
+const [command, first, second, third] = process.argv.slice(2);
+try {
+  const json = async path => JSON.parse(await readFile(path, 'utf8'));
+  let result;
+  if (command === 'propose-authority') {
+    const supported = await json(first); result = containmentProposal(supported.permissions ?? supported);
+  }
+  else if (command === 'propose-allow') result = legacyAllowProposal(await json(first));
+  else if (command === 'evaluate') {
+    const input = await json(first);
+    result = { ...evaluateFirstCutover(input), integrity: await verifyReceiptFiles(input, first) };
+  } else if (command === 'verify-backup') {
+    const { manifest } = await loadBackup(first);
+    result = { status: 'PRIVATE_BACKUP_INTEGRITY_VERIFIED', documents: manifest.documents, atomic: false,
+      stableAcrossPasses: manifest.stableAcrossPasses, productionWrites: 0 };
+  } else if (command === 'restore-local') {
+    const { documents } = await loadBackup(first);
+    result = await restoreLocal(localFirestore(second), documents);
+  } else if (command === 'compare' || command === 'propose-repair') {
+    const base = await loadBackup(first); const current = await loadBackup(second);
+    const directory = await privateDirectory(second);
+    const output = command === 'compare' ? compare(base.documents, current.documents)
+      : proposeRepair(base.documents, current.documents, await json(third));
+    await writeFile(join(directory, `${command}.json`), JSON.stringify(output, null, 2), { mode: 0o600, flag: 'wx' });
+    result = { status: 'PRIVATE_PROPOSAL_WRITTEN', productionWrites: 0 };
+  } else throw new Error('Commands: propose-authority <supported-permissions.json>; propose-allow <IAM-v3.json>; evaluate <receipts.json>; verify-backup <private-dir>; restore-local <private-dir> <loopback-origin>; compare <backup> <readback>; propose-repair <backup> <readback> <incident.json>. No apply command exists.');
+  demand(result, 'missing result'); console.log(JSON.stringify(result, null, 2));
+} catch (error) {
+  console.error(error instanceof Error ? error.message : 'BLOCKED: invalid input'); process.exitCode = 1;
+}

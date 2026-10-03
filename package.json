@@ -30,7 +30,9 @@
     "test:prebuilt": "node --test scripts/release-prebuilt/tests/*.check.cjs",
     "test:prebuilt-output": "node scripts/release-prebuilt/test-output.cjs",
     "compare:prebuilt": "node scripts/release-prebuilt/compare.cjs",
-    "test:release-cutover": "node --test scripts/release-cutover/*.check.mjs"
+    "test:release-cutover": "node --test scripts/release-cutover/*.check.mjs",
+    "test:first-cutover": "node --test scripts/first-cutover/policy.check.mjs scripts/first-cutover/backup-recovery.check.mjs",
+    "test:first-cutover:emulator": "node --test scripts/first-cutover/emulator.check.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

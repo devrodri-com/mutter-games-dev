@@ -177,3 +177,42 @@ jobs:
           path: ${{ runner.temp }}/edge-tooling-controls.tar.gz
           if-no-files-found: error
           retention-days: 14
+
+  first-cutover-controls:
+    name: First cutover controls
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact event target
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Verify controls target
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+          EVENT_REF: ${{ github.ref }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          printf 'event=%s\nref=%s\nhead=%s\ntree=%s\n' "$EVENT_NAME" "$EVENT_REF" "$(git rev-parse HEAD)" "$(git rev-parse 'HEAD^{tree}')"
+      - name: Setup exact Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.3'
+          cache: npm
+      - name: Install exact declared dependencies
+        run: npm ci
+      - name: First cutover positive and negative policy controls
+        run: npm run test:first-cutover
+      - name: Preserve strict cutover controls
+        run: npm run test:release-cutover
+      - name: Setup Java for local persistence
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: First cutover selective recovery with real emulator
+        env:
+          JAVA_TOOL_OPTIONS: -Duser.language=en -Duser.country=US
+        run: node node_modules/firebase-tools/lib/bin/firebase.js emulators:exec --only firestore --project demo-mutter-first-cutover --config firebase.catalog-emulators.json "npm run test:first-cutover:emulator"
