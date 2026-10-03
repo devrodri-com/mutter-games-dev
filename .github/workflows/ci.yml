@@ -16,7 +16,7 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     env:
-      WEB_INVENTORY_ADMIN_SHA: 74fd10955ac8163221b1478bafa791d1969ace48
+      WEB_INVENTORY_ADMIN_SHA: a7394af13eb7724e479d52f98d5ca3825282f20b
       MUTTER_ADMIN_API_SOURCE: ${{ github.workspace }}/paired-admin-api
       EDGE_TOOLING_EVIDENCE_DIR: ${{ github.workspace }}/../mutter-edge-controls-${{ github.run_id }}-${{ github.run_attempt }}
       CHECKOUT_PACKAGING_EVIDENCE_DIR: ${{ github.workspace }}/../mutter-edge-controls-${{ github.run_id }}-${{ github.run_attempt }}/emitted-functions
@@ -55,18 +55,6 @@ jobs:
       - name: Install functions dependencies
         run: npm ci --prefix functions
 
-      - name: Audit production dependencies
-        run: npm run audit:prod
-
-      - name: Audit all dependencies
-        run: npm run audit:all
-
-      - name: Audit functions production dependencies
-        run: npm run audit:prod --prefix functions
-
-      - name: Audit all functions dependencies
-        run: npm run audit:all --prefix functions
-
       - name: Verify installed Edge exception and operational boundaries
         run: npm run check:edge-tooling
 
@@ -78,6 +66,7 @@ jobs:
           npm run test:edge-tooling
 
       - name: Build
+        id: spa-build
         run: npm run build
 
       - name: Checkout API typecheck
@@ -107,13 +96,16 @@ jobs:
       - name: Compare every deployable byte
         run: node scripts/release-prebuilt/ci.cjs compare "$RUNNER_TEMP/mutter-prebuilt" "$RUNNER_TEMP/mutter-prebuilt-repeat"
 
-      - name: Archive complete prebuilt without deployment
-        run: tar -czf "$RUNNER_TEMP/mutter-prebuilt.tar.gz" -C "$RUNNER_TEMP/mutter-prebuilt" .
+      - name: Archive diagnostic prebuilt without deployment
+        run: |
+          set -euo pipefail
+          tar -czf "$RUNNER_TEMP/mutter-prebuilt.tar.gz" -C "$RUNNER_TEMP/mutter-prebuilt" .
+          echo 'Diagnostic prebuilt: NO ELEGIBLE PARA RELEASE. Global security and independent review remain required.' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Preserve complete prebuilt and provenance
         uses: actions/upload-artifact@v4
         with:
-          name: mutter-stock-prebuilt
+          name: mutter-stock-prebuilt-DIAGNOSTIC-NO-RELEASE
           path: ${{ runner.temp }}/mutter-prebuilt.tar.gz
           if-no-files-found: error
           retention-days: 14
@@ -141,6 +133,9 @@ jobs:
         working-directory: paired-admin-api
         run: npm ci --ignore-scripts --no-audit --no-fund
 
+      - name: Busboy regressions across the exact pair and functions
+        run: node paired-admin-api/scripts/test-busboy.cjs . functions paired-admin-api
+
       - name: Setup Java for declared Firebase emulator tooling
         uses: actions/setup-java@v4
         with:
@@ -165,18 +160,66 @@ jobs:
           CATALOG_WEBKIT: '1'
         run: npm run test:catalog:browser
 
-      - name: Archive Edge control execution and emitted evidence
+      - name: Archive available Edge evidence; fail if a successful build lost it
+        id: edge-archive
         if: always()
-        run: tar -czf "$RUNNER_TEMP/edge-tooling-controls.tar.gz" -C "$EDGE_TOOLING_EVIDENCE_DIR" .
+        env:
+          SPA_BUILD_OUTCOME: ${{ steps.spa-build.outcome }}
+        run: |
+          set -euo pipefail
+          if test "$SPA_BUILD_OUTCOME" = success; then
+            test -s "$EDGE_TOOLING_EVIDENCE_DIR/spa/result.json"
+            test -s "$EDGE_TOOLING_EVIDENCE_DIR/spa/spa-inventory.json"
+          fi
+          if test -d "$EDGE_TOOLING_EVIDENCE_DIR"; then
+            tar -czf "$RUNNER_TEMP/edge-tooling-controls.tar.gz" -C "$EDGE_TOOLING_EVIDENCE_DIR" .
+            echo 'available=true' >> "$GITHUB_OUTPUT"
+          elif test "$SPA_BUILD_OUTCOME" = success; then
+            echo 'Required evidence missing after a successful SPA build' >&2
+            exit 1
+          else
+            echo 'No Edge artifact was produced before the failed/skipped build; preserve the actual job logs.' >> "$GITHUB_STEP_SUMMARY"
+          fi
 
-      - name: Preserve Edge control execution and emitted evidence
-        if: always()
+      - name: Preserve actual Edge control execution and emitted evidence
+        if: always() && steps.edge-archive.outputs.available == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: edge-tooling-controls
           path: ${{ runner.temp }}/edge-tooling-controls.tar.gz
           if-no-files-found: error
           retention-days: 14
+
+  security:
+    name: Security (${{ matrix.directory }}, ${{ matrix.scope }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        directory: ['.', 'functions']
+        scope: [prod, all]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Verify security target
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          git show -s --format='head=%H tree=%T'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.3'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            functions/package-lock.json
+      - run: npm ci --prefix ${{ matrix.directory }}
+      - name: Native required dependency audit
+        run: npm run audit:${{ matrix.scope }} --prefix ${{ matrix.directory }}
 
   first-cutover-controls:
     name: First cutover controls
