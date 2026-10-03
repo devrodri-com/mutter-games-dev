@@ -1,3 +1,4 @@
+require('./braces-remediation/control.cjs').inspect(require('node:path').resolve(__dirname, '..'));
 // Build and load the exact two emitted functions without linking or deploying.
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');

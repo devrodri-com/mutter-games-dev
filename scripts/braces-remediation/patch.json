@@ -1,0 +1,271 @@
+{
+  "schema": 1,
+  "changes": [
+    {
+      "path": "lib/compile.js",
+      "edits": [
+        {
+          "startLine": 4,
+          "remove": [],
+          "insert": [
+            "const { MAX_DEPTH } = require('./constants');\n"
+          ]
+        },
+        {
+          "startLine": 6,
+          "remove": [
+            "  const walk = (node, parent = {}) => {\n"
+          ],
+          "insert": [
+            "  const maxDepth = Number.isFinite(options.maxDepth) ? Math.min(MAX_DEPTH, options.maxDepth) : MAX_DEPTH;\n",
+            "\n",
+            "  const walk = (node, parent = {}, depth = 0) => {\n",
+            "    if (node.nodes && depth > maxDepth) {\n",
+            "      throw new RangeError(`AST depth (${depth}), exceeds max depth (${maxDepth})`);\n",
+            "    }\n"
+          ]
+        },
+        {
+          "startLine": 49,
+          "remove": [
+            "        output += walk(child, node);\n"
+          ],
+          "insert": [
+            "        output += walk(child, node, child.nodes ? depth + 1 : depth);\n"
+          ]
+        },
+        {
+          "startLine": 56,
+          "remove": [
+            "  return walk(ast);\n"
+          ],
+          "insert": [
+            "  return walk(ast, {}, ast.type === 'root' ? 0 : 1);\n"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "lib/constants.js",
+      "edits": [
+        {
+          "startLine": 3,
+          "remove": [],
+          "insert": [
+            "  MAX_DEPTH: 100,\n"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "lib/expand.js",
+      "edits": [
+        {
+          "startLine": 5,
+          "remove": [],
+          "insert": [
+            "const { MAX_DEPTH } = require('./constants');\n"
+          ]
+        },
+        {
+          "startLine": 32,
+          "remove": [],
+          "insert": [
+            "const queueOwner = node => {\n",
+            "  if (node.type === 'brace' || node.type === 'root' || !node.parent) return node;\n",
+            "\n",
+            "  const seen = new Set();\n",
+            "  while (node.type !== 'brace' && node.type !== 'root' && node.parent) {\n",
+            "    if (seen.has(node)) {\n",
+            "      throw new RangeError('AST parent chain contains a cycle');\n",
+            "    }\n",
+            "    seen.add(node);\n",
+            "    node = node.parent;\n",
+            "  }\n",
+            "  return node;\n",
+            "};\n",
+            "\n"
+          ]
+        },
+        {
+          "startLine": 34,
+          "remove": [],
+          "insert": [
+            "  const maxDepth = Number.isFinite(options.maxDepth) ? Math.min(MAX_DEPTH, options.maxDepth) : MAX_DEPTH;\n"
+          ]
+        },
+        {
+          "startLine": 35,
+          "remove": [
+            "  const walk = (node, parent = {}) => {\n"
+          ],
+          "insert": [
+            "  const walk = (node, parent = {}, depth = 0) => {\n",
+            "    if (node.nodes && depth > maxDepth) {\n",
+            "      throw new RangeError(`AST depth (${depth}), exceeds max depth (${maxDepth})`);\n",
+            "    }\n"
+          ]
+        },
+        {
+          "startLine": 38,
+          "remove": [
+            "    let p = parent;\n",
+            "    let q = parent.queue;\n",
+            "\n",
+            "    while (p.type !== 'brace' && p.type !== 'root' && p.parent) {\n",
+            "      p = p.parent;\n",
+            "      q = p.queue;\n",
+            "    }\n"
+          ],
+          "insert": [
+            "    const q = queueOwner(parent).queue;\n"
+          ]
+        },
+        {
+          "startLine": 74,
+          "remove": [
+            "    let queue = node.queue;\n",
+            "    let block = node;\n",
+            "\n",
+            "    while (block.type !== 'brace' && block.type !== 'root' && block.parent) {\n",
+            "      block = block.parent;\n",
+            "      queue = block.queue;\n",
+            "    }\n"
+          ],
+          "insert": [
+            "    const queue = queueOwner(node).queue;\n"
+          ]
+        },
+        {
+          "startLine": 102,
+          "remove": [
+            "        walk(child, node);\n"
+          ],
+          "insert": [
+            "        walk(child, node, child.nodes ? depth + 1 : depth);\n"
+          ]
+        },
+        {
+          "startLine": 109,
+          "remove": [
+            "  return utils.flatten(walk(ast));\n"
+          ],
+          "insert": [
+            "  return utils.flatten(walk(ast, {}, ast.type === 'root' ? 0 : 1));\n"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "lib/parse.js",
+      "edits": [
+        {
+          "startLine": 9,
+          "remove": [],
+          "insert": [
+            "  MAX_DEPTH,\n"
+          ]
+        },
+        {
+          "startLine": 37,
+          "remove": [],
+          "insert": [
+            "  const maxDepth = Number.isFinite(opts.maxDepth) ? Math.min(MAX_DEPTH, opts.maxDepth) : MAX_DEPTH;\n"
+          ]
+        },
+        {
+          "startLine": 49,
+          "remove": [],
+          "insert": [
+            "  let nesting = 0;\n"
+          ]
+        },
+        {
+          "startLine": 145,
+          "remove": [],
+          "insert": [
+            "      if (nesting + 1 > maxDepth) {\n",
+            "        throw new SyntaxError(`Input depth (${nesting + 1}), exceeds max depth (${maxDepth})`);\n",
+            "      }\n",
+            "      nesting++;\n"
+          ]
+        },
+        {
+          "startLine": 158,
+          "remove": [],
+          "insert": [
+            "      nesting--;\n"
+          ]
+        },
+        {
+          "startLine": 197,
+          "remove": [],
+          "insert": [
+            "      if (nesting + 1 > maxDepth) {\n",
+            "        throw new SyntaxError(`Input depth (${nesting + 1}), exceeds max depth (${maxDepth})`);\n",
+            "      }\n",
+            "      nesting++;\n"
+          ]
+        },
+        {
+          "startLine": 233,
+          "remove": [],
+          "insert": [
+            "      nesting--;\n"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "lib/stringify.js",
+      "edits": [
+        {
+          "startLine": 3,
+          "remove": [],
+          "insert": [
+            "const { MAX_DEPTH } = require('./constants');\n"
+          ]
+        },
+        {
+          "startLine": 5,
+          "remove": [
+            "  const stringify = (node, parent = {}) => {\n"
+          ],
+          "insert": [
+            "  const maxDepth = Number.isFinite(options.maxDepth) ? Math.min(MAX_DEPTH, options.maxDepth) : MAX_DEPTH;\n",
+            "\n",
+            "  const stringify = (node, parent = {}, depth = 0) => {\n",
+            "    if (node.nodes && depth > maxDepth) {\n",
+            "      throw new RangeError(`AST depth (${depth}), exceeds max depth (${maxDepth})`);\n",
+            "    }\n"
+          ]
+        },
+        {
+          "startLine": 23,
+          "remove": [
+            "        output += stringify(child);\n"
+          ],
+          "insert": [
+            "        output += stringify(child, undefined, child.nodes ? depth + 1 : depth);\n"
+          ]
+        },
+        {
+          "startLine": 29,
+          "remove": [
+            "  return stringify(ast);\n"
+          ],
+          "insert": [
+            "  return stringify(ast, {}, ast.type === 'root' ? 0 : 1);\n"
+          ]
+        },
+        {
+          "startLine": 31,
+          "remove": [
+            "\n"
+          ],
+          "insert": []
+        }
+      ]
+    }
+  ]
+}

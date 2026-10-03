@@ -16,7 +16,7 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     env:
-      WEB_INVENTORY_ADMIN_SHA: a7394af13eb7724e479d52f98d5ca3825282f20b
+      WEB_INVENTORY_ADMIN_SHA: 4c2eaa23b34f3cb5b823dbee03738ca4a2d21fb2
       MUTTER_ADMIN_API_SOURCE: ${{ github.workspace }}/paired-admin-api
       EDGE_TOOLING_EVIDENCE_DIR: ${{ github.workspace }}/../mutter-edge-controls-${{ github.run_id }}-${{ github.run_attempt }}
       CHECKOUT_PACKAGING_EVIDENCE_DIR: ${{ github.workspace }}/../mutter-edge-controls-${{ github.run_id }}-${{ github.run_attempt }}/emitted-functions
@@ -50,10 +50,13 @@ jobs:
             functions/package-lock.json
 
       - name: Install root dependencies
-        run: npm ci
+        run: npm run install:controlled
 
       - name: Install functions dependencies
-        run: npm ci --prefix functions
+        run: node scripts/braces-remediation/install.cjs functions
+
+      - name: Source repair and actual consumer regressions
+        run: npm run test:braces
 
       - name: Verify installed Edge exception and operational boundaries
         run: npm run check:edge-tooling
@@ -131,7 +134,7 @@ jobs:
 
       - name: Install paired Admin dependencies
         working-directory: paired-admin-api
-        run: npm ci --ignore-scripts --no-audit --no-fund
+        run: npm run install:controlled
 
       - name: Busboy regressions across the exact pair and functions
         run: node paired-admin-api/scripts/test-busboy.cjs . functions paired-admin-api
@@ -217,9 +220,17 @@ jobs:
           cache-dependency-path: |
             package-lock.json
             functions/package-lock.json
-      - run: npm ci --prefix ${{ matrix.directory }}
+      - run: node scripts/braces-remediation/install.cjs "${{ matrix.directory }}"
       - name: Native required dependency audit
-        run: npm run audit:${{ matrix.scope }} --prefix ${{ matrix.directory }}
+        run: node scripts/braces-remediation/audit.cjs "${{ matrix.scope }}" "$RUNNER_TEMP/native-audit" "${{ matrix.directory }}"
+
+      - name: Preserve original native audit and exit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-audit-${{ matrix.directory == '.' && 'root' || 'functions' }}-${{ matrix.scope }}
+          path: ${{ runner.temp }}/native-audit
+          if-no-files-found: error
 
   first-cutover-controls:
     name: First cutover controls
@@ -245,7 +256,7 @@ jobs:
           node-version: '22.23.3'
           cache: npm
       - name: Install exact declared dependencies
-        run: npm ci
+        run: npm run install:controlled
       - name: First cutover positive and negative policy controls
         run: npm run test:first-cutover
       - name: Preserve strict cutover controls
@@ -259,3 +270,41 @@ jobs:
         env:
           JAVA_TOOL_OPTIONS: -Duser.language=en -Duser.country=US
         run: node node_modules/firebase-tools/lib/bin/firebase.js emulators:exec --only firestore --project demo-mutter-first-cutover --config firebase.catalog-emulators.json "npm run test:first-cutover:emulator"
+
+  source-remediation:
+    name: Source remediation (does not waive native audit)
+    needs: [build, security, first-cutover-controls]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.23.3'
+          cache: npm
+      - name: Require actual paired compatibility gates
+        env:
+          BUILD_RESULT: ${{ needs.build.result }}
+          CUTOVER_RESULT: ${{ needs.first-cutover-controls.result }}
+        run: |
+          set -euo pipefail
+          test "$BUILD_RESULT" = success
+          test "$CUTOVER_RESULT" = success
+      - run: npm run install:controlled
+      - run: node scripts/braces-remediation/install.cjs functions
+      - run: npm run test:braces
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: native-audit-*
+          path: audit-input
+      - name: Assess exact source against all four original audit graphs
+        run: |
+          set -euo pipefail
+          node scripts/braces-remediation/evaluate.cjs . audit-input/native-audit-root-prod prod
+          node scripts/braces-remediation/evaluate.cjs . audit-input/native-audit-root-all all
+          node scripts/braces-remediation/evaluate.cjs functions audit-input/native-audit-functions-prod prod
+          node scripts/braces-remediation/evaluate.cjs functions audit-input/native-audit-functions-all all
+          echo 'INDEPENDENT_REMEDIATION_AUDIT=PENDING; RELEASE_ELIGIBLE=NO' >> "$GITHUB_STEP_SUMMARY"

@@ -1,3 +1,4 @@
+require('./braces-remediation/control.cjs').inspect(require('node:path').resolve(__dirname, '..'));
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { verifyInstalled } = require('./edge-tooling/inventory.cjs');
