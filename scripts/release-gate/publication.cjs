@@ -1,6 +1,9 @@
 'use strict';
 const { pathToFileURL } = require('node:url');
 const { assert, fs, path, sha, read } = require('./common.cjs');
+class PublicationBlocked extends Error {
+  constructor(cause) { super(cause.message, { cause }); this.name = 'PublicationBlocked'; }
+}
 function reviewEvidence(review, report, technical) {
   assert.equal(technical.RELEASE_TECHNICAL_GATE_STATUS, 'PASS', 'Technical gate missing');
   assert.equal(review?.status, 'PASS_EXACT_TARGET', 'Independent wiring review pending');
@@ -35,4 +38,4 @@ async function publicationCheck(config, technical) {
     documentAuthorshipAndAuthorityRequireTrustedOperatorHandoff: true,
     PRODUCTION_APPLICATION_AUTHORIZED_BY_THIS_TOOL: false, remoteEnforcementAttestedByThisTool: false };
 }
-module.exports = { reviewEvidence, publicationCheck };
+module.exports = { reviewEvidence, publicationCheck, PublicationBlocked };

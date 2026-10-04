@@ -7,6 +7,8 @@ const { assert, fs, path, sha, read, write, identity, policy, components, truste
 const { pages, validateArtifact, artifact } = require('./github.cjs');
 const { validateRun, validateCheckout, validateJobs, validatePair } = require('./results.cjs');
 const { reviewEvidence, publicationCheck } = require('./publication.cjs');
+const { PublicationBlocked } = require('./publication.cjs');
+const { failureResult } = require('./cli.cjs');
 const root = path.resolve(__dirname, '../..'), role = fs.existsSync(path.join(root, 'functions/package-lock.json')) ? 'frontend' : 'admin';
 const expected = read(path.join(__dirname, 'jobs.json'));
 const target = identity(root), attempt = 3, runId = 123;
@@ -124,6 +126,14 @@ test('run and PR checkout identity cannot substitute a merge for branch head', (
 test('manual PASS or historical source approval cannot authorize publication', async () => {
   assert.throws(() => reviewEvidence({ status: 'PASS_EXACT_TARGET' }, Buffer.from('PASS'), { RELEASE_TECHNICAL_GATE_STATUS: 'PASS' }));
   await assert.rejects(publicationCheck({}, { RELEASE_TECHNICAL_GATE_STATUS: 'PASS' }), /Independent review/);
+});
+test('operational rejection preserves technical PASS while technical failure stays failed', () => {
+  const rejected = failureResult(new PublicationBlocked(new Error('Independent review pending')));
+  assert.equal(rejected.RELEASE_TECHNICAL_GATE_STATUS, 'PASS');
+  assert.equal(rejected.PUBLICATION_PREREQUISITES, 'NOT_VERIFIED');
+  assert.equal(rejected.PRODUCTION_APPLICATION_AUTHORIZED, false);
+  const broken = new Error('Wrong artifact'); broken.code = 'ERR_ASSERTION';
+  assert.equal(failureResult(broken).RELEASE_TECHNICAL_GATE_STATUS, 'FAIL');
 });
 test('pair requires exact Admin head and tree, literal pin and all six audits', () => {
   const admin = { target, results: [{}, {}] }, store = { paired: target, results: [{}, {}, {}, {}] };
