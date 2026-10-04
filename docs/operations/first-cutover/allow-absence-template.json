@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "method": "ALLOW_ABSENCE_V1",
+  "status": "NOT_VERIFIED_NOT_APPLIED",
+  "project": "mutter-games",
+  "projectNumber": "26777776532",
+  "database": "projects/mutter-games/databases/(default)",
+  "applyAllowed": false,
+  "projectSource": null,
+  "roles": [],
+  "accountPages": [],
+  "allow": {
+    "before": null,
+    "freshBase": null,
+    "proposal": null,
+    "application": null,
+    "readback": null
+  },
+  "resourcePolicies": [],
+  "databasePolicy": null,
+  "negativeProofs": [],
+  "reviewSources": [],
+  "credentials": {
+    "status": "PENDING",
+    "unresolved": null
+  },
+  "review": {
+    "status": "PENDING"
+  },
+  "candidate": {
+    "noGrantProject": null,
+    "restrictedPolicy": null,
+    "grantedProject": null
+  }
+}

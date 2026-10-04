@@ -48,7 +48,7 @@ for (const [name, mutate] of Object.entries(negatives)) test(`first cutover reje
   const e = structuredClone(syntheticEvidence()); mutate(e); assert.throws(() => evaluateFirstCutover(e), /BLOCKED/);
 });
 test('CLI evidence requires primary receipts, not synthetic fixture flags', async () => {
-  await assert.rejects(verifyReceiptFiles(syntheticEvidence(), import.meta.filename), /primary receipts/);
+  await assert.rejects(verifyReceiptFiles(syntheticEvidence(), import.meta.filename), /synthetic cutover/);
 });
 test('strict verifier source and business targets stay outside new policy', async () => {
   const source = await readFile(new URL('../release-cutover/cli.mjs', import.meta.url), 'utf8');

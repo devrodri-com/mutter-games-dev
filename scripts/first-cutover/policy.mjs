@@ -2,6 +2,7 @@ import { readFile, realpath } from 'node:fs/promises';
 import { dirname, resolve, relative, isAbsolute } from 'node:path';
 import { PROJECT, DATABASE, PLANNED_ACCOUNT, LEGACY_ACCOUNTS, DECISION, DECISION_CONTRACT_SHA256, demand, digest, isHash, canonical } from './common.mjs';
 import { PROJECTS } from '../release-cutover/policy.mjs';
+import { verifyContainment } from './containment.mjs';
 import { effectiveFunctions } from '../release-cutover/drain.mjs';
 
 export const REQUIRED_BARRIERS = Object.freeze([...Object.values(PROJECTS), 'firestore-direct', 'legacy-authority', 'delegation', 'administrative-launch']);
@@ -42,6 +43,7 @@ export function evaluateFirstCutover(input) {
   demand(typeof input.revision === 'string' && /^[a-zA-Z0-9_-]{16,100}$/.test(input.revision), 'revision');
   demand(input.delegation?.containedBeforeCandidateGrant === true && input.delegation.resourceAndInheritedBindingsReviewed === true
     && input.delegation.legacyElevatedAllowsRemoved === true && input.delegation.noUnresolvedEscape === true, 'delegation not contained');
+  const containment = verifyContainment(input.containment, input);
   demand(input.admissions?.observedOldAdmissionsAfterClose === 0 && input.admissions.unresolvedMixedAuthOperations === 0
     && input.admissions.unexplainedCandidateErrors === 0, 'unaccepted admission/Auth/candidate problem');
   const ops = input.operations;
@@ -63,15 +65,16 @@ export function evaluateFirstCutover(input) {
     && input.comparison.checkedAtMs <= input.nowMs, 'unresolved commercial discrepancy');
   demand(input.recovery?.selectiveOnly === true && input.recovery.noBlindRecreate === true && input.recovery.versionAndDependenciesChecked === true
     && input.recovery.rollbackPreservesReservations === true, 'unsafe repair/rollback');
-  return { status: 'FIRST_CUTOVER_EVIDENCE_CONSISTENT', strictDrainProof: input.strictDrainProof,
+  return { status: 'FIRST_CUTOVER_EVIDENCE_CONSISTENT', containment, strictDrainProof: input.strictDrainProof,
     residual: 'OWNER_ACCEPTED_FIRST_CUTOVER_ONLY_WITH_CONDITIONS', waitUntilMs: waitUntil,
     globalTerminationProven: false, remoteEnforcementAttestedByThisTool: false, applicationAuthorizedByThisTool: false };
 }
 
 export async function verifyReceiptFiles(input, file) {
+  demand(input.synthetic !== true, 'synthetic cutover cannot be published');
   const root = await realpath(dirname(file));
   demand(Array.isArray(input.receipts) && input.receipts.length > 0, 'primary receipts missing');
-  const required = ['decision', 'audit', 'artifact', 'identity', 'window', 'barriers', 'delegation', 'admissions', 'operations', 'functionSnapshots', 'margin', 'backup', 'comparison', 'recovery'];
+  const required = ['decision', 'audit', 'artifact', 'identity', 'window', 'containment', 'barriers', 'delegation', 'admissions', 'operations', 'functionSnapshots', 'margin', 'backup', 'comparison', 'recovery'];
   demand(input.receipts.length === required.length && new Set(input.receipts.map(r => r.section)).size === required.length, 'receipt sections incomplete');
   for (const key of required) {
     const r = input.receipts.find(r => r.section === key);

@@ -31,7 +31,7 @@
     "test:prebuilt-output": "node scripts/release-prebuilt/test-output.cjs",
     "compare:prebuilt": "node scripts/release-prebuilt/compare.cjs",
     "test:release-cutover": "node --test scripts/release-cutover/*.check.mjs",
-    "test:first-cutover": "node --test scripts/first-cutover/policy.check.mjs scripts/first-cutover/backup-recovery.check.mjs",
+    "test:first-cutover": "node --test scripts/first-cutover/policy.check.mjs scripts/first-cutover/backup-recovery.check.mjs scripts/first-cutover/containment.check.mjs",
     "test:first-cutover:emulator": "node --test scripts/first-cutover/emulator.check.mjs",
     "install:controlled": "node scripts/braces-remediation/install.cjs",
     "check:braces": "node scripts/braces-remediation/control.cjs verify",

@@ -1,7 +1,8 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { demand } from './common.mjs';
-import { containmentProposal, legacyAllowProposal } from './authority.mjs';
+import { demand, canonical } from './common.mjs';
+import { containmentProposal, legacyAllowProposal, verifyAllowBase, verifyAllowAfter } from './authority.mjs';
+import { readPolicy, PROJECT_RESOURCE } from './iam-evidence.mjs';
 import { loadBackup, privateDirectory } from './backup.mjs';
 import { compare, proposeRepair } from './recovery.mjs';
 import { localFirestore, restoreLocal } from './local-firestore.mjs';
@@ -13,7 +14,19 @@ try {
   if (command === 'propose-authority') {
     const supported = await json(first); result = containmentProposal(supported.permissions ?? supported);
   }
-  else if (command === 'propose-allow') result = legacyAllowProposal(await json(first));
+  else if (['propose-allow', 'verify-allow-base', 'verify-allow-after'].includes(command)) {
+    const bundle = await json(first);
+    const before = readPolicy(bundle.before, PROJECT_RESOURCE, bundle.context);
+    const options = { requestedPolicyVersion: 3, responseComplete: true };
+    if (command === 'propose-allow') result = { proposal: legacyAllowProposal(before, options), sourceReceipt: bundle.before };
+    else {
+      const fresh = readPolicy(bundle.fresh, PROJECT_RESOURCE, bundle.context);
+      const proposal = legacyAllowProposal(before, options);
+      demand(canonical(bundle.proposal) === canonical(proposal), 'proposal differs from source');
+      const verified = command === 'verify-allow-base' ? verifyAllowBase(proposal, fresh, options) : verifyAllowAfter(proposal, before, fresh, options);
+      result = { status: 'LOCAL_POLICY_CONSISTENCY_ONLY', verified, productionWrites: 0, providerAuthenticityRequiresIndependentReview: true };
+    }
+  }
   else if (command === 'evaluate') {
     demand(second && third, 'evaluate now requires <receipts.json> <publication-config.json> <new-evidence-dir>');
     const config = await json(second);
@@ -34,7 +47,7 @@ try {
       : proposeRepair(base.documents, current.documents, await json(third));
     await writeFile(join(directory, `${command}.json`), JSON.stringify(output, null, 2), { mode: 0o600, flag: 'wx' });
     result = { status: 'PRIVATE_PROPOSAL_WRITTEN', productionWrites: 0 };
-  } else throw new Error('Commands: propose-authority <supported-permissions.json>; propose-allow <IAM-v3.json>; evaluate <receipts.json> <publication-config.json> <new-evidence-dir>; verify-backup <private-dir>; restore-local <private-dir> <loopback-origin>; compare <backup> <readback>; propose-repair <backup> <readback> <incident.json>. No apply command exists.');
+  } else throw new Error('Commands: propose-authority <supported-permissions.json>; propose-allow|verify-allow-base|verify-allow-after <bound-policy-sources.json>; evaluate <receipts.json> <publication-config.json> <new-evidence-dir>; verify-backup <private-dir>; restore-local <private-dir> <loopback-origin>; compare <backup> <readback>; propose-repair <backup> <readback> <incident.json>. No apply command exists.');
   demand(result, 'missing result'); console.log(JSON.stringify(result, null, 2));
 } catch (error) {
   console.error(error instanceof Error ? error.message : 'BLOCKED: invalid input'); process.exitCode = 1;

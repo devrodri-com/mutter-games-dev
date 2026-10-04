@@ -152,3 +152,10 @@ su sustitución condicionada de la prueba global antigua; no se reabre el residu
 Los gates de runtime, identidades, barreras, operaciones frescas, captura final,
 índice y cron siguen siendo operativos. Ningún comando de este gate despliega,
 otorga permisos o convierte consistencia documental en enforcement remoto.
+
+La frontera de cuentas exige ahora el método explícito y los recibos de
+[ALLOW_ABSENCE_V1 o PROJECT_DENY](./first-cutover/ALLOW_ABSENCE_V1.md). El JSON de
+la nueva auditoría debe identificar esta implementación y su artifact. El PASS de
+diseño anterior no se reutiliza. Sin políticas reales, revisión de credenciales y
+pruebas de ventana, contención y PRE_CUTOVER_READY permanecen NOT_VERIFIED/NO;
+el CI técnico puede ser PASS separadamente. No se aplica nada desde este runbook.

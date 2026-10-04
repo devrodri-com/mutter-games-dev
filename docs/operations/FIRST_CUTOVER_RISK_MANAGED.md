@@ -35,7 +35,7 @@ Desde el checkout exacto Tienda, Node del lock/toolchain auditado:
 npm run test:first-cutover
 node node_modules/firebase-tools/lib/bin/firebase.js emulators:exec --only firestore --project demo-mutter-first-cutover --config firebase.catalog-emulators.json "npm run test:first-cutover:emulator"
 node scripts/first-cutover/cli.mjs propose-authority docs/operations/first-cutover/supported-deny-permissions.json
-node scripts/first-cutover/cli.mjs propose-allow iam-project-v3.json
+node scripts/first-cutover/cli.mjs propose-allow /absolute/bound-policy-sources.json
 node scripts/first-cutover/cli.mjs evaluate /absolute/first-cutover-evidence.json /absolute/publication-config.json /absolute/new-publication-evidence
 node scripts/first-cutover/cli.mjs verify-backup /Users/lolo/PrivateBackups/Mutter/CAPTURA_PRIVADA
 node scripts/first-cutover/cli.mjs compare /Users/lolo/PrivateBackups/Mutter/RESPALDO /Users/lolo/PrivateBackups/Mutter/READBACK
@@ -100,33 +100,33 @@ en la tabla consultada; volver a comprobar disponibilidad antes de crear. No se
 creó, no tiene permisos ni claves. Reservar su uso al par auditado y rollback
 compatible; no compartirla con herramientas o deployments históricos.
 
-1. Cerrar entradas WAF con los generadores existentes para los cuatro proyectos,
-   preservando reglas anteriores/hosts históricos. Cubrir GET ImageKit signature,
-   reconciliación y flujos mixtos Auth→Firestore. Confirmar Rules directas y guarda
-   `operations/webStockCutover` cerradas en una ventana futura autorizada. No pausar
-   durante la preparación. No hacer bypass global por header/IP.
-2. Instalar y releer la deny policy propuesta, limitada a las dos cuentas antiguas.
-   El punto de adjunción es `cloudresourcemanager.googleapis.com/projects/26777776532`.
-   La API IAM v2 usa el attachment point URL-encoded, kind `denypolicies`, policy ID
-   `mutter-first-cutover-legacy`. Guardar name/uid/etag/createTime/updateTime y todos
-   los permisos/principals del readback; esperar la operación API real. Rechazar
-   diferencia. La propuesta no incluye un permiso no soportado ni deny universal
-   a agentes Google. Habilitar APIs faltantes NO está autorizado aquí.
-3. Retirar los allow elevados de las cuentas antiguas con el delta versionado:
-   Editor, SDK Admin, Firebase Auth Admin y TokenCreator. Conservar solamente el
-   rol custom `mutterLegacyReadOnly`. `propose-allow` exige version3/etag, preserva
-   otros miembros y auditConfigs, y detiene roles/condiciones no revisados. Releer
-   y comparar etag/base antes de aplicar; nunca reemplazar un IAM completo desde
-   una captura vieja. Examinar allow heredados y resource policies aparte. Esta
-   retirada es necesaria para cerrar lanzamiento de procesos privilegiados y
-   permisos no cubiertos por la deny enumerada; la deny sola NO basta.
-4. Verificar que las cuentas antiguas no pueden modificar políticas/roles, emitir
-   tokens o claves ni lanzar/actualizar servicios con otra identidad. La revisión
-   incluye recursos y herencia, no sólo un binding visible. Sólo después crear la
-   identidad candidata sin autoridad, restringir su resource policy, y otorgar el
-   rol custom `mutterStockRuntime`. Mantener explícitamente operadores humanos y
-   agentes Google necesarios; no exceptuar a las cuentas antiguas. Una vía de
-   escape pendiente bloquea el otorgamiento y la aplicación.
+Seleccionar explícitamente `PROJECT_DENY` o [ALLOW_ABSENCE_V1](./first-cutover/ALLOW_ABSENCE_V1.md).
+La propuesta deny permanece disponible y su readback debe coincidir exactamente.
+En Mutter sin organización se prepara ALLOW_ABSENCE_V1; no es fallback por error,
+no equivale universalmente a una deny y no se aplica en preparación.
+
+1. Políticas completas, lista agotada de cuentas, parent y rutas pertinentes;
+   roles mínimos exactos comprobados. La solicitud siempre pide versión 3;
+   respuesta wire 1 legítima sólo se admite con condiciones/procedencia acreditadas.
+2. Preflight resuelto y ventana nueva confirmada. Cerrar entradas WAF de los cuatro
+   proyectos, Rules y control, firma y flujos mixtos Auth→Firestore. Preservar
+   protecciones y hosts históricos, sin bypass global ni pausa durante preparación.
+3. PROJECT_DENY: aplicar/releer propuesta exacta antes de retirar allows. En ambos
+   métodos: base/etag fresco, `verifyAllowBase`, delta quirúrgico, respuesta y GET
+   posterior, `verifyAllowAfter`. No usar el verificador de antes para el after.
+4. Probar cada identidad antigua, controlar autenticación y resultado positivo,
+   revisar membresías/recursos, lanzamiento de procesos, recuperación de autoridad
+   y credenciales anteriores. No dar por contenido por tiempo o setIamPolicy exitoso.
+5. Sólo después, prueba no-grant, candidata sin autoridad/clave, política directa
+   vacía y grant runtime mínimo. La cronología queda ligada a revisión/recibos;
+   no se exige ausencia de grant durante toda la reapertura. La provisión requiere
+   autorización productiva futura y los canales privados ya definidos.
+
+El [contrato de evidencia](./first-cutover/ALLOW_ABSENCE_V1.md) fija ambos caminos,
+el tratamiento antes/after, la política aplicable a Firestore, los límites de los
+probes y las credenciales. `allow-absence-template.json` queda NOT_VERIFIED con
+campos pendientes reales, no etags o pruebas inventadas. Un booleano de enforcement
+ya no cierra `legacy-authority` ni selecciona un método.
 
 Permisos mínimos propuestos derivados de consumidores: lectura/listado de entidades
 y `datastore.databases.get` para transacciones; create/update/delete para inventario,
@@ -165,7 +165,7 @@ sondas en la preparación.
   petición. No confundir ambas respuestas ni ejecutarla sin revisión específica.
   No existe aquí una sonda create garantizada sin escritura: no usar exists:false
   sobre un producto como canario. Para create exigir evaluación efectiva nativa
-  y readback de la misma deny; documentar que eso no es un Commit create real.
+  y readback/revisión del método de contención seleccionado; documentar que eso no es un Commit create real.
   Si el canal no permite acreditar la barrera requerida, STOP; no falsificar un
   recibo `enforcementEvidence=true` por un ensayo local.
 
