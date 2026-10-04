@@ -134,3 +134,21 @@ Invocar la señal dedicada de **ambos** handlers en el candidato según la matri
 8. Detener ante drift, runtime/identidad no acreditados, writer/cota desconocidos, smokes con escritura, logs incompletos, índice no READY o recibo Cron insano. Preservar barreras, reservas y datos. Rollback sólo a pareja compatible y repitiendo host/cron/WAF/drenaje; nunca al checkout/Admin anterior que ignore reservas vivas.
 
 Esta secuencia es un procedimiento preparado. Runtime remoto, cierres, configuración, Cron, índice, smokes sobre Production y observación permanecen sin ejecutar en el target de readiness. La revisión independiente pertenece a otra sesión superior.
+
+## 10. Gate técnico pareado y consumo obligatorio
+
+Ejecutar `node scripts/release-gate/cli.cjs verify-pair /absolute/pair-config.json /absolute/new-evidence`
+según [su contrato de entrada](../../scripts/release-gate/README.md), desde el source
+limpio y exacto. Conserva los audits nativos y el estado global del CI; una
+remediación de fuente auditada sólo explica el aviso exacto fijado en su política.
+El resultado debe ligar los seis audits, la pareja literal, pasos completos,
+digest oficial y bytes del nuevo prebuilt. No usar el artifact diagnóstico histórico.
+
+Antes de aplicar, ejecutar `node scripts/release-gate/cli.cjs publication-check /absolute/publication-config.json /absolute/new-application-evidence`.
+Ese comando revalida la evidencia externa y exige auditoría independiente del
+delta exacto, autorización de corte y la política/recibos del primer corte.
+[El procedimiento del primer corte](./FIRST_CUTOVER_RISK_MANAGED.md) conserva
+su sustitución condicionada de la prueba global antigua; no se reabre el residual.
+Los gates de runtime, identidades, barreras, operaciones frescas, captura final,
+índice y cron siguen siendo operativos. Ningún comando de este gate despliega,
+otorga permisos o convierte consistencia documental en enforcement remoto.

@@ -1,0 +1,122 @@
+{
+  "Build": {
+    "steps": [
+      "Checkout",
+      "Verify event checkout identity",
+      "Setup Node",
+      "Install root dependencies",
+      "Install functions dependencies",
+      "Source repair and actual consumer regressions",
+      "Verify installed Edge exception and operational boundaries",
+      "Edge control positive and negative regressions",
+      "Build",
+      "Checkout API typecheck",
+      "Stock reconciliation API typecheck",
+      "Prebuilt control regressions",
+      "Cutover control regressions",
+      "Build complete isolated prebuilt from exact clean source",
+      "Verify complete prebuilt",
+      "Prebuilt negative output regressions",
+      "Independently rebuild exact prebuilt",
+      "Compare every deployable byte",
+      "Archive diagnostic prebuilt without deployment",
+      "Preserve complete prebuilt and provenance",
+      "Checkout exact paired Admin inventory target",
+      "Verify paired Admin identity",
+      "Install paired Admin dependencies",
+      "Busboy regressions across the exact pair and functions",
+      "Setup Java for declared Firebase emulator tooling",
+      "Catalog regressions and existing suites in isolation",
+      "Verify checkout and stock reconciliation function packaging",
+      "Prepare declared Playwright browsers",
+      "Catalog desktop and mobile browser regressions",
+      "Archive available Edge evidence; fail if a successful build lost it",
+      "Preserve actual Edge control execution and emitted evidence",
+      "Release gate positive and negative regressions",
+      "Record actual build source and pair",
+      "Preserve build binding"
+    ]
+  },
+  "First cutover controls": {
+    "steps": [
+      "Checkout exact event target",
+      "Verify controls target",
+      "Setup exact Node",
+      "Install exact declared dependencies",
+      "First cutover positive and negative policy controls",
+      "Preserve strict cutover controls",
+      "Setup Java for local persistence",
+      "First cutover selective recovery with real emulator"
+    ]
+  },
+  "Source remediation (does not waive native audit)": {
+    "steps": [
+      "source-remediation prerequisite 1",
+      "source-remediation prerequisite 2",
+      "Require actual paired compatibility gates",
+      "source-remediation prerequisite 4",
+      "source-remediation prerequisite 5",
+      "source-remediation prerequisite 6",
+      "source-remediation prerequisite 7",
+      "Assess exact source against all four original audit graphs",
+      "Evaluate current security disposition",
+      "Preserve security disposition binding"
+    ]
+  },
+  "Security (., prod)": {
+    "steps": [
+      "security prerequisite 1",
+      "Verify security target",
+      "security prerequisite 3",
+      "security prerequisite 4",
+      "Native required dependency audit",
+      "Preserve original native audit and exit"
+    ],
+    "audit": {
+      "directory": "root",
+      "scope": "prod"
+    }
+  },
+  "Security (., all)": {
+    "steps": [
+      "security prerequisite 1",
+      "Verify security target",
+      "security prerequisite 3",
+      "security prerequisite 4",
+      "Native required dependency audit",
+      "Preserve original native audit and exit"
+    ],
+    "audit": {
+      "directory": "root",
+      "scope": "all"
+    }
+  },
+  "Security (functions, prod)": {
+    "steps": [
+      "security prerequisite 1",
+      "Verify security target",
+      "security prerequisite 3",
+      "security prerequisite 4",
+      "Native required dependency audit",
+      "Preserve original native audit and exit"
+    ],
+    "audit": {
+      "directory": "functions",
+      "scope": "prod"
+    }
+  },
+  "Security (functions, all)": {
+    "steps": [
+      "security prerequisite 1",
+      "Verify security target",
+      "security prerequisite 3",
+      "security prerequisite 4",
+      "Native required dependency audit",
+      "Preserve original native audit and exit"
+    ],
+    "audit": {
+      "directory": "functions",
+      "scope": "all"
+    }
+  }
+}

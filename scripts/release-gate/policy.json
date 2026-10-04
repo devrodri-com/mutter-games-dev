@@ -1,0 +1,56 @@
+{
+  "schema": 1,
+  "id": "MUTTER_VERIFIED_SOURCE_REPAIR_RELEASE_GATE_V1",
+  "auditReportSha256": "d612043ea00c6b56970ebd6f2a5bf5ec3e5fdad9eacb8e4c50ae86429724a030",
+  "advisory": "GHSA-vfj7-8cjw-p6xm",
+  "repair": "mutter-braces-3.0.3-depth-backport-v1",
+  "branch": "codex/mutter-web-stock-prep-20260928",
+  "harness": "f3bd9b6dc480afca3bcd7e2cf629671751a19cb3",
+  "audited": {
+    "frontend": {
+      "repository": "devrodri-com/mutter-games-dev",
+      "head": "900365e8011e3f61db0e7e843ae781da5c1ad58f",
+      "tree": "8dcfaedbab9822f28dd425fb403410c9271f432e",
+      "files": {
+        "functions/package-lock.json": "c7ed52e37904ae10746299b3a15ff10816fccf02f9ea70dad654aa25aaa73471",
+        "package-lock.json": "630889b504ae75ae0a4087b26698d2847e461b5d42ff6f14dbadebf17b69777e",
+        "scripts/braces-remediation/LICENSE": "35bdd8a44339719441900fb50fbefc5e2dca1ca662cbaed7a687de842c8b70f2",
+        "scripts/braces-remediation/README.md": "a63794c8c8e7cd7fc748f84c8ed99b46ba2f6c11898e87ab58e3ed3df3672dd6",
+        "scripts/braces-remediation/audit.cjs": "57020187e31a02c95c1b0ee72a606653d1942c02eccae64c34cc160454bf7f05",
+        "scripts/braces-remediation/consumers.check.cjs": "ff3b192aad088ea0b94911f35f239fbee1f9a842a0f7cbb118ad0c80d798e2dc",
+        "scripts/braces-remediation/control.cjs": "fca81cf596e6c112aaa08c0bdbb9107e6b875d56877a97f86206f4cb5d1ea4a5",
+        "scripts/braces-remediation/differential.check.cjs": "f4624d7ce8b35f3a5ff64e247515725804569151cd9578e9ee54530fa0540032",
+        "scripts/braces-remediation/evaluate.check.cjs": "b0a25f44e57b937bfea0521062ba88a822d0f1b84fe2fd696289a165c4be7d73",
+        "scripts/braces-remediation/evaluate.cjs": "8fb43cff3e7054ffe2a7dbde0cf90387f84cf96142365824496fe15f03e2e02c",
+        "scripts/braces-remediation/fixtures/all.json": "313276a73d7f75ed157d8ebb5c8821750e6f9667587a42492ac566df07701a1e",
+        "scripts/braces-remediation/fixtures/all.receipt.json": "cadac5320c5d8ba6c62f1a0b4855cc4b5aa64609d9045088b50394296c7c7e48",
+        "scripts/braces-remediation/install.cjs": "8eed057a4cd1680d5e730d5ac8a86752fb6233f5c6c7d50eb40631220bb3c0ac",
+        "scripts/braces-remediation/manifest.json": "1b6fa48613555b2bef8827bbdee3a8a71945226ee44da1f31436588b96b36c61",
+        "scripts/braces-remediation/patch.json": "9cf7ea0f0dd0805e1dc9604d6ce68271c3b0c5102f2e6e9e7774f422b0ce6a13",
+        "scripts/braces-remediation/regression.check.cjs": "4b04ae4bdb61d8b20495558f5bcb05d03950c43abea1f8baaf02b660be6e70d9",
+        "scripts/edge-tooling/exception.json": "627bbe6efb2a3bd709d09fd4d99d5d552ff8a7b6901eecf164d43e10272367d2"
+      }
+    },
+    "admin": {
+      "repository": "devrodri-com/mutter-games-admin-api",
+      "head": "4c2eaa23b34f3cb5b823dbee03738ca4a2d21fb2",
+      "tree": "5222ca196ec797c9d1f7690b8adb7053bcd79dfe",
+      "files": {
+        "package-lock.json": "f126d47a1e4fa8bac158c1ce3c33efbfaaa20bf706b029afa5f28fbcffd24a46",
+        "scripts/braces-remediation/LICENSE": "35bdd8a44339719441900fb50fbefc5e2dca1ca662cbaed7a687de842c8b70f2",
+        "scripts/braces-remediation/README.md": "a63794c8c8e7cd7fc748f84c8ed99b46ba2f6c11898e87ab58e3ed3df3672dd6",
+        "scripts/braces-remediation/audit.cjs": "57020187e31a02c95c1b0ee72a606653d1942c02eccae64c34cc160454bf7f05",
+        "scripts/braces-remediation/control.cjs": "fca81cf596e6c112aaa08c0bdbb9107e6b875d56877a97f86206f4cb5d1ea4a5",
+        "scripts/braces-remediation/differential.check.cjs": "f4624d7ce8b35f3a5ff64e247515725804569151cd9578e9ee54530fa0540032",
+        "scripts/braces-remediation/evaluate.check.cjs": "b0a25f44e57b937bfea0521062ba88a822d0f1b84fe2fd696289a165c4be7d73",
+        "scripts/braces-remediation/evaluate.cjs": "8fb43cff3e7054ffe2a7dbde0cf90387f84cf96142365824496fe15f03e2e02c",
+        "scripts/braces-remediation/fixtures/all.json": "46fd42087bebf0cbfc3bf51ff988ad2b269830fc613aea86fc9a06d0bfee6a87",
+        "scripts/braces-remediation/fixtures/all.receipt.json": "d8fbef4bf24543eff44df20d543c3ce6f8de40736a216108bf9d5f0bad148233",
+        "scripts/braces-remediation/install.cjs": "8eed057a4cd1680d5e730d5ac8a86752fb6233f5c6c7d50eb40631220bb3c0ac",
+        "scripts/braces-remediation/manifest.json": "1b6fa48613555b2bef8827bbdee3a8a71945226ee44da1f31436588b96b36c61",
+        "scripts/braces-remediation/patch.json": "9cf7ea0f0dd0805e1dc9604d6ce68271c3b0c5102f2e6e9e7774f422b0ce6a13",
+        "scripts/braces-remediation/regression.check.cjs": "4b04ae4bdb61d8b20495558f5bcb05d03950c43abea1f8baaf02b660be6e70d9"
+      }
+    }
+  }
+}

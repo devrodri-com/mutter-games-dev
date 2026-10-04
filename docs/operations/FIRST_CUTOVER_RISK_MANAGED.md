@@ -36,7 +36,7 @@ npm run test:first-cutover
 node node_modules/firebase-tools/lib/bin/firebase.js emulators:exec --only firestore --project demo-mutter-first-cutover --config firebase.catalog-emulators.json "npm run test:first-cutover:emulator"
 node scripts/first-cutover/cli.mjs propose-authority docs/operations/first-cutover/supported-deny-permissions.json
 node scripts/first-cutover/cli.mjs propose-allow iam-project-v3.json
-node scripts/first-cutover/cli.mjs evaluate first-cutover-evidence.json
+node scripts/first-cutover/cli.mjs evaluate /absolute/first-cutover-evidence.json /absolute/publication-config.json /absolute/new-publication-evidence
 node scripts/first-cutover/cli.mjs verify-backup /Users/lolo/PrivateBackups/Mutter/CAPTURA_PRIVADA
 node scripts/first-cutover/cli.mjs compare /Users/lolo/PrivateBackups/Mutter/RESPALDO /Users/lolo/PrivateBackups/Mutter/READBACK
 node scripts/first-cutover/cli.mjs propose-repair /Users/lolo/PrivateBackups/Mutter/RESPALDO /Users/lolo/PrivateBackups/Mutter/READBACK incidente-privado.json
@@ -53,8 +53,8 @@ Fixtures sintéticos no son recibos de producción. El tool nunca autoriza aplic
 ## 1. Identidad, operaciones y material de recuperación
 
 Releer HEAD/tree de ambos candidatos, CI pareado, artifact completo/stamp/digest,
-cuatro proyectos Vercel y destinos reales. Admin permanece en
-`74fd10955ac8163221b1478bafa791d1969ace48`; el informe congela el nuevo Tienda.
+cuatro proyectos Vercel y destinos reales. Usar la pareja exacta congelada por el
+recibo técnico nuevo, con pin Admin literal y revisión independiente del delta.
 Comprobar `mutter-games`, número `26777776532`, Firestore `(default)`; no aceptar
 defaults del CLI. Verificar source/runtime y principal configurado por separado.
 
@@ -234,3 +234,13 @@ Fuentes primarias: [Deny y API](https://docs.cloud.google.com/iam/docs/deny-acce
 [IAM Firestore](https://docs.cloud.google.com/firestore/native/docs/security/iam),
 [permisos Auth](https://docs.cloud.google.com/iam/docs/roles-permissions/firebaseauth).
 La documentación fundamenta el diseño; no prueba configuración aplicada.
+
+## Control técnico de la corrección auditada
+
+Antes de esta secuencia, ejecutar [el gate pareado](../../scripts/release-gate/README.md).
+El `failure` global y los seis exits nativos se conservan. Sólo el advisory exacto
+reparado puede recibir `VERIFIED_SOURCE_REMEDIATION`; todo otro fallo bloquea.
+`evaluate` exige ahora configuración de publicación y un directorio nuevo: vuelve
+a leer/verificar runs y artifact, exige la revisión independiente de este wiring
+y la autorización/recibos de la ventana, y consume la política existente sin
+alterar sus barreras. Un PASS técnico no declara corte listo ni activa aplicación.

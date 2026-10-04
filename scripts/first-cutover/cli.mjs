@@ -5,7 +5,6 @@ import { containmentProposal, legacyAllowProposal } from './authority.mjs';
 import { loadBackup, privateDirectory } from './backup.mjs';
 import { compare, proposeRepair } from './recovery.mjs';
 import { localFirestore, restoreLocal } from './local-firestore.mjs';
-import { evaluateFirstCutover, verifyReceiptFiles } from './policy.mjs';
 
 const [command, first, second, third] = process.argv.slice(2);
 try {
@@ -16,8 +15,11 @@ try {
   }
   else if (command === 'propose-allow') result = legacyAllowProposal(await json(first));
   else if (command === 'evaluate') {
-    const input = await json(first);
-    result = { ...evaluateFirstCutover(input), integrity: await verifyReceiptFiles(input, first) };
+    demand(second && third, 'evaluate now requires <receipts.json> <publication-config.json> <new-evidence-dir>');
+    const config = await json(second);
+    demand(config.cutoverEvidenceFile === first, 'publication config must bind this cutover evidence');
+    const { main } = await import('../release-gate/cli.cjs');
+    result = await main(['publication-check', second, third]);
   } else if (command === 'verify-backup') {
     const { manifest } = await loadBackup(first);
     result = { status: 'PRIVATE_BACKUP_INTEGRITY_VERIFIED', documents: manifest.documents, atomic: false,
@@ -32,7 +34,7 @@ try {
       : proposeRepair(base.documents, current.documents, await json(third));
     await writeFile(join(directory, `${command}.json`), JSON.stringify(output, null, 2), { mode: 0o600, flag: 'wx' });
     result = { status: 'PRIVATE_PROPOSAL_WRITTEN', productionWrites: 0 };
-  } else throw new Error('Commands: propose-authority <supported-permissions.json>; propose-allow <IAM-v3.json>; evaluate <receipts.json>; verify-backup <private-dir>; restore-local <private-dir> <loopback-origin>; compare <backup> <readback>; propose-repair <backup> <readback> <incident.json>. No apply command exists.');
+  } else throw new Error('Commands: propose-authority <supported-permissions.json>; propose-allow <IAM-v3.json>; evaluate <receipts.json> <publication-config.json> <new-evidence-dir>; verify-backup <private-dir>; restore-local <private-dir> <loopback-origin>; compare <backup> <readback>; propose-repair <backup> <readback> <incident.json>. No apply command exists.');
   demand(result, 'missing result'); console.log(JSON.stringify(result, null, 2));
 } catch (error) {
   console.error(error instanceof Error ? error.message : 'BLOCKED: invalid input'); process.exitCode = 1;

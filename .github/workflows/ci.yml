@@ -16,7 +16,7 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     env:
-      WEB_INVENTORY_ADMIN_SHA: 4c2eaa23b34f3cb5b823dbee03738ca4a2d21fb2
+      WEB_INVENTORY_ADMIN_SHA: f7c0258044b7788fe73d04f8d34e2153aed8c597
       MUTTER_ADMIN_API_SOURCE: ${{ github.workspace }}/paired-admin-api
       EDGE_TOOLING_EVIDENCE_DIR: ${{ github.workspace }}/../mutter-edge-controls-${{ github.run_id }}-${{ github.run_attempt }}
       CHECKOUT_PACKAGING_EVIDENCE_DIR: ${{ github.workspace }}/../mutter-edge-controls-${{ github.run_id }}-${{ github.run_attempt }}/emitted-functions
@@ -103,12 +103,12 @@ jobs:
         run: |
           set -euo pipefail
           tar -czf "$RUNNER_TEMP/mutter-prebuilt.tar.gz" -C "$RUNNER_TEMP/mutter-prebuilt" .
-          echo 'Diagnostic prebuilt: NO ELEGIBLE PARA RELEASE. Global security and independent review remain required.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Candidate only: exact external paired gate, independent wiring review and operational cutover remain required. Native CI results stay unchanged.' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Preserve complete prebuilt and provenance
         uses: actions/upload-artifact@v4
         with:
-          name: mutter-stock-prebuilt-DIAGNOSTIC-NO-RELEASE
+          name: mutter-stock-prebuilt-CANDIDATE-PENDING-GATE-AUDIT-${{ github.run_attempt }}
           path: ${{ runner.temp }}/mutter-prebuilt.tar.gz
           if-no-files-found: error
           retention-days: 14
@@ -193,6 +193,19 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+      - name: Release gate positive and negative regressions
+        run: npm run test:release-gate
+
+      - name: Record actual build source and pair
+        run: node scripts/release-gate/ci.cjs build frontend "$RUNNER_TEMP/release-build"
+
+      - name: Preserve build binding
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-build-frontend-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-build
+          if-no-files-found: error
+
   security:
     name: Security (${{ matrix.directory }}, ${{ matrix.scope }})
     runs-on: ubuntu-latest
@@ -202,7 +215,8 @@ jobs:
         directory: ['.', 'functions']
         scope: [prod, all]
     steps:
-      - uses: actions/checkout@v4
+      - name: security prerequisite 1
+        uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
@@ -213,22 +227,24 @@ jobs:
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
           git show -s --format='head=%H tree=%T'
-      - uses: actions/setup-node@v4
+      - name: security prerequisite 3
+        uses: actions/setup-node@v4
         with:
           node-version: '22.23.3'
           cache: npm
           cache-dependency-path: |
             package-lock.json
             functions/package-lock.json
-      - run: node scripts/braces-remediation/install.cjs "${{ matrix.directory }}"
+      - name: security prerequisite 4
+        run: node scripts/braces-remediation/install.cjs "${{ matrix.directory }}"
       - name: Native required dependency audit
-        run: node scripts/braces-remediation/audit.cjs "${{ matrix.scope }}" "$RUNNER_TEMP/native-audit" "${{ matrix.directory }}"
+        run: node scripts/release-gate/audit.cjs frontend "${{ matrix.scope }}" "$RUNNER_TEMP/native-audit" "${{ matrix.directory }}"
 
       - name: Preserve original native audit and exit
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: native-audit-${{ matrix.directory == '.' && 'root' || 'functions' }}-${{ matrix.scope }}
+          name: native-audit-${{ matrix.directory == '.' && 'root' || 'functions' }}-${{ matrix.scope }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/native-audit
           if-no-files-found: error
 
@@ -277,11 +293,13 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: source-remediation prerequisite 1
+        uses: actions/checkout@v4
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - name: source-remediation prerequisite 2
+        uses: actions/setup-node@v4
         with:
           node-version: '22.23.3'
           cache: npm
@@ -293,18 +311,34 @@ jobs:
           set -euo pipefail
           test "$BUILD_RESULT" = success
           test "$CUTOVER_RESULT" = success
-      - run: npm run install:controlled
-      - run: node scripts/braces-remediation/install.cjs functions
-      - run: npm run test:braces
-      - uses: actions/download-artifact@v4
+      - name: source-remediation prerequisite 4
+        run: npm run install:controlled
+      - name: source-remediation prerequisite 5
+        run: node scripts/braces-remediation/install.cjs functions
+      - name: source-remediation prerequisite 6
+        run: npm run test:braces
+      - name: source-remediation prerequisite 7
+        uses: actions/download-artifact@v4
         with:
           pattern: native-audit-*
           path: audit-input
       - name: Assess exact source against all four original audit graphs
         run: |
           set -euo pipefail
-          node scripts/braces-remediation/evaluate.cjs . audit-input/native-audit-root-prod prod
-          node scripts/braces-remediation/evaluate.cjs . audit-input/native-audit-root-all all
-          node scripts/braces-remediation/evaluate.cjs functions audit-input/native-audit-functions-prod prod
-          node scripts/braces-remediation/evaluate.cjs functions audit-input/native-audit-functions-all all
-          echo 'INDEPENDENT_REMEDIATION_AUDIT=PENDING; RELEASE_ELIGIBLE=NO' >> "$GITHUB_STEP_SUMMARY"
+          node scripts/braces-remediation/evaluate.cjs . audit-input/native-audit-root-prod-${{ github.run_attempt }} prod
+          node scripts/braces-remediation/evaluate.cjs . audit-input/native-audit-root-all-${{ github.run_attempt }} all
+          node scripts/braces-remediation/evaluate.cjs functions audit-input/native-audit-functions-prod-${{ github.run_attempt }} prod
+          node scripts/braces-remediation/evaluate.cjs functions audit-input/native-audit-functions-all-${{ github.run_attempt }} all
+          echo 'AUDITED_SOURCE_REPAIR_PRESERVED=YES; INDEPENDENT_RELEASE_GATE_AUDIT=PENDING; PRODUCTION_APPLICATION_AUTHORIZED=NO' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Evaluate current security disposition
+        env:
+          RELEASE_NEEDS_JSON: ${{ toJSON(needs) }}
+        run: node scripts/release-gate/ci.cjs assess frontend "$RUNNER_TEMP/release-assessment" audit-input
+
+      - name: Preserve security disposition binding
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-assessment-frontend-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-assessment
+          if-no-files-found: error
