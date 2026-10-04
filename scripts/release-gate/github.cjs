@@ -29,6 +29,7 @@ function validateArtifact(meta, run, name, digest) {
   assert(Number.isFinite(created) && created >= start && created <= end, 'Artifact outside run attempt');
 }
 function download(meta, run, name, output) {
+  assert(Number.isSafeInteger(meta.size_in_bytes) && meta.size_in_bytes > 0 && meta.size_in_bytes < 512 * 1024 * 1024, 'Declared archive size outside bound');
   fs.mkdirSync(output, { recursive: false });
   const zip = path.join(output, 'artifact.zip'), fd = fs.openSync(zip, 'wx');
   let result;

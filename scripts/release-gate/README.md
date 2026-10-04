@@ -40,6 +40,8 @@ merge evidence is permitted only with API-confirmed parents and the same tree as
 its branch HEAD; a frontend candidate artifact requires the branch push run.
 
 Pagination must exhaust the API count without drift or duplicates. The exact
+attempt must remain the latest completed attempt, re-read after evidence/artifact
+verification; a rerun that starts meanwhile blocks the result. The exact
 attempt's entire job and step inventory is checked against `jobs.json`; missing,
 unfinished, skipped, cancelled or unknown functional steps fail. Only the native
 audit step can fail for the exact classified graph. Conditional post-cache skips

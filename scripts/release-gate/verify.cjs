@@ -13,6 +13,8 @@ function verifyRun(role, root, runId, attempt, output) {
   assert([`https://github.com/${repo}.git`, `https://github.com/${repo}`, `git@github.com:${repo}.git`].includes(git(root, 'remote', 'get-url', 'origin')));
   fs.mkdirSync(output, { recursive: false });
   const base = `repos/${repo}/actions/runs/${runId}`;
+  const current = request(base); write(path.join(output, 'current-run.json'), current);
+  validateRun(current, role, target.head, attempt);
   const run = request(`${base}/attempts/${attempt}`); write(path.join(output, 'run.json'), run);
   validateRun(run, role, target.head, attempt);
   const jobPages = pages(`${base}/attempts/${attempt}/jobs`, 'jobs'); write(path.join(output, 'jobs-pages.json'), jobPages.records);
@@ -53,6 +55,9 @@ function verifyRun(role, root, runId, attempt, output) {
   const result = { role, repository: repo, target, context: build.context, paired: build.paired,
     runId, attempt, CI_GLOBAL_STATUS: run.conclusion, results, logsSha256: sha(fs.readFileSync(logs)),
     status: 'REPOSITORY_PREREQUISITES_VERIFIED', PRODUCTION_APPLICATION_AUTHORIZED: false };
+  const after = request(base); write(path.join(output, 'run-after-verification.json'), after);
+  validateRun(after, role, target.head, attempt);
+  assert.equal(after.conclusion, run.conclusion, 'Run changed during verification');
   write(path.join(output, 'verified-run.json'), result);
   return { result, run, artifacts: artifactPages.items, fetch };
 }
@@ -105,6 +110,12 @@ function verifyPair(config, output) {
   const text = fs.readFileSync(path.join(storeRoot, '.github/workflows/ci.yml'), 'utf8');
   validatePair(store.result, admin.result, text);
   const prebuilt = verifyPrebuilt(storeRoot, store, path.join(output, 'frontend'));
+  for (const [role, item] of [['admin', admin], ['frontend', store]]) {
+    const after = request(`repos/${item.result.repository}/actions/runs/${item.result.runId}`);
+    validateRun(after, role, item.result.target.head, item.result.attempt);
+    assert.equal(after.conclusion, item.run.conclusion, 'Run changed during artifact verification');
+    write(path.join(output, `${role}-final-run.json`), after);
+  }
   const results = [...store.result.results, ...admin.result.results]; assert.equal(results.length, 6);
   const receipt = { schema: 1, policy: policy.id, auditReportSha256: policy.auditReportSha256,
     targets: { store: store.result.target, admin: admin.result.target }, runs: { store: store.result, admin: admin.result },

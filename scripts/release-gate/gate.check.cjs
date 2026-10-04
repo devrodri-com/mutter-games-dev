@@ -117,6 +117,7 @@ test('run and PR checkout identity cannot substitute a merge for branch head', (
   const head = { sha: target.head, commit: { tree: { sha: target.tree } } };
   validateCheckout(binding, r, head, head, binding.workflowSha256);
   assert.throws(() => validateRun({ ...r, run_attempt: 4 }, role, target.head, attempt));
+  assert.throws(() => validateRun({ ...r, status: 'in_progress' }, role, target.head, attempt));
   assert.throws(() => validateCheckout({ ...binding, checkout: 'a'.repeat(40) }, r, head, head, binding.workflowSha256));
   assert.throws(() => validateCheckout(binding, { ...r, event: 'pull_request' }, head, head, binding.workflowSha256));
 });
