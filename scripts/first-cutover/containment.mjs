@@ -1,7 +1,7 @@
 import { PROJECT, DATABASE, PLANNED_ACCOUNT, LEGACY_ACCOUNTS, demand, digest } from './common.mjs';
 import { containmentProposal, legacyAllowProposal, verifyAllowBase, verifyAllowAfter,
   READER_ROLE, READER_PERMISSIONS, CANDIDATE_ROLE, CANDIDATE_PERMISSIONS } from './authority.mjs';
-import { readSource, readPolicy, same, instant, requireReview, PROJECT_RESOURCE, PROJECT_NUMBER, accountResource, sortedBindings } from './iam-evidence.mjs';
+import { readSource, readPolicy, policyView, same, instant, requireReview, PROJECT_RESOURCE, PROJECT_NUMBER, accountResource, sortedBindings } from './iam-evidence.mjs';
 import { verifyNegativeProofs, verifyCredentials } from './authority-proofs.mjs';
 
 const policyOptions = { requestedPolicyVersion: 3, responseComplete: true };
@@ -11,11 +11,11 @@ const legacyMembers = LEGACY_ACCOUNTS.map(a => `serviceAccount:${a}`);
 const candidateMember = `serviceAccount:${PLANNED_ACCOUNT}`;
 
 function noLegacyResourceGrant(policy) {
-  demand(policy.bindings.every(b => !b.members.some(m => legacyMembers.includes(m)
+  demand(policyView(policy, policyOptions).bindings.every(b => !b.members.some(m => legacyMembers.includes(m)
     || m === 'allUsers' || m === 'allAuthenticatedUsers')), 'legacy/public resource grant remains');
 }
 function noCandidateGrant(policy) {
-  demand(policy.bindings.every(b => !b.members.includes(candidateMember)), 'candidate authority granted before containment');
+  demand(policyView(policy, policyOptions).bindings.every(b => !b.members.includes(candidateMember)), 'candidate authority granted before containment');
 }
 function exactRoles(value, context) {
   demand(Array.isArray(value) && value.length === 2, 'two exact roles required');
@@ -147,16 +147,16 @@ export function verifyContainment(evidence, input) {
   demand(candidate.noGrantProject.observedAtMs > evidence.review.reviewedAtMs, 'no-grant proof must follow effective containment');
   const candidateResource = accountResource(PLANNED_ACCOUNT);
   const resourcePolicy = readPolicy(candidate.restrictedPolicy, candidateResource, context); noLegacyResourceGrant(resourcePolicy);
-  demand(resourcePolicy.bindings.length === 0, 'new candidate requires empty direct policy; inherited operator/agents remain in project policy');
+  demand(policyView(resourcePolicy, policyOptions).bindings.length === 0, 'new candidate requires empty direct policy; inherited operator/agents remain in project policy');
   demand(candidate.restrictedPolicy.observedAtMs > candidate.noGrantProject.observedAtMs, 'candidate resource policy must follow no-grant proof');
   const granted = readPolicy(candidate.grantedProject, PROJECT_RESOURCE, context);
-  const expectedGrant = structuredClone(noGrant);
+  const expectedGrant = policyView(noGrant, policyOptions);
   const existingGrant = expectedGrant.bindings.find(b => b.role === CANDIDATE_ROLE && !b.condition);
   if (existingGrant) existingGrant.members.push(candidateMember);
   else expectedGrant.bindings.push({ role: CANDIDATE_ROLE, members: [candidateMember] });
   // Compare the full final project policy except its new etag; do not feed the
   // post-grant policy into the earlier before/after verification.
-  demand(granted.etag !== noGrant.etag && same(sortedBindings(granted), sortedBindings(expectedGrant)), 'candidate grant not exact/preserved');
+  demand(granted.etag !== noGrant.etag && same(sortedBindings(granted, policyOptions), sortedBindings(expectedGrant, policyOptions)), 'candidate grant not exact/preserved');
   demand(candidate.grantedProject.observedAtMs > candidate.restrictedPolicy.observedAtMs, 'candidate grant precedes containment/restriction');
   for (const s of [candidate.noGrantProject, candidate.restrictedPolicy, candidate.grantedProject])
     demand(s.observedAtMs <= input.barriers.find(b => b.scope === 'delegation').observedAtMs, 'candidate timeline beyond barrier receipt');

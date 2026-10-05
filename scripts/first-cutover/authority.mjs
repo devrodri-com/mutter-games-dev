@@ -1,6 +1,6 @@
 import { PROJECT, PLANNED_ACCOUNT, LEGACY_ACCOUNTS, demand, canonical, digest } from './common.mjs';
 
-import { validateWirePolicy, sortedBindings } from './iam-evidence.mjs';
+import { validateWirePolicy, policyView, sortedBindings } from './iam-evidence.mjs';
 
 export const DENIED_PERMISSIONS = Object.freeze([
   'datastore.googleapis.com/entities.create', 'datastore.googleapis.com/entities.update', 'datastore.googleapis.com/entities.delete',
@@ -47,7 +47,7 @@ export function legacyAllowProposal(before, readContext) {
     [LEGACY_ACCOUNTS[1], new Set(['roles/editor', READER_ROLE])],
   ]);
   const found = new Set();
-  const after = structuredClone(before);
+  const after = policyView(before, readContext);
   after.bindings = after.bindings.flatMap(binding => {
     demand(typeof binding.role === 'string' && Array.isArray(binding.members), 'invalid IAM binding');
     if (!binding.members.some(m => members.has(m))) return [binding];
@@ -74,7 +74,7 @@ export function verifyAllowBase(proposal, fresh, readContext) {
 export function verifyAllowAfter(proposal, before, fresh, readContext) {
   verifyAllowBase(proposal, before, readContext);
   validateWirePolicy(fresh, readContext);
-  demand(fresh.etag !== proposal.etag && canonical(sortedBindings(fresh)) === canonical(sortedBindings(proposal.after)),
+  demand(fresh.etag !== proposal.etag && canonical(sortedBindings(fresh, readContext)) === canonical(sortedBindings(proposal.after, readContext)),
     'IAM after drift, stale etag or unauthorized delta');
   return true;
 }

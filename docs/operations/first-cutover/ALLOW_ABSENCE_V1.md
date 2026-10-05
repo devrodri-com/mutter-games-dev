@@ -35,8 +35,13 @@ parent sin proyección), lista agotada de cuentas y sus políticas, política de
 proyecto, roles mínimos exactos y superficie/política aplicable a Firestore.
 Para IAM siempre solicitar versión máxima 3: proyecto en `body.options`, cuentas
 en `query['options.requestedPolicyVersion']` con body vacío, según REST v1. Se
-admite respuesta wire 1 sólo sin condiciones ni `_withcond_` y con esa solicitud
-completa. V3 conserva condiciones ajenas; una condición pertinente no revisada
+admite respuesta wire 0/1 o versión omitida sólo sin condiciones ni `_withcond_`
+y con esa solicitud completa. `bindings` omitido significa lista semántica vacía;
+`null` y tipos inválidos bloquean. V3 también puede omitir bindings en una lectura
+completa. `readPolicy` devuelve el wire original; `policyView` crea una copia
+con bindings vacío sólo cuando falta el campo, sin inventar versión ni alterar
+el etag, auditConfigs o campos desconocidos. Las capturas reales requieren además
+POST, endpoint nativo y cuerpo/query concordantes. V3 conserva condiciones ajenas; una condición pertinente no revisada
 bloquea. Versiones/contextos desconocidos, proyección, paginación sin agotar,
 403 o fuentes ausentes mantienen NOT_VERIFIED.
 
@@ -159,3 +164,28 @@ Fuentes primarias (describen API, no prueban Mutter):
 - [Opciones en cuentas](https://docs.cloud.google.com/iam/docs/reference/rest/v1/projects.serviceAccounts/getIamPolicy).
 - [Discovery Firestore v1](https://firestore.googleapis.com/$discovery/rest?version=v1).
 - [Vigencia de access tokens](https://docs.cloud.google.com/iam/docs/reference/credentials/rest/v1/projects.serviceAccounts/generateAccessToken).
+
+
+## Compatibilidad del wire y acceso de probes pendiente
+
+La regresión `iam-wire.check.mjs` usa ejemplos sanitizados SYNTHETIC: nunca son
+capturas literales ni prueba de enforcement. La entrega privada del delta conserva
+el ensayo base/HEAD sobre las dos respuestas originales y sus hashes; no se añaden
+version/bindings ni una ventana falsa a esas respuestas históricas. El etag es
+opaco, no un indicador de autoridad ni un valor especial. Una política directa
+vacía no sustituye proyecto, roles, revisiones, credenciales o pruebas negativas.
+El proyecto vacío no permite construir el delta porque exige ambas identidades
+antiguas. La candidata directa vacía pasa por la misma vista semántica; el grant
+posterior sigue comparando la política completa y exige otro etag.
+
+La propuesta de acceso de pruebas se entrega **privada, NO APLICADA**. Sólo prevé
+getAccessToken temporal para el operador sobre dos cuentas antiguas, no sobre la
+candidata. No se modifica aquí ningún gate para tolerar delegación pendiente: toda
+concesión y retirada futura necesitan readback v3/etag, revisión de rutas y pruebas
+efectivas. La retirada del grant no revoca tokens emitidos. Las cinco familias de
+credenciales y la propagación conservan sus controles; la candidata no se habilita
+si hay un fallo de limpieza o una ruta sin tratar. No hay comando apply.
+
+La publicación sigue exigiendo auditoría nueva del par y artifact final, JSON
+separado y recibos operativos actuales. El PASS de compatibilidad no autoriza una
+pausa ni una publicación. Fuente semántica: [Policy REST](https://docs.cloud.google.com/iam/docs/reference/rest/v1/Policy).
