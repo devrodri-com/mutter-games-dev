@@ -3,6 +3,7 @@ import { containmentProposal, legacyAllowProposal, verifyAllowBase, verifyAllowA
   READER_ROLE, READER_PERMISSIONS, CANDIDATE_ROLE, CANDIDATE_PERMISSIONS } from './authority.mjs';
 import { readSource, readPolicy, policyView, same, instant, requireReview, PROJECT_RESOURCE, PROJECT_NUMBER, accountResource, sortedBindings } from './iam-evidence.mjs';
 import { verifyNegativeProofs, verifyCredentials } from './authority-proofs.mjs';
+import { INSTALLATION_PHASE, verifyInstallationInput, verifyPendingCredentials } from './installation-isolation.mjs';
 
 const policyOptions = { requestedPolicyVersion: 3, responseComplete: true };
 const categories = ['DIRECT_AND_CONDITIONAL_GRANTS', 'INDIRECT_MEMBERSHIP_AND_RESOURCE_GRANTS',
@@ -48,7 +49,7 @@ function accountsFromPages(pages, context) {
 /** Both methods are explicit, versioned documentary checks. Nothing here fetches
  * Google or proves provider authenticity. Missing evidence throws NOT_VERIFIED.
  */
-export function verifyContainment(evidence, input) {
+function verifyAuthorityIsolation(evidence, input, installation) {
   demand(evidence?.schema === 1 && ['PROJECT_DENY', 'ALLOW_ABSENCE_V1'].includes(evidence.method), 'explicit containment method required');
   demand(evidence.project === PROJECT && evidence.projectNumber === PROJECT_NUMBER && evidence.database === DATABASE,
     'containment project identity');
@@ -136,15 +137,19 @@ export function verifyContainment(evidence, input) {
     if (request.method === 'getIamPolicy') readPolicy(add(source), request.resource, context);
     else readSource(add(source), { method: request.method, resource: request.resource }, context);
   }
-  const credentialsAt = verifyCredentials(evidence.credentials, sources.map(digest), negative.effectiveAt, context);
-  requireReview(evidence.review, sources, context, categories);
-  demand(evidence.review.method === evidence.method && instant(evidence.review.reviewedAtMs)
-    && evidence.review.reviewedAtMs >= credentialsAt && evidence.review.reviewedAtMs <= input.nowMs, 'review method/chronology');
+  const staged = installation || input.phase === INSTALLATION_PHASE || !!evidence.installationReview;
+  const authorityReview = staged ? evidence.installationReview : evidence.review;
+  const credentialsAt = staged ? verifyPendingCredentials(installation ? evidence.credentials : evidence.installationCredentials,
+    sources.map(digest), negative.effectiveAt, context)
+    : verifyCredentials(evidence.credentials, sources.map(digest), negative.effectiveAt, context);
+  requireReview(authorityReview, sources, context, staged ? categories.filter(c => c !== 'PREEXISTING_CREDENTIALS') : categories);
+  demand(authorityReview.method === evidence.method && instant(authorityReview.reviewedAtMs)
+    && authorityReview.reviewedAtMs >= credentialsAt && authorityReview.reviewedAtMs <= input.nowMs, 'review method/chronology');
 
   const candidate = evidence.candidate;
   const noGrant = readPolicy(candidate?.noGrantProject, PROJECT_RESOURCE, context);
   verifyAllowAfter(proposal, before, noGrant, policyOptions); noCandidateGrant(noGrant);
-  demand(candidate.noGrantProject.observedAtMs > evidence.review.reviewedAtMs, 'no-grant proof must follow effective containment');
+  demand(candidate.noGrantProject.observedAtMs > authorityReview.reviewedAtMs, 'no-grant proof must follow effective IAM isolation');
   const candidateResource = accountResource(PLANNED_ACCOUNT);
   const resourcePolicy = readPolicy(candidate.restrictedPolicy, candidateResource, context); noLegacyResourceGrant(resourcePolicy);
   demand(policyView(resourcePolicy, policyOptions).bindings.length === 0, 'new candidate requires empty direct policy; inherited operator/agents remain in project policy');
@@ -162,11 +167,40 @@ export function verifyContainment(evidence, input) {
     demand(s.observedAtMs <= input.barriers.find(b => b.scope === 'delegation').observedAtMs, 'candidate timeline beyond barrier receipt');
   demand(input.delegation?.containedBeforeCandidateGrant === true
     && input.delegation.containmentSha256 === digest(evidence)
-    && input.delegation.containedAtMs === evidence.review.reviewedAtMs
+    && input.delegation.containedAtMs === authorityReview.reviewedAtMs
     && input.delegation.candidateGrantedAtMs === candidate.grantedProject.observedAtMs, 'delegation chronology not bound to containment');
+  if (!installation && staged) {
+    // Grant depends on the prior IAM review. Credential treatment belongs after
+    // the migration it enables; its final verifier and complete review stay strict.
+    const closedAt = verifyCredentials(evidence.credentials, sources.map(digest), candidate.grantedProject.observedAtMs, context);
+    requireReview(evidence.review, sources, context, categories);
+    demand(evidence.review.method === evidence.method && instant(evidence.review.reviewedAtMs)
+      && evidence.review.reviewedAtMs >= closedAt && evidence.review.reviewedAtMs <= input.nowMs, 'final credential review method/chronology');
+  }
   const barrier = input.barriers.find(b => b.scope === 'legacy-authority');
   demand(barrier?.evidenceSha256 === digest(evidence) && barrier.method === evidence.method
-    && barrier.observedAtMs >= evidence.review.reviewedAtMs, 'legacy-authority barrier not bound to method/readbacks');
+    && barrier.observedAtMs >= (installation ? authorityReview : evidence.review).reviewedAtMs, 'legacy-authority barrier not bound to method/readbacks');
+  if (installation) return { method: evidence.method, phase: INSTALLATION_PHASE,
+    status: 'IAM_INSTALLATION_DOCUMENTS_CONSISTENT', evidenceSha256: digest(evidence), sourceHashes: sources.map(digest),
+    effectiveAtMs: negative.effectiveAt, containedAtMs: authorityReview.reviewedAtMs,
+    candidateRuntimeGranted: true, candidateGrantedAtMs: candidate.grantedProject.observedAtMs,
+    credentialRoutesClosed: false, credentials: structuredClone(evidence.credentials),
+    remoteEnforcementAttestedByThisTool: false, providerAuthenticityRequiresIndependentReview: true };
   return { method: evidence.method, status: 'CONTAINMENT_DOCUMENTS_CONSISTENT', remoteEnforcementAttestedByThisTool: false,
     providerAuthenticityRequiresIndependentReview: true, containedAtMs: evidence.review.reviewedAtMs };
+}
+
+/** Prior IAM/delegation isolation permits a candidate grant while Auth remains
+ * explicitly pending. This is not a containment or publication acceptance.
+ */
+export function verifyInstallationIsolation(evidence, input) {
+  verifyInstallationInput(input);
+  demand(!evidence?.review, 'installation cannot present a final credential review');
+  return verifyAuthorityIsolation(evidence, input, true);
+}
+
+/** Final acceptance still requires every applicable credential family closed. */
+export function verifyContainment(evidence, input) {
+  demand(!input.phase || [INSTALLATION_PHASE, 'CLOSED_SYSTEM_INSTALL'].includes(input.phase), 'unknown credential installation phase');
+  return verifyAuthorityIsolation(evidence, input, false);
 }

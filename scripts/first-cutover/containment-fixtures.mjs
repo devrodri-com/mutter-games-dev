@@ -21,9 +21,10 @@ export const policyRead = (input, resource, policy, at) => source(input, 'getIam
     : { at, body: { options: { requestedPolicyVersion: 3 } } });
 export function bindContainment(input) {
   const e = input.containment, barrier = input.barriers.find(b => b.scope === 'legacy-authority');
-  barrier.method = e.method; barrier.evidenceSha256 = digest(e); barrier.observedAtMs = 100090;
+  const authorityReview = e.installationReview ?? e.review;
+  barrier.method = e.method; barrier.evidenceSha256 = digest(e); barrier.observedAtMs = Math.max(100090, e.review?.reviewedAtMs ?? 0);
   const delegation = input.barriers.find(b => b.scope === 'delegation'); delegation.observedAtMs = 100090;
-  Object.assign(input.delegation, { containmentSha256: digest(e), containedAtMs: e.review.reviewedAtMs,
+  Object.assign(input.delegation, { containmentSha256: digest(e), containedAtMs: authorityReview.reviewedAtMs,
     candidateGrantedAtMs: e.candidate.grantedProject.observedAtMs });
   return input;
 }
@@ -113,4 +114,57 @@ export function syntheticContainment(input, method = 'ALLOW_ABSENCE_V1', version
       { role: CANDIDATE_ROLE, members: [`serviceAccount:${PLANNED_ACCOUNT}`] }] }, 100085) };
   input.containment = e;
   return bindContainment(input);
+}
+
+/** Changes a synthetic completed example into the honest installation stage. */
+export function pendingInstallation(input, method = 'ALLOW_ABSENCE_V1') {
+  syntheticContainment(input, method);
+  input.phase = 'CONTROLLED_INSTALL_PENDING_CLOSURE';
+  input.identity.runtimeVerified = false;
+  input.identity.noOtherUncontainedAuthority = false;
+  const evidence = input.containment;
+  evidence.installationReview = structuredClone(evidence.review);
+  evidence.installationReview.coverage = evidence.installationReview.coverage.filter(row => row.category !== 'PREEXISTING_CREDENTIALS');
+  delete evidence.review;
+  evidence.credentials.status = 'PENDING_CLOSURE';
+  evidence.credentials.unresolved = 2;
+  for (const family of evidence.credentials.families) if (['FIREBASE_SESSIONS', 'SIGNED_JWT_AND_BLOB'].includes(family.family)) {
+    family.disposition = 'PENDING_TREATMENT';
+    family.reason = 'Synthetic issuance and Firebase sessions remain untreated; IAM installation does not close this family.';
+  }
+  return bindContainment(input);
+}
+
+/** Explicit simulated treatment after migration. Never a provider receipt. */
+export function syntheticSequenceClosure(input, afterAtMs = input.nowMs + 10) {
+  const result = structuredClone(input), evidence = result.containment;
+  evidence.installationCredentials = structuredClone(evidence.credentials);
+  evidence.credentials.status = 'REVIEWED_NO_UNRESOLVED_ROUTE';
+  evidence.credentials.unresolved = 0;
+  for (const family of evidence.credentials.families) {
+    family.reviewedAtMs = afterAtMs;
+    if (family.disposition === 'PENDING_TREATMENT') {
+      Object.assign(family, { disposition: 'BOUNDED_VALIDITY_AND_ISSUANCE_CLOSED', lastPossibleIssueAtMs: afterAtMs - 2,
+        validUntilMs: afterAtMs - 1, familySpecificValidity: true,
+        issuanceClosureBasis: 'Explicit synthetic simulated treatment and expiry only; no production closure or provider authenticity is asserted.' });
+    }
+  }
+  evidence.review = structuredClone(evidence.installationReview);
+  evidence.review.reviewedAtMs = afterAtMs + 1;
+  evidence.review.coverage.push({ category: 'PREEXISTING_CREDENTIALS', disposition: 'NO_UNRESOLVED_ROUTE',
+    reason: 'Explicitly simulated synthetic treatment completed after candidate migration; not a production credential closure.',
+    sourceSha256: [...evidence.review.sourceSha256] });
+  result.identity.runtimeVerified = true;
+  result.identity.noOtherUncontainedAuthority = true;
+  bindContainment(result);
+  // Advance only the synthetic operational observations past the same required
+  // mitigation interval. This does not wait for or attest a real provider.
+  const finalBarrierAt = Math.max(...result.barriers.map(barrier => barrier.observedAtMs));
+  const quietAt = finalBarrierAt + 600001;
+  result.operations.observedAtMs = quietAt;
+  result.backup.finalCaptureStartedAtMs = quietAt;
+  result.backup.finalCaptureFinishedAtMs = quietAt + 1;
+  result.comparison.checkedAtMs = quietAt + 2;
+  result.nowMs = Math.max(result.nowMs, quietAt + 3);
+  return result;
 }

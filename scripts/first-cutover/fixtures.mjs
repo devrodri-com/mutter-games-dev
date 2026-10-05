@@ -1,7 +1,7 @@
 // Synthetic observations only. Never accepted by the production-evidence CLI.
 import { PROJECT, DATABASE, ROOT, DECISION, DECISION_CONTRACT_SHA256, PLANNED_ACCOUNT, LEGACY_ACCOUNTS, digest } from './common.mjs';
 import { PROJECTS } from '../release-cutover/policy.mjs';
-import { syntheticContainment } from './containment-fixtures.mjs';
+import { syntheticContainment, pendingInstallation } from './containment-fixtures.mjs';
 import { REQUIRED_BARRIERS } from './policy.mjs';
 export function syntheticEvidence() {
   const h = 'a'.repeat(64); const target = { head: 'a'.repeat(40), tree: 'b'.repeat(40) };
@@ -29,6 +29,14 @@ export function syntheticEvidence() {
     comparison: { unresolved: 0, uncertainOrdersUnresolved: 0, reservationSafe: true, checkedAtMs: 820000 },
     recovery: { selectiveOnly: true, noBlindRecreate: true, versionAndDependenciesChecked: true, rollbackPreservesReservations: true },
   });
+}
+export function syntheticInstallation(method = 'ALLOW_ABSENCE_V1') {
+  const input = syntheticEvidence();
+  // One synthetic window spans installation, simulated treatment and the
+  // unchanged operational mitigation required by the final cutover evaluator.
+  input.window.expiresAtMs = 2000000;
+  input.maxAgeMs = 2000000;
+  return pendingInstallation(input, method);
 }
 export function product(overrides = {}) {
   return { name: `${ROOT}/products/synthetic`, createTime: '2026-10-01T00:00:00Z', updateTime: '2026-10-01T00:00:00Z',

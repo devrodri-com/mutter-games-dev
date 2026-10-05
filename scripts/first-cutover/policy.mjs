@@ -4,8 +4,9 @@ import { PROJECT, DATABASE, PLANNED_ACCOUNT, LEGACY_ACCOUNTS, DECISION, DECISION
 import { PROJECTS } from '../release-cutover/policy.mjs';
 import { verifyContainment } from './containment.mjs';
 import { effectiveFunctions } from '../release-cutover/drain.mjs';
+import { REQUIRED_BARRIERS } from './installation-isolation.mjs';
 
-export const REQUIRED_BARRIERS = Object.freeze([...Object.values(PROJECTS), 'firestore-direct', 'legacy-authority', 'delegation', 'administrative-launch']);
+export { REQUIRED_BARRIERS } from './installation-isolation.mjs';
 const ms = v => Number.isSafeInteger(v) && v >= 0;
 const sha = v => typeof v === 'string' && /^[a-f0-9]{40}$/.test(v);
 /** Evaluates evidence consistency, not provider enforcement. The CLI additionally

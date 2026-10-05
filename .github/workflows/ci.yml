@@ -16,7 +16,7 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     env:
-      WEB_INVENTORY_ADMIN_SHA: 62f4811cfbacfee0138713e1eef88e255d534b9d
+      WEB_INVENTORY_ADMIN_SHA: 5a7184cff3ff6c4cff10fb85bb870bf3a4a98ee9
       MUTTER_ADMIN_API_SOURCE: ${{ github.workspace }}/paired-admin-api
       EDGE_TOOLING_EVIDENCE_DIR: ${{ github.workspace }}/../mutter-edge-controls-${{ github.run_id }}-${{ github.run_attempt }}
       CHECKOUT_PACKAGING_EVIDENCE_DIR: ${{ github.workspace }}/../mutter-edge-controls-${{ github.run_id }}-${{ github.run_attempt }}/emitted-functions

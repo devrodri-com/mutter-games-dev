@@ -1,6 +1,13 @@
 import { DATABASE, PLANNED_ACCOUNT, LEGACY_ACCOUNTS, demand, digest } from './common.mjs';
 import { readSource, same, instant, PROJECT_RESOURCE, accountResource, OPERATOR } from './iam-evidence.mjs';
 
+export const CREDENTIAL_FAMILIES = Object.freeze([
+  'LEGACY_KEYS_AND_REPRESENTING_TOKENS', 'FOREIGN_ACCESS_TOKENS', 'SIGNED_JWT_AND_BLOB', 'OIDC_TOKENS', 'FIREBASE_SESSIONS',
+]);
+export const CLOSED_CREDENTIAL_DISPOSITIONS = Object.freeze([
+  'DESTINATION_AUTHORITY_CONTAINED', 'BOUNDED_VALIDITY_AND_ISSUANCE_CLOSED', 'NO_RELEVANT_AUTHORITY_WITH_EVIDENCE',
+]);
+
 // Explicit IAM permission names, not a prefix conversion from deny permissions.
 // Resource support must be captured and reviewed for each actual evaluation.
 export const PROJECT_WRITE_PERMISSIONS = Object.freeze([
@@ -96,13 +103,12 @@ export function verifyNegativeProofs(proofs, accounts, afterAt, context) {
  * Unknown issuance/validity remains PENDING, outside the accepted late-write risk.
  */
 export function verifyCredentials(value, sourceHashes, effectiveAt, context) {
-  const families = ['LEGACY_KEYS_AND_REPRESENTING_TOKENS', 'FOREIGN_ACCESS_TOKENS', 'SIGNED_JWT_AND_BLOB', 'OIDC_TOKENS', 'FIREBASE_SESSIONS'];
   demand(value?.status === 'REVIEWED_NO_UNRESOLVED_ROUTE' && value.noIntrusionOrIssuanceInferred === true
     && value.keyDeletionRevokesIssuedTokens === false && value.tokenCreatorRemovalRevokesIssuedTokens === false
     && value.unresolved === 0 && Array.isArray(value.families)
-    && same(value.families.map(f => f.family).sort(), [...families].sort()), 'preexisting credential treatment incomplete');
+    && same(value.families.map(f => f.family).sort(), [...CREDENTIAL_FAMILIES].sort()), 'preexisting credential treatment incomplete');
   for (const family of value.families) {
-    demand(['DESTINATION_AUTHORITY_CONTAINED', 'BOUNDED_VALIDITY_AND_ISSUANCE_CLOSED', 'NO_RELEVANT_AUTHORITY_WITH_EVIDENCE'].includes(family.disposition)
+    demand(CLOSED_CREDENTIAL_DISPOSITIONS.includes(family.disposition)
       && Array.isArray(family.representedPrincipals) && family.representedPrincipals.length > 0
       && typeof family.scope === 'string' && family.scope.length > 0
       && typeof family.validityBasis === 'string' && family.validityBasis.length >= 30
