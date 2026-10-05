@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { readFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { test, expect, vi } from 'vitest';
 import { initializeTestEnvironment, assertSucceeds, assertFails } from '@firebase/rules-unit-testing';
 import { initializeApp, deleteApp } from 'firebase-admin/app';
@@ -15,6 +16,7 @@ test('real Auth + checkout handler + candidate Rules persist one canonical order
   expect(process.env.FIRESTORE_EMULATOR_HOST).toBe('127.0.0.1:8188');
   expect(process.env.FIREBASE_AUTH_EMULATOR_HOST).toBe('127.0.0.1:9198');
   const projectId = 'demo-mutter-r1';
+  const uid = `handler-buyer-${randomUUID()}`;
   const env = await initializeTestEnvironment({ projectId, firestore: { host: '127.0.0.1', port: 8188, rules: readFileSync('firebase.catalog-r1b.rules', 'utf8') } });
   const app = initializeApp({ projectId }, 'catalog-checkout');
   const db = getFirestore(app); const auth = getAuth(app);
@@ -44,9 +46,8 @@ test('real Auth + checkout handler + candidate Rules persist one canonical order
   try {
     await env.clearFirestore();
     await db.doc('operations/webStockCutover').set({schema:1,state:'open',revision:'synthetic-open-rules-handler',updatedAt:new Date()});
-    await auth.createUser({ uid: 'handler-buyer' });
-    const custom = await auth.createCustomToken('handler-buyer');
-    const signed = await fetch('http://127.0.0.1:9198/identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=synthetic', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: custom, returnSecureToken: true }) });
+    await auth.createUser({ uid, email: `${uid}@example.invalid`, password: 'synthetic-handler-buyer-password' });
+    const signed = await fetch('http://127.0.0.1:9198/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=synthetic', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: `${uid}@example.invalid`, password: 'synthetic-handler-buyer-password', returnSecureToken: true }) });
     const token = string(object(await signed.json()).idToken);
     await auth.verifyIdToken(token, true);
     await db.doc('products/p').set({ active: true, title: 'P', stockTotal: 2, priceUSD: 100 });
@@ -57,9 +58,9 @@ test('real Auth + checkout handler + candidate Rules persist one canonical order
     const started = await call(input, token); expect(started.status).toBe(200);
     expect((await call(input, token)).body).toEqual(started.body); expect(posts).toBe(1);
     const id = string(started.body.id); expect(externalReference).toBe(id);
-    expect((await db.doc(`orders/${id}`).get()).data()).toMatchObject({ uid: 'handler-buyer', total: 100, currency: 'UYU', paymentStatus: 'pending', checkoutIntentId: id, preferenceId: 'synthetic-preference' });
-    expect((await db.doc(`checkoutIntents/${id}`).get()).data()).toMatchObject({ uid: 'handler-buyer', state: 'ready', preferenceId: 'synthetic-preference' });
-    const buyer = env.authenticatedContext('handler-buyer').firestore();
+    expect((await db.doc(`orders/${id}`).get()).data()).toMatchObject({ uid, total: 100, currency: 'UYU', paymentStatus: 'pending', checkoutIntentId: id, preferenceId: 'synthetic-preference' });
+    expect((await db.doc(`checkoutIntents/${id}`).get()).data()).toMatchObject({ uid, state: 'ready', preferenceId: 'synthetic-preference' });
+    const buyer = env.authenticatedContext(uid, { firebase: { sign_in_provider: 'password', identities: {} } }).firestore();
     await assertSucceeds(buyer.doc(`orders/${id}`).get());
     await assertFails(buyer.doc(`orders/${id}`).update({ paymentStatus: 'paid' }));
     await assertFails(buyer.doc(`checkoutIntents/${id}`).get());
@@ -67,5 +68,5 @@ test('real Auth + checkout handler + candidate Rules persist one canonical order
       await assertFails(buyer.collection(collection).get());
       await assertFails(buyer.doc(`${collection}/synthetic`).set({ synthetic: true }));
     }
-  } finally { transport.mockRestore(); vi.unstubAllEnvs(); await db.terminate(); await deleteApp(app); await env.cleanup(); }
+  } finally { await auth.deleteUser(uid); transport.mockRestore(); vi.unstubAllEnvs(); await db.terminate(); await deleteApp(app); await env.cleanup(); }
 });

@@ -40,10 +40,10 @@ test('R1-5 rejects non-admin and client role claims before any order read', asyn
 });
 
 test('R1-5 verified Admin claims read bounded pages without a Rules permissions document', async () => {
-  const one = await adminOrders(db, { admin: true }, { action: 'admin_orders', limit: 2 });
+  const one = await adminOrders(db, { admin: true, firebase: { sign_in_provider: 'password' } }, { action: 'admin_orders', limit: 2 });
   if (!('orders' in one)) throw new Error('Expected list');
   expect(one.orders.map(order => order.id)).toEqual(['a_paid', 'b_reserved']); expect(one.nextCursor).toEqual({ section: 'recent', id: 'b_reserved', createdAt: { seconds: 6, nanoseconds: 0 } });
-  const two = await adminOrders(db, { superadmin: true }, { action: 'admin_orders', limit: 2, cursor: one.nextCursor });
+  const two = await adminOrders(db, { superadmin: true, firebase: { sign_in_provider: 'password' } }, { action: 'admin_orders', limit: 2, cursor: one.nextCursor });
   if (!('orders' in two)) throw new Error('Expected list');
   expect(two.orders.map(order => order.id)).toEqual(['c_released', 'd_late']);
   expect((await db.collection('adminUsers').get()).size).toBe(0);
@@ -55,29 +55,29 @@ test('R1-5 verified Admin claims read bounded pages without a Rules permissions 
 
 test('R1-5 details expose canonical attention, release and delivery without changing orders or stock', async () => {
   const before = await db.collection('orders').get();
-  const detail = await adminOrders(db, { admin: true }, { action: 'admin_order', orderId: 'f_review' });
+  const detail = await adminOrders(db, { admin: true, firebase: { sign_in_provider: 'password' } }, { action: 'admin_order', orderId: 'f_review' });
   expect(detail).toMatchObject({ order: { paymentStatus: 'in_review', inventoryState: 'reserved', attention: 'provider_verification_unavailable',
     nextCheckAt: 8000, paymentDeadline: 2000, delivery: 'shipping', shipping: { department: 'Montevideo' },
     items: [{ title: 'Consola', variant: 'Color-Negro', quantity: 1, unitPrice: 4821 }],
     reconciliation: { state: 'review', lastError: 'provider_verification_unavailable' } } });
-  expect(await adminOrders(db, { admin: true }, { action: 'admin_order', orderId: 'c_released' })).toMatchObject({ order: { inventoryState: 'released', releasedAt: 5000 } });
-  expect(await adminOrders(db, { admin: true }, { action: 'admin_order', orderId: 'd_late' })).toMatchObject({ order: { attention: 'approved_without_stock' } });
-  expect(await adminOrders(db, { admin: true }, { action: 'admin_order', orderId: 'e_duplicate' })).toMatchObject({ order: { attention: 'duplicate_approved_payment' } });
+  expect(await adminOrders(db, { admin: true, firebase: { sign_in_provider: 'password' } }, { action: 'admin_order', orderId: 'c_released' })).toMatchObject({ order: { inventoryState: 'released', releasedAt: 5000 } });
+  expect(await adminOrders(db, { admin: true, firebase: { sign_in_provider: 'password' } }, { action: 'admin_order', orderId: 'd_late' })).toMatchObject({ order: { attention: 'approved_without_stock' } });
+  expect(await adminOrders(db, { admin: true, firebase: { sign_in_provider: 'password' } }, { action: 'admin_order', orderId: 'e_duplicate' })).toMatchObject({ order: { attention: 'duplicate_approved_payment' } });
   const after = await db.collection('orders').get();
   expect(after.docs.map(doc => ({ id: doc.id, data: doc.data(), updateTime: doc.updateTime }))).toEqual(before.docs.map(doc => ({ id: doc.id, data: doc.data(), updateTime: doc.updateTime })));
   expect((await db.collection('inventoryMovements').get()).empty).toBe(true);
 });
 
 test('R1-5 historical records without a date remain visible and never become verified from legacy status', async () => {
-  const page = await adminOrders(db, { admin: true }, { action: 'admin_orders', section: 'undated', limit: 50 });
+  const page = await adminOrders(db, { admin: true, firebase: { sign_in_provider: 'password' } }, { action: 'admin_orders', section: 'undated', limit: 50 });
   expect(page).toMatchObject({ orders: [{ id: 'z_historical', historical: true, paymentStatus: 'historical_unverified', inventoryState: 'historical', createdAt: null, currency: null }], nextCursor: null });
 });
 
 test('R1-5 rejects unbounded/invalid pages and treats storage errors as errors', async () => {
   for (const body of [{ action: 'admin_orders', limit: 51 }, { action: 'admin_orders', limit: 0 }, { action: 'admin_orders', cursor: 'orders/secret' }, { action: 'admin_order', orderId: '..' }, { action: 'admin_orders', uid: 'another-buyer' }]) {
-    await expect(adminOrders(db, { admin: true }, body)).rejects.toMatchObject({ status: 400 });
+    await expect(adminOrders(db, { admin: true, firebase: { sign_in_provider: 'password' } }, body)).rejects.toMatchObject({ status: 400 });
   }
-  await expect(adminOrders(db, { admin: true }, { action: 'admin_order', orderId: 'absent' })).rejects.toMatchObject({ status: 404 });
+  await expect(adminOrders(db, { admin: true, firebase: { sign_in_provider: 'password' } }, { action: 'admin_order', orderId: 'absent' })).rejects.toMatchObject({ status: 404 });
   const reads = vi.spyOn(db, 'collection').mockImplementationOnce(() => { throw new Error('synthetic storage unavailable'); });
-  await expect(adminOrders(db, { admin: true }, { action: 'admin_orders' })).rejects.toThrow('synthetic storage unavailable'); reads.mockRestore();
+  await expect(adminOrders(db, { admin: true, firebase: { sign_in_provider: 'password' } }, { action: 'admin_orders' })).rejects.toThrow('synthetic storage unavailable'); reads.mockRestore();
 });

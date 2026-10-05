@@ -18,6 +18,14 @@ Contexto fechado, no runtime acreditado: la revalidación del 30/09/2026 inform�
 
 ## 2. Evidencia previa obligatoria
 
+Para el target de autenticación de 2026-10-05, incorporar obligatoriamente
+[frontera Firebase y cierre operativo](LEGACY_AUTH_CLOSURE.md). El rechazo custom
+no acredita cierre de sesiones derivadas a contraseña. Conservar ese pendiente
+en las familias de credenciales; ningún verde de CI sustituye sus recibos.
+Las Rules candidatas se seleccionan con `firebase.stock-release.json`, sólo
+`firestore:rules`: no publicar el `firebase.json` histórico permisivo. Comparar
+los hashes de los bytes probados y del readback antes de declarar aplicación.
+
 Para cada entrega, volver a ejecutar los [controles de la excepción Edge](../edge-tooling-exception.md) sobre el HEAD/tree y el Admin pareado reales: identidad instalada, consumidores, compilación observada, artefactos finales de SPA/checkout/reconciliador y arranque Node aislado. Conservar sus recibos, grafos y hashes junto con los cuatro audits y el CI exacto. `NOT_VERIFIED` o ausencia de evidencia detienen la aceptación. Si la plataforma reconstruye, cambia el builder o usa otros bytes, los artefactos de CI no atestiguan ese build remoto: antes de aceptar una publicación futura, verificar identidad de herramientas/runtime, observación equivalente de carga y grafos/hashes de los artefactos realmente servidos, bajo autorización independiente. Esta preparación no observó ni autoriza esa reconstrucción. Cambios de versión, cadena, bytes, consumidor o exposición suspenden la excepción; no actualizar hashes permitidos sólo para obtener verde. Esto añade un prerrequisito y conserva íntegros los controles Cron/WAF siguientes.
 
 Antes de cambiar Production, conservar un registro con hora, operador, autorización, proyecto/equipo, HEAD/tree y par Admin de destino; deployment anterior y candidato con sus URLs, target, aliases y estado; definición y estado efectivo de Cron; inventario de otros jobs del proyecto; configuración WAF activa/versionada completa; y estado de Deployment Protection. No guardar valores de secretos, headers de autenticación, tokens o cuerpos de pago.

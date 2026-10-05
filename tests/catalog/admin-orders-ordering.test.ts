@@ -17,7 +17,7 @@ afterAll(async () => { await db.terminate(); await deleteApp(app); });
 const order = (createdAt: unknown) => ({ createdAt, commerceVersion: 2, paymentStatus: 'approved',
   inventory: { state: 'committed' }, total: 100, currency: 'UYU' });
 async function page(body: Record<string, unknown> = {}) {
-  return parseAdminOrderPage(await adminOrders(db, { admin: true }, { action: 'admin_orders', ...body }));
+  return parseAdminOrderPage(await adminOrders(db, { admin: true, firebase: { sign_in_provider: 'password' } }, { action: 'admin_orders', ...body }));
 }
 
 test('R1-D list-order: the newest twenty of45 come first; all pages are20/20/5 without omissions', async () => {
@@ -82,7 +82,7 @@ test('R1-D malformed and cross-section cursors fail before reading business data
     { section: 'undated', cursor: { section: 'recent', id: 'a', createdAt: { seconds: 1000, nanoseconds: 0 } } },
     { cursor: { section: 'undated', id: 'a' } },
   ];
-  for (const body of invalid) await expect(adminOrders(db, { admin: true }, { action: 'admin_orders', ...body })).rejects.toMatchObject({ status: 400 });
+  for (const body of invalid) await expect(adminOrders(db, { admin: true, firebase: { sign_in_provider: 'password' } }, { action: 'admin_orders', ...body })).rejects.toMatchObject({ status: 400 });
   expect(reads).not.toHaveBeenCalled(); reads.mockRestore();
 });
 

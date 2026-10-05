@@ -33,7 +33,7 @@ test('exact previous effective policy accepts a forged paid order for withdrawn 
 });
 for (const identity of ['unauthenticated', 'anonymous', 'buyer', 'other', 'admin'] as const) {
   test(`${identity} cannot create, replace, update or delete commercial records, including nested paths`, async () => {
-    const context = identity === 'unauthenticated' ? env.unauthenticatedContext() : env.authenticatedContext(identity === 'anonymous' ? 'buyer' : identity, identity === 'admin' ? { email: 'admin@example.invalid' } : identity === 'anonymous' ? {} : { email: `${identity}@example.invalid` });
+    const context = identity === 'unauthenticated' ? env.unauthenticatedContext() : env.authenticatedContext(identity === 'anonymous' ? 'buyer' : identity, identity === 'admin' ? { email: 'admin@example.invalid', firebase: { sign_in_provider: 'password', identities: {} } } : identity === 'anonymous' ? {} : { email: `${identity}@example.invalid` });
     const db = context.firestore();
     for (const collection of ['orders', 'checkoutIntents']) {
       await assertFails(db.doc(`${collection}/forged-${identity}`).set({ ...order, uid: identity }));
@@ -50,26 +50,26 @@ for (const identity of ['unauthenticated', 'anonymous', 'buyer', 'other', 'admin
   });
 }
 test('own order get/query and verified effective administrator reads; foreign access and claim-only escalation denied', async () => {
-  const buyer = env.authenticatedContext('buyer').firestore();
+  const buyer = env.authenticatedContext('buyer', { firebase: { sign_in_provider: 'anonymous', identities: {} } }).firestore();
   await assertSucceeds(buyer.doc('orders/existing').get());
   await assertSucceeds(buyer.collection('orders').where('uid', '==', 'buyer').get());
   await assertFails(buyer.collection('orders').get());
   await assertFails(env.authenticatedContext('other', { email: 'other@example.invalid' }).firestore().doc('orders/existing').get());
   await assertFails(env.unauthenticatedContext().firestore().doc('orders/existing').get());
-  const admin = env.authenticatedContext('admin', { email: 'admin@example.invalid' }).firestore();
+  const admin = env.authenticatedContext('admin', { email: 'admin@example.invalid', firebase: { sign_in_provider: 'password', identities: {} } }).firestore();
   await assertSucceeds(admin.doc('orders/existing').get());
   await assertSucceeds(admin.collection('orders').get());
   await assertFails(env.authenticatedContext('claim-only', { admin: true, email: 'claim@example.invalid' }).firestore().doc('orders/existing').get());
   for (const db of [buyer, admin]) await assertFails(db.doc('checkoutIntents/existing').get());
 });
-test('public catalog, effective admin edits, private anonymous/registered carts and client profile remain functional', async () => {
+test('public catalog, server-owned admin edits, private anonymous/registered carts and client profile remain functional', async () => {
   const publicDb = env.unauthenticatedContext().firestore();
   for (const path of ['products/published', 'products/withdrawn', 'categories/c', 'categories/c/subcategories/s']) await assertSucceeds(publicDb.doc(path).get());
-  const admin = env.authenticatedContext('admin', { email: 'admin@example.invalid' }).firestore();
-  await assertSucceeds(admin.doc('products/published').update({ title: 'Edited' }));
-  await assertFails(env.authenticatedContext('buyer').firestore().doc('products/published').update({ active: true }));
+  const admin = env.authenticatedContext('admin', { email: 'admin@example.invalid', firebase: { sign_in_provider: 'password', identities: {} } }).firestore();
+  await assertFails(admin.doc('products/published').update({ title: 'Edited' }));
+  await assertFails(env.authenticatedContext('buyer', { firebase: { sign_in_provider: 'anonymous', identities: {} } }).firestore().doc('products/published').update({ active: true }));
   for (const uid of ['anonymous-cart', 'registered-cart']) {
-    const db = env.authenticatedContext(uid, uid === 'registered-cart' ? { email: 'client@example.invalid' } : {}).firestore();
+    const db = env.authenticatedContext(uid, uid === 'registered-cart' ? { email: 'client@example.invalid', firebase: { sign_in_provider: 'password', identities: {} } } : { firebase: { sign_in_provider: 'anonymous', identities: {} } }).firestore();
     await assertSucceeds(db.doc(`carts/${uid}`).set({ items: [{ id: 'published', quantity: 1 }] }));
     await assertSucceeds(db.doc(`carts/${uid}`).set({ items: [] }));
     await assertSucceeds(db.doc(`carts/${uid}`).get());

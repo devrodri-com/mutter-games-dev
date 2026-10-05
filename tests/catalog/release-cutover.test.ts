@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { afterAll, afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { initializeApp, deleteApp } from 'firebase-admin/app';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
-const auth = vi.hoisted(() => ({ verify: vi.fn(async () => ({ uid: 'synthetic-cutover-buyer' })) }));
+const auth = vi.hoisted(() => ({ verify: vi.fn(async () => ({ uid: 'synthetic-cutover-buyer', firebase: { sign_in_provider: 'anonymous' } })) }));
 vi.mock('firebase-admin/auth', () => ({ getAuth: () => ({ verifyIdToken: auth.verify }) }));
 const provider = vi.hoisted(() => ({ post: vi.fn(async () => ({ id: 'synthetic-preference', init_point: 'https://example.invalid/payment', collectorId: '200' })) }));
 vi.mock('../../api/_lib/mercado-pago', () => ({ createMercadoPagoPreference: provider.post }));

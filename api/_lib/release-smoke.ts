@@ -1,7 +1,7 @@
 import type { Firestore } from 'firebase-admin/firestore';
 import { CheckoutError, record } from './checkout-domain.js';
 import { checkout } from './checkout-service.js';
-import { adminOrders } from './admin-orders.js';
+import { adminOrderReadSmoke } from './admin-orders.js';
 import { releaseAuthorized, type ReleaseRequest, type ReleaseResponse } from './release-attestation.js';
 
 /** Internal read-only capability. It cannot forward arbitrary checkout actions. */
@@ -32,8 +32,8 @@ export async function handleReleaseSmoke(
             const page = await db.collection('products').limit(1).get();
             res.status(200).json({ schemaVersion: 1, smoke: 'catalog', readable: true, sampled: page.size });
         } else if (body.action === 'admin_read') {
-            const page = await adminOrders(db, { admin: true }, { action: 'admin_orders', limit: 1 });
-            res.status(200).json({ schemaVersion: 1, smoke: 'admin_read', readable: true, sampled: 'orders' in page ? page.orders.length : 0 });
+            const sampled = await adminOrderReadSmoke(db);
+            res.status(200).json({ schemaVersion: 1, smoke: 'admin_read', readable: true, sampled });
         } else {
             // These exact existing actions only read. Never pass status/verify/start,
             // a provider implementation or a payment gateway to this capability.

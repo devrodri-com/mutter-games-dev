@@ -7,8 +7,8 @@ if (process.env.FIRESTORE_EMULATOR_HOST !== '127.0.0.1:8188') throw new Error('D
 const env = await initializeTestEnvironment({ projectId: 'demo-mutter-cutover-rules', firestore: {
     host: '127.0.0.1', port: 8188, rules: readFileSync('firebase.catalog-cutover.rules', 'utf8'),
 } });
-const admin = env.authenticatedContext('admin', { email: 'admin@example.invalid' }).firestore();
-const buyer = env.authenticatedContext('buyer', { email: 'buyer@example.invalid' }).firestore();
+const admin = env.authenticatedContext('admin', { email: 'admin@example.invalid', firebase: { sign_in_provider: 'password', identities: {} } }).firestore();
+const buyer = env.authenticatedContext('buyer', { email: 'buyer@example.invalid', firebase: { sign_in_provider: 'password', identities: {} } }).firestore();
 const publicDb = env.unauthenticatedContext().firestore();
 const controlPath = 'operations/webStockCutover';
 async function control(state: 'open' | 'closed' | 'reconciling') {
@@ -40,9 +40,9 @@ test('missing control closes every direct writer while preserving public and aut
     await assertSucceeds(buyer.doc('orders/o').get());
     await assertSucceeds(buyer.doc('carts/buyer').get());
 });
-test('open preserves existing authorized writes; client cannot modify control or commercial ledgers', async () => {
+test('open preserves owner writes and keeps catalogue server-owned; client cannot modify control or commercial ledgers', async () => {
     await control('open');
-    for (const path of adminPaths) await assertSucceeds(admin.doc(path).update({ name: 'open' }));
+    for (const path of adminPaths) await assertFails(admin.doc(path).update({ name: 'open' }));
     for (const path of buyerPaths) await assertSucceeds(buyer.doc(path).update({ name: 'open' }));
     for (const db of [admin, buyer, publicDb]) {
         await assertFails(db.doc(controlPath).get());

@@ -513,11 +513,10 @@ test('real handler withholds the existing payment link after actual Admin unpubl
     let reservationId: string | undefined;
     try {
         await handlerDb.doc('operations/webStockCutover').set({schema:1,state:'open',revision:'synthetic-coupled-handler-open',updatedAt:new Date()});
-        await auth.createUser({ uid });
+        await auth.createUser({ uid, email: `${uid}@example.invalid`, password: `synthetic-${uid}` });
         authCreated = true;
-        const token = await auth.createCustomToken(uid);
-        const signed = await fetch(`http://${authHost}/identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=synthetic`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, returnSecureToken: true }),
+        const signed = await fetch(`http://${authHost}/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=synthetic`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: `${uid}@example.invalid`, password: `synthetic-${uid}`, returnSecureToken: true }),
         });
         const authResponse = record(await signed.json());
         if (typeof authResponse.idToken !== 'string') throw new Error('Expected emulator ID token');

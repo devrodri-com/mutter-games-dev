@@ -45,11 +45,10 @@ async function invoke(body: unknown, token?: string) {
 }
 beforeAll(async () => {
   for (const user of users) {
-    await auth.createUser({ uid: user.uid, email: user.email });
+    await auth.createUser({ uid: user.uid, email: user.email, password: `synthetic-${user.uid}` });
     if (claimsByRole[user.role]) await auth.setCustomUserClaims(user.uid, claimsByRole[user.role]);
-    const custom = await auth.createCustomToken(user.uid);
-    const signed = await fetch('http://127.0.0.1:9198/identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=synthetic', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: custom, returnSecureToken: true }),
+    const signed = await fetch('http://127.0.0.1:9198/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=synthetic', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: user.email, password: `synthetic-${user.uid}`, returnSecureToken: true }),
     });
     expect(signed.ok).toBe(true);
     const body = record(await signed.json());

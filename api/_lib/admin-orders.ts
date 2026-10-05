@@ -1,3 +1,4 @@
+import { admitsSession } from './session-authority.js';
 import { FieldPath, Timestamp, type Firestore } from 'firebase-admin/firestore';
 import { CheckoutError } from './checkout-domain.js';
 import { ADMIN_ORDER_TIMESTAMP_RANGE, adminCommercialAttention, parseAdminOrderCursor, type AdminOrderCursor, type AdminOrderDetail, type AdminOrderPage, type AdminOrderSummary } from '../../src/domain/adminOrders.js';
@@ -79,7 +80,17 @@ function validId(value: unknown): value is string {
 }
 /** Claims must come only from verifyIdToken(token, true), as in the existing Admin API. No permissions document is required. */
 export async function adminOrders(db: Firestore, verifiedClaims: Record<string, unknown>, body: Record<string, unknown>): Promise<AdminOrderPage | { order: AdminOrderDetail }> {
-  if (verifiedClaims.admin !== true && verifiedClaims.superadmin !== true) throw new CheckoutError(403, 'FORBIDDEN', 'No tenés permisos para consultar pedidos.');
+  if (!admitsSession(verifiedClaims, 'admin') || (verifiedClaims.admin !== true && verifiedClaims.superadmin !== true)) throw new CheckoutError(403, 'FORBIDDEN', 'No tenés permisos para consultar pedidos.');
+  return readAdminOrders(db, body);
+}
+
+/** Dedicated release bearer must already be verified. No session or role is fabricated. */
+export async function adminOrderReadSmoke(db: Firestore): Promise<number> {
+  const page = await readAdminOrders(db, { action: 'admin_orders', limit: 1 });
+  return 'orders' in page ? page.orders.length : 0;
+}
+
+async function readAdminOrders(db: Firestore, body: Record<string, unknown>): Promise<AdminOrderPage | { order: AdminOrderDetail }> {
   if (body.action === 'admin_order') {
     if (Object.keys(body).some(key => !['action', 'orderId'].includes(key)) || !validId(body.orderId)) throw new CheckoutError(400, 'INVALID_INPUT', 'Pedido inválido.');
     const snapshot = await db.collection('orders').doc(body.orderId).get();
