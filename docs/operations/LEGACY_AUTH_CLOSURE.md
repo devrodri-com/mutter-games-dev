@@ -72,9 +72,9 @@ Conocer un UID, un pedido o presentar la propia sesión no libera ese estado.
 Para anónimos o cuentas sin canal, una identificación independiente del titular
 legítimo puede permitir un regreso al mismo UID; es una posibilidad, no una garantía.
 Sin esa evidencia, conservar el UID y los datos sin recrear ni liberar la cuenta.
-La lectura mínima actual deja 94 carritos y 2 pedidos sin vínculo suficiente con
-un UID inventariado: permanecen intactos, sin asignación, traslado ni migración
-de sincronización. La ausencia de vínculo no autoriza inferir un propietario.
+Los documentos sin vínculo suficiente con un UID inventariado permanecen
+intactos, sin asignación, traslado ni migración de sincronización. Sus counts quedan
+en el inventario privado; la ausencia de vínculo no autoriza inferir un propietario.
 Las cuentas nuevas posteriores al corte usan el bootstrap acotado del servidor,
 que contrasta la creación oficial y proveedor permitido, sin dar roles de Admin.
 El bootstrap crea el estado protegido NATIVE_POST_CUTOVER antes de la capability;
