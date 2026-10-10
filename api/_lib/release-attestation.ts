@@ -5,7 +5,7 @@ import { object, parseReleaseBuildIdentity, type ReleaseBuildIdentity } from './
 // can test the emitted contract without copying its acceptance policy.
 export { verifyReleaseAttestation } from './release-attestation-verifier.js';
 
-export type ReleaseHandler = 'checkout' | 'reconcile';
+export type ReleaseHandler = 'checkout' | 'reconcile' | 'access';
 export type ReleaseRequest = {
     method?: string;
     headers: Record<string, string | string[] | undefined>;
@@ -55,7 +55,7 @@ export function handleReleaseAttestation(req: ReleaseRequest, res: ReleaseRespon
     const action = req.headers['x-mutter-release-action'];
     if (action === undefined) return false;
     res.setHeader('Cache-Control', 'no-store');
-    const method = handler === 'checkout' ? 'POST' : 'GET';
+    const method = handler === 'reconcile' ? 'GET' : 'POST';
     if (req.method !== method) {
         res.setHeader('Allow', method);
         res.status(405).json({ error: 'Method not allowed' });

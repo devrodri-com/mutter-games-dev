@@ -11,6 +11,7 @@
       "Edge control positive and negative regressions",
       "Build",
       "Checkout API typecheck",
+      "Credential access API typecheck",
       "Stock reconciliation API typecheck",
       "Prebuilt control regressions",
       "Cutover control regressions",

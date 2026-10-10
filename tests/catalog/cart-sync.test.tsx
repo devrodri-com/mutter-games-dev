@@ -1,7 +1,10 @@
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { test,expect,vi,beforeEach,afterEach } from 'vitest';
-const boundary=vi.hoisted(()=>({auth:{currentUser:{uid:'synthetic-cart'}},listeners:[] as ((snap:unknown)=>void)[],productListeners:[] as {id:string;callback:(snapshot:unknown)=>void;error:()=>void}[],authListeners:[] as ((user:unknown)=>void)[],write:vi.fn(),read:vi.fn()}));
+const boundary=vi.hoisted(()=>({auth:{currentUser:{uid:'synthetic-cart'}},listeners:[] as ((snap:unknown)=>void)[],productListeners:[] as {id:string;callback:(snapshot:unknown)=>void;error:()=>void}[],authListeners:[] as ((user:unknown)=>void)[],write:vi.fn(),read:vi.fn(),credentialAccess:'active' as 'active'|'pending'|'loading'|'unavailable'}));
+// These stock fixtures replace the admission boundary. Real Auth/SDK/Rules and access UI
+// suites verify authorization; CartProvider, cache, synchronization and inventory stay real.
+vi.mock('../../src/context/AuthContext',()=>({useAuth:()=>({credentialAccess:boundary.credentialAccess})}));
 vi.mock('../../src/firebase',()=>({auth:boundary.auth,db:{}}));
 vi.mock('../../src/firebaseUtils',()=>({db:{}}));
 vi.mock('react-hot-toast',()=>({toast:{error:vi.fn()}}));
@@ -14,7 +17,7 @@ const item={id:'p',slug:'p-game',name:'Old',title:{es:'Old',en:''},priceUSD:10,p
 function Probe(){context=useCart();return <div>{context.items.length}</div>;}
 function snapshot(items:unknown[]){return {metadata:{fromCache:false,hasPendingWrites:false},exists:()=>true,data:()=>({cartItems:items})};}
 const current=()=>({exists:()=>true,id:'p',data:()=>({active:true,title:'Current',priceUSD:20,stockTotal:2})});
-beforeEach(async()=>{localStorage.clear();boundary.auth.currentUser={uid:'synthetic-cart'};boundary.authListeners=[];boundary.listeners=[];boundary.productListeners=[];boundary.write.mockReset().mockResolvedValue(undefined);boundary.read.mockReset().mockResolvedValue(current());const element=document.createElement('div');document.body.append(element);root=createRoot(element);await act(async()=>root.render(<CartProvider><Probe/></CartProvider>));});
+beforeEach(async()=>{localStorage.clear();boundary.credentialAccess='active';boundary.auth.currentUser={uid:'synthetic-cart'};boundary.authListeners=[];boundary.listeners=[];boundary.productListeners=[];boundary.write.mockReset().mockResolvedValue(undefined);boundary.read.mockReset().mockResolvedValue(current());const element=document.createElement('div');document.body.append(element);root=createRoot(element);await act(async()=>root.render(<CartProvider><Probe/></CartProvider>));});
 afterEach(async()=>{await act(async()=>root.unmount());document.body.innerHTML='';});
 test('remote restore revalidates price; late validation cannot repopulate explicit clear',async()=>{
  await act(async()=>boundary.listeners[0](snapshot([item])));expect(context?.items[0].priceUSD).toBe(20);
@@ -109,4 +112,31 @@ test('failed or malformed live inventory fails closed and a verified snapshot re
  await act(async () => boundary.productListeners[0].callback({ metadata: { fromCache: false, hasPendingWrites: false }, exists: () => true, data: () => ({ active: true, webReservations: null }) }));
  expect(context?.items[0].availability).toBe('unverified');
  await act(async () => boundary.productListeners[0].callback(productSnapshot(2))); expect(context?.items[0].availability).toBe('available');
+});
+
+
+test('pending access keeps the same UID cached cart dirty without private synchronization; recovery resumes it once', async () => {
+ const preserved = { ...item, customName: 'Cached selection', quantity: 2 };
+ const cached = JSON.stringify({ items: [preserved], dirty: true });
+ localStorage.setItem('mutter-cart:synthetic-cart', cached);
+ await act(async () => { boundary.credentialAccess = 'pending'; root.render(<CartProvider><Probe /></CartProvider>); });
+ expect(context?.items).toMatchObject([{ id: 'p', customName: 'Cached selection', quantity: 2 }]);
+ expect(context?.cartReady).toBe(false); expect(context?.cartError).toContain('Tu carrito se conserva');
+ expect(boundary.listeners).toHaveLength(0); expect(boundary.write).not.toHaveBeenCalled();
+ expect(localStorage.getItem('mutter-cart:synthetic-cart')).toBe(cached);
+ await act(async () => context?.removeItem(preserved));
+ expect(context?.items).toMatchObject([{ customName: 'Cached selection', quantity: 2 }]);
+ expect(boundary.write).not.toHaveBeenCalled(); expect(boundary.listeners).toHaveLength(0);
+ expect(localStorage.getItem('mutter-cart:synthetic-cart')).toBe(cached);
+ // Products are public; the denied listeners above are private cart listeners.
+ await act(async () => { boundary.credentialAccess = 'active'; root.render(<CartProvider><Probe /></CartProvider>); });
+ expect(boundary.write).toHaveBeenCalledTimes(1);
+ expect(boundary.write.mock.calls[0]?.[0]).toMatchObject({ collection: 'carts', id: 'synthetic-cart' });
+ expect(boundary.write.mock.calls[0]?.[1].cartItems).toMatchObject([{ customName: 'Cached selection', quantity: 2 }]);
+ expect(boundary.listeners).toHaveLength(1);
+ expect(JSON.parse(localStorage.getItem('mutter-cart:synthetic-cart') ?? '{}')).toMatchObject({ dirty: false, items: [{ customName: 'Cached selection', quantity: 2 }] });
+ await act(async () => boundary.listeners[0](snapshot([preserved])));
+ expect(context?.cartReady).toBe(true); expect(context?.cartError).toBeNull();
+ expect(context?.items[0]).toMatchObject({ customName: 'Cached selection', quantity: 2, priceUSD: 20 });
+ expect(boundary.write).toHaveBeenCalledTimes(1);
 });

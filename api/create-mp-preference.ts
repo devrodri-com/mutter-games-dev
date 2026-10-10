@@ -1,7 +1,8 @@
 import type { VercelRequest } from '@vercel/node';
 import { adminApp } from './_lib/firebase-server.js';
 import { adminOrders } from './_lib/admin-orders.js';
-import { admitsSession } from './_lib/session-authority.js';
+import { requireCredentialSession } from './_lib/credential-session.js';
+import { CredentialAccessError } from './_lib/credential-access-state.js';
 import { requestAdmissionContext } from './_lib/web-admission.js';
 import type { DecodedIdToken } from 'firebase-admin/auth';
 import { getAuth } from 'firebase-admin/auth';
@@ -37,9 +38,7 @@ export default async function handler(req: Pick<VercelRequest, 'method' | 'heade
         catch {
             return res.status(401).json({ error: 'La sesión no es válida. Volvé a intentarlo.' });
         }
-        if (!admitsSession(claims, 'buyer')) {
-            throw new CheckoutError(403, 'SESSION_PROVIDER_NOT_ALLOWED', 'Esta sesión no está admitida. Iniciá sesión con el acceso habitual de la tienda.');
-        }
+        await requireCredentialSession(getAuth(app), getFirestore(app), claims, 'buyer');
         let body: unknown;
         try {
             body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
@@ -59,7 +58,7 @@ export default async function handler(req: Pick<VercelRequest, 'method' | 'heade
         }));
     }
     catch (error: unknown) {
-        if (error instanceof CheckoutError || error instanceof CutoverClosedError)
+        if (error instanceof CheckoutError || error instanceof CutoverClosedError || error instanceof CredentialAccessError)
             return res.status(error.status).json({ code: error.code, error: error.message });
         return res.status(503).json({ code: 'UNAVAILABLE', error: 'No pudimos verificar la compra. Conservamos tu carrito; intentá nuevamente.' });
     }

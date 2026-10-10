@@ -29,7 +29,7 @@ export function verifyReleaseAttestation(value: unknown, expected: AttestationEx
     const build = parseReleaseBuildIdentity(row?.buildIdentity);
     if (!row || Object.keys(row).sort().join(',') !== 'buildIdentity,coldStartId,deployment,handler,invocationId,nativeUndici,node,schemaVersion'
         || row.schemaVersion !== 1) reasons.push('INVALID_RECEIPT_SCHEMA');
-    if (!['checkout', 'reconcile'].includes(expected.handler) || row?.handler !== expected.handler) reasons.push('HANDLER_NOT_VERIFIED');
+    if (!['checkout', 'reconcile', 'access'].includes(expected.handler) || row?.handler !== expected.handler) reasons.push('HANDLER_NOT_VERIFIED');
     if (!/^dpl_[A-Za-z0-9]+$/.test(expected.deploymentId) || deployment?.id !== expected.deploymentId
         || !/^[a-z0-9-]+\.vercel\.app$/.test(expected.deploymentUrl) || deployment?.url !== expected.deploymentUrl)
         reasons.push('DEPLOYMENT_NOT_VERIFIED');

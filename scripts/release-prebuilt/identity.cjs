@@ -7,10 +7,8 @@ const { createHash } = require('node:crypto');
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 const jsonBytes = value => Buffer.from(`${JSON.stringify(value, null, 2)}\n`);
 const STAMP_PATH = 'api/_lib/release-build-identity.json';
-const DEFINITIONS = Object.freeze([
-  { key: 'checkout', route: '/api/create-mp-preference', entrypoint: 'api/create-mp-preference.ts', handler: 'api/create-mp-preference.js' },
-  { key: 'reconcile', route: '/api/internal/web-stock-reconcile', entrypoint: 'api/internal/web-stock-reconcile.ts', handler: 'api/internal/web-stock-reconcile.js' },
-]);
+const { DEFINITIONS: topology } = require('../checkout-packaging/function-definitions.cjs');
+const DEFINITIONS = Object.freeze(topology.map(({ key, route, routes, entrypoint, handler }) => ({ key, route, routes, entrypoint, handler })));
 
 async function sourceIdentity(source) {
   assert.equal(process.version, 'v22.23.3', 'Prebuilt requires the reviewed exact Node patch');
@@ -63,7 +61,7 @@ async function outputConfiguration(source) {
   assert.deepEqual(config.builds, [{ src: 'package.json', use: '@vercel/static-build' }, ...DEFINITIONS.map(item => ({ src: item.entrypoint, use: '@vercel/node' }))]);
   assert.deepEqual(config.routes, [
     { src: '/api/orders', dest: 'https://mutter-games-admin-api-prod.vercel.app/api/orders' },
-    ...DEFINITIONS.map(item => ({ src: item.route, dest: `/${item.entrypoint}` })),
+    ...DEFINITIONS.flatMap(item => item.routes.map(route => ({ src: route, dest: `/${item.entrypoint}` }))),
     { handle: 'filesystem' }, { src: '.*', dest: '/index.html' },
   ], 'Changed routes require explicit prebuilt review');
   assert.deepEqual(config.crons, [{ path: '/api/internal/web-stock-reconcile', schedule: '*/5 * * * *' }]);

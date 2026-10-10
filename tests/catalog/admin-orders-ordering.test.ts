@@ -1,23 +1,58 @@
 // @vitest-environment node
-import { createHash } from 'node:crypto';
-import { afterAll, beforeEach, expect, test, vi } from 'vitest';
-import { deleteApp, initializeApp } from 'firebase-admin/app';
+import { createHash, randomUUID } from 'node:crypto';
+import { afterAll, beforeAll, beforeEach, expect, test, vi } from 'vitest';
+import { deleteApp } from 'firebase-admin/app';
+import { getAuth, type DecodedIdToken } from 'firebase-admin/auth';
+import { initializeDemoAdmin } from './demo-admin';
+import { mintCredentialSession } from '../../api/_lib/credential-session';
+import type { CredentialAccount } from '../../api/_lib/credential-access-state';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { adminOrders, projectAdminOrder } from '../../api/_lib/admin-orders';
 import { adminAttentionLabel, adminOrderLabel, parseAdminOrderPage } from '../../src/domain/adminOrders';
 
 if (!/^127\.0\.0\.1:\d+$/.test(process.env.FIRESTORE_EMULATOR_HOST ?? '')) throw new Error('Firestore emulator required');
-const app = initializeApp({ projectId: 'demo-mutter-admin-ordering' }, 'admin-orders-ordering');
-const db = getFirestore(app);
+const app = initializeDemoAdmin('catalog-checkout');
+const db = getFirestore(app), auth = getAuth(app);
+db.settings({ projectId: 'demo-mutter-admin-ordering' });
+const identities = new Map<string, DecodedIdToken>();
+function claims(role: string): DecodedIdToken { const value = identities.get(role); if (!value) throw Error('Missing synthetic admission'); return value; }
+beforeAll(async () => {
+  // Declared authority inputs for read-model tests, not proof of real delivery.
+  // Production minting and actual SDK verification still establish the claims.
+  const epoch = 'synthetic-admin-ordering-epoch';
+  await db.doc('operations/credentialAccessCutover').set({ schema: 1, phase: 'ENFORCED', epoch, legacyCutoffMs: 1 });
+  for (const role of ['admin', 'buyer']) {
+    const uid = `synthetic-ordering-${randomUUID()}`, email = `${uid}@example.invalid`;
+    await auth.createUser({ uid, email });
+    const account: CredentialAccount = { schema: 1, uid, epoch, status: 'RECOVERED', recoveryEmail: email,
+      channelStatus: 'INDEPENDENTLY_VERIFIED', channelEvidenceSha256: '4'.repeat(64), roles: { admin: role === 'admin', superadmin: false } };
+    await db.doc(`credentialAccess/${uid}`).set(account);
+    const issued = await mintCredentialSession(auth, db, account, 'RECOVERY_CHANNEL');
+    if (!issued.customToken) throw Error('Missing synthetic issued capability');
+    const response = await fetch('http://127.0.0.1:9198/identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=synthetic', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: issued.customToken, returnSecureToken: true }),
+    });
+    expect(response.status).toBe(200); const value: unknown = await response.json();
+    if (!value || typeof value !== 'object' || !('idToken' in value) || typeof value.idToken !== 'string') throw Error('Missing demo token');
+    identities.set(role, await auth.verifyIdToken(value.idToken, true));
+  }
+});
 beforeEach(async () => {
   const docs = await db.collection('orders').get();
   await Promise.all(docs.docs.map(doc => doc.ref.delete()));
 });
-afterAll(async () => { await db.terminate(); await deleteApp(app); });
+afterAll(async () => {
+  for (const identity of identities.values()) {
+    await auth.deleteUser(identity.uid); await db.doc(`credentialAccess/${identity.uid}`).delete();
+    const sessions = await db.collection('credentialSessions').where('uid', '==', identity.uid).get();
+    for (const session of sessions.docs) await session.ref.delete();
+  }
+  await db.doc('operations/credentialAccessCutover').delete(); await db.terminate(); await deleteApp(app);
+});
 const order = (createdAt: unknown) => ({ createdAt, commerceVersion: 2, paymentStatus: 'approved',
   inventory: { state: 'committed' }, total: 100, currency: 'UYU' });
 async function page(body: Record<string, unknown> = {}) {
-  return parseAdminOrderPage(await adminOrders(db, { admin: true, firebase: { sign_in_provider: 'password' } }, { action: 'admin_orders', ...body }));
+  return parseAdminOrderPage(await adminOrders(db, claims('admin'), { action: 'admin_orders', ...body }));
 }
 
 test('R1-D list-order: the newest twenty of45 come first; all pages are20/20/5 without omissions', async () => {
@@ -82,14 +117,14 @@ test('R1-D malformed and cross-section cursors fail before reading business data
     { section: 'undated', cursor: { section: 'recent', id: 'a', createdAt: { seconds: 1000, nanoseconds: 0 } } },
     { cursor: { section: 'undated', id: 'a' } },
   ];
-  for (const body of invalid) await expect(adminOrders(db, { admin: true, firebase: { sign_in_provider: 'password' } }, { action: 'admin_orders', ...body })).rejects.toMatchObject({ status: 400 });
+  for (const body of invalid) await expect(adminOrders(db, claims('admin'), { action: 'admin_orders', ...body })).rejects.toMatchObject({ status: 400 });
   expect(reads).not.toHaveBeenCalled(); reads.mockRestore();
 });
 
 test('R1-D both sections reject role-like client claims before reads', async () => {
   const reads = vi.spyOn(db, 'collection');
-  for (const section of ['recent', 'undated']) for (const claims of [{ uid: 'buyer' }, { admin: 'true' }, { role: 'admin' }, { superadmin: 1 }]) {
-    await expect(adminOrders(db, claims, { action: 'admin_orders', section })).rejects.toMatchObject({ status: 403 });
+  for (const section of ['recent', 'undated']) for (const untrustedRoles of [{}, { admin: 'true' }, { role: 'admin' }, { superadmin: 1 }]) {
+    await expect(adminOrders(db, { ...claims('buyer'), ...untrustedRoles }, { action: 'admin_orders', section })).rejects.toMatchObject({ status: 403 });
   }
   expect(reads).not.toHaveBeenCalled(); reads.mockRestore();
 });

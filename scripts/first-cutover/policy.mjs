@@ -5,6 +5,7 @@ import { PROJECTS } from '../release-cutover/policy.mjs';
 import { verifyContainment } from './containment.mjs';
 import { effectiveFunctions } from '../release-cutover/drain.mjs';
 import { REQUIRED_BARRIERS } from './installation-isolation.mjs';
+import { verifyAuthDestinationReceiptFiles } from './auth-destination-proof.mjs';
 
 export { REQUIRED_BARRIERS } from './installation-isolation.mjs';
 const ms = v => Number.isSafeInteger(v) && v >= 0;
@@ -87,5 +88,6 @@ export async function verifyReceiptFiles(input, file) {
     demand(receipt.synthetic !== true && receipt.provenanceReviewed === true && typeof receipt.primarySource === 'string'
       && receipt.primarySource.length > 0 && canonical(receipt.observation) === canonical(input[key]), 'unbound/synthetic receipt');
   }
+  if (input.containment?.authDestinationContainment) await verifyAuthDestinationReceiptFiles(input.containment.authDestinationContainment, root);
   return { status: 'LOCAL_RECEIPT_INTEGRITY_ONLY', providerAuthenticityRequiresIndependentReview: true };
 }

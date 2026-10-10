@@ -136,7 +136,7 @@ function verifyOperationalSources(source) {
     if (entry.isFile() && (codeExtension.test(entry.name) || /\.(?:json|ya?ml|sh)$/.test(entry.name)) && !entry.name.includes('lock')) candidates.add(entry.name);
   }
   for (const directory of ['api', 'src', 'scripts', 'functions', 'backend', 'tests', '.github/workflows']) collect(directory, ['api', 'src', 'scripts', 'functions', '.github/workflows'].includes(directory));
-  for (const mandatory of ['package.json', 'functions/package.json', 'vercel.json', 'vite.config.ts', 'vitest.config.ts', '.github/workflows/ci.yml', 'api/create-mp-preference.ts', 'api/internal/web-stock-reconcile.ts']) {
+  for (const mandatory of ['package.json', 'functions/package.json', 'vercel.json', 'vite.config.ts', 'vitest.config.ts', '.github/workflows/ci.yml', 'api/create-mp-preference.ts', 'api/internal/web-stock-reconcile.ts', 'api/access.ts']) {
     if (!candidates.has(mandatory)) fail('EDGE_OPERATIONAL_NOT_VERIFIED', mandatory, 'Required operational entry missing');
   }
   const queue = [...candidates].sort();

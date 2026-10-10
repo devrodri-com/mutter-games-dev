@@ -47,7 +47,7 @@ try {
     assert(['invoke', 'attest', 'smoke'].includes(mode));
     const [artifactDirectory, handlerName, method, functionKind, credentials] = args;
     assert(['GET', 'POST', 'OPTIONS'].includes(method));
-    assert(['checkout', 'reconcile'].includes(functionKind));
+    assert(['checkout', 'reconcile', 'access'].includes(functionKind));
     const requestHeaders = {};
     if (mode === 'invoke' && functionKind === 'reconcile') {
       assert(['missing-secret', 'empty-secret', 'missing-header', 'wrong-secret'].includes(credentials));
@@ -100,12 +100,13 @@ try {
       purchase: { items: [{ id: 'p', quantity: 1 }], shipping: { pickup: true, department: '', name: 'Synthetic',
         address: '', city: '', postalCode: '', phone: '123', email: 'test@example.invalid' } },
       key: 'synthetic-native-smoke-0001', quoteHash: 'a'.repeat(64) };
-    await loaded.default({ method, headers: requestHeaders, body: requestBody }, response);
+    await loaded.default({ method, url: functionKind === 'access' ? (mode === 'invoke' ? credentials : '/api/access/session') : undefined, headers: requestHeaders, body: requestBody }, response);
     assert.equal(headers.get('cache-control'), 'no-store');
     assert.equal(jsonCalls, 1);
     if (mode === 'invoke') {
-      assert.equal(status, functionKind === 'checkout' ? (method === 'POST' ? 401 : 405) : (method === 'GET' ? 401 : 405));
-      if (functionKind === 'checkout') assert.deepEqual(body, { error: method === 'POST' ? 'Iniciá sesión para continuar.' : 'Method not allowed' });
+      assert.equal(status, functionKind === 'access' ? (credentials === '/api/access/unknown' ? 404 : method === 'POST' ? 401 : 405) : functionKind === 'checkout' ? (method === 'POST' ? 401 : 405) : (method === 'GET' ? 401 : 405));
+      if (functionKind === 'access') assert.deepEqual(body, status === 404 ? { code: 'NOT_FOUND', error: 'Not found' } : status === 401 ? { code: 'INVALID_SESSION', error: 'Volvé a iniciar sesión para continuar.' } : { code: 'METHOD_NOT_ALLOWED', error: 'Method not allowed' });
+      else if (functionKind === 'checkout') assert.deepEqual(body, { error: method === 'POST' ? 'Iniciá sesión para continuar.' : 'Method not allowed' });
       else assert.deepEqual(body, { error: method === 'GET' ? 'Unauthorized' : 'Method not allowed' });
     } else if (mode === 'smoke') {
       assert.equal(status, 400);
@@ -136,7 +137,7 @@ try {
         if (credentials === 'retry') {
           const first = body;
           jsonCalls = 0;
-          await loaded.default({ method, headers: requestHeaders, body: {} }, response);
+          await loaded.default({ method, url: functionKind === 'access' ? '/api/access/session' : undefined, headers: requestHeaders, body: {} }, response);
           assert.equal(status, 200); assert.equal(jsonCalls, 1);
           assert.equal(body.coldStartId, first.coldStartId);
           assert.notEqual(body.invocationId, first.invocationId);

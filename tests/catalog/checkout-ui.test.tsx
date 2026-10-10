@@ -2,6 +2,9 @@ import React,{act} from 'react';
 import {createRoot} from 'react-dom/client';
 import {test,expect,vi,afterEach} from 'vitest';
 const sdk=vi.hoisted(()=>({listeners:[] as ((value:unknown)=>void)[],user:{uid:'ui-checkout',getIdToken:async()=>'synthetic'}}));
+// This stock/checkout suite supplies an admitted session at the Auth boundary.
+// Real Auth/SDK/Rules and access UI suites cover capability authorization.
+vi.mock('../../src/context/AuthContext', () => ({ useAuth: () => ({ credentialAccess: 'active' }) }));
 vi.mock('../../src/firebase',()=>({auth:{currentUser:sdk.user},db:{}}));
 vi.mock('../../src/firebaseUtils',()=>({db:{},upsertClientFromCheckout:vi.fn()}));
 vi.mock('firebase/auth',()=>({onAuthStateChanged:(_auth:unknown,fn:(user:unknown)=>void)=>{fn(sdk.user);return ()=>undefined;}}));

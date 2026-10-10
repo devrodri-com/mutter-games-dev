@@ -1,4 +1,6 @@
-import { admitsSession } from './session-authority.js';
+import { getAuth } from 'firebase-admin/auth';
+import { adminApp } from './firebase-server.js';
+import { requireCredentialSession } from './credential-session.js';
 import { FieldPath, Timestamp, type Firestore } from 'firebase-admin/firestore';
 import { CheckoutError } from './checkout-domain.js';
 import { ADMIN_ORDER_TIMESTAMP_RANGE, adminCommercialAttention, parseAdminOrderCursor, type AdminOrderCursor, type AdminOrderDetail, type AdminOrderPage, type AdminOrderSummary } from '../../src/domain/adminOrders.js';
@@ -78,9 +80,9 @@ export function projectAdminOrderDetail(id: string, value: unknown): AdminOrderD
 function validId(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0 && Buffer.byteLength(value, 'utf8') <= 1500 && !value.includes('/') && value !== '.' && value !== '..';
 }
-/** Claims must come only from verifyIdToken(token, true), as in the existing Admin API. No permissions document is required. */
+/** Claims must come from verifyIdToken(token, true); roles also require the protected account and session records. */
 export async function adminOrders(db: Firestore, verifiedClaims: Record<string, unknown>, body: Record<string, unknown>): Promise<AdminOrderPage | { order: AdminOrderDetail }> {
-  if (!admitsSession(verifiedClaims, 'admin') || (verifiedClaims.admin !== true && verifiedClaims.superadmin !== true)) throw new CheckoutError(403, 'FORBIDDEN', 'No tenés permisos para consultar pedidos.');
+  await requireCredentialSession(getAuth(adminApp()), db, verifiedClaims, 'admin');
   return readAdminOrders(db, body);
 }
 

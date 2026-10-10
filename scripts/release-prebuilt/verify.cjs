@@ -50,7 +50,7 @@ async function verifyPrebuilt(source, root) {
   for (let index = 0; index < expected.functions.length; index += 1) {
     const definition = expected.functions[index];
     const declared = manifest.functions[index];
-    for (const name of ['key', 'route', 'entrypoint', 'handler', 'directory', 'config'])
+    for (const name of ['key', 'route', 'routes', 'entrypoint', 'handler', 'directory', 'config'])
       assert.deepEqual(declared[name], definition[name]);
     const directory = destination(output, definition.directory);
     assert.deepEqual(JSON.parse(await fs.readFile(path.join(directory, '.vc-config.json'), 'utf8')), definition.config);

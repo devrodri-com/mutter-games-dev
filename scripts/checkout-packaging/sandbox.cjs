@@ -10,11 +10,13 @@ const reconcileCases = Object.freeze([
   ['reconcile-missing-header', 'GET', 'missing-header'], ['reconcile-wrong-secret', 'GET', 'wrong-secret'],
   ['reconcile-method', 'POST', 'wrong-secret'], ['reconcile-restarted-get', 'GET', 'wrong-secret'],
 ]);
+const accessCases = Object.freeze([['access-cold-get', 'GET', '/api/access/session'], ['access-cold-post', 'POST', '/api/access/session'], ['access-options', 'OPTIONS', '/api/access/recovery/request'], ['access-complete-missing-authorization', 'POST', '/api/access/recovery/complete'], ['access-unknown-path', 'POST', '/api/access/unknown'], ['access-restarted-post', 'POST', '/api/access/session']]);
 const attestationCases = Object.freeze(['missing-secret', 'empty-secret', 'short-secret', 'missing-header', 'wrong-secret', 'wrong-action', 'method', 'authorized', 'retry', 'missing-undici']);
 const smokeCases = Object.freeze(['array-quote', 'array-availability']);
 const EXPECTED_NATIVE_CASE_LABELS = Object.freeze([
   ...checkoutCases.map(([label]) => label), ...reconcileCases.map(([label]) => label),
-  ...['checkout', 'reconcile'].flatMap(key => attestationCases.map(credentials => `attestation-${key}-${credentials}`)),
+  ...accessCases.map(([label]) => label),
+  ...['checkout', 'reconcile', 'access'].flatMap(key => attestationCases.map(credentials => `attestation-${key}-${credentials}`)),
   ...smokeCases.map(credentials => `smoke-checkout-${credentials}`),
 ]);
 
@@ -62,16 +64,17 @@ async function verifyNativeProcesses(source, workspace, entries, options = {}) {
   }
   await writeJson(path.join(workspace.root, 'network-isolation.json'), { attempts, selected: selected?.name ?? null, unrestrictedFallback: false, homePreservedNotRepurposed: env.HOME === process.env.HOME, credentialEnvironmentInherited: false });
   assert(selected, 'OS denial not established; no handler was imported');
-  assert.deepEqual(entries.map(entry => entry.key), ['checkout', 'reconcile'], 'Require exactly the two prepared function artifacts');
-  const [checkout, reconcile] = entries;
+  assert.deepEqual(entries.map(entry => entry.key), require('./function-definitions.cjs').DEFINITIONS.map(item => item.key), 'Require every prepared function artifact');
+  const [checkout, reconcile, access] = entries;
   const cases = [];
   for (const [label, method] of checkoutCases) {
     cases.push(await run(selected, label, ['invoke', checkout.directory, checkout.handler, method, 'checkout'], checkout.directory));
   }
   for (const [label, method, credentials] of reconcileCases) cases.push(await run(selected, label, ['invoke', reconcile.directory, reconcile.handler, method, 'reconcile', credentials], reconcile.directory));
+  for (const [label, method, url] of accessCases) cases.push(await run(selected, label, ['invoke', access.directory, access.handler, method, 'access', url], access.directory));
   const attestationIdentity = options.attestationIdentity ?? null;
   for (const entry of entries) {
-    const method = entry.key === 'checkout' ? 'POST' : 'GET';
+    const method = entry.key === 'reconcile' ? 'GET' : 'POST';
     for (const credentials of attestationCases) {
       const requestMethod = credentials === 'method' ? (method === 'GET' ? 'POST' : 'GET') : method;
       cases.push(await run(selected, `attestation-${entry.key}-${credentials}`, ['attest', entry.directory, entry.handler, requestMethod, entry.key, credentials, JSON.stringify(attestationIdentity)], entry.directory));

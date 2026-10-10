@@ -16,7 +16,7 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     env:
-      WEB_INVENTORY_ADMIN_SHA: 5a7184cff3ff6c4cff10fb85bb870bf3a4a98ee9
+      WEB_INVENTORY_ADMIN_SHA: eb5927618473e1313f49233ab260f22ddd97d876
       MUTTER_ADMIN_API_SOURCE: ${{ github.workspace }}/paired-admin-api
       EDGE_TOOLING_EVIDENCE_DIR: ${{ github.workspace }}/../mutter-edge-controls-${{ github.run_id }}-${{ github.run_attempt }}
       CHECKOUT_PACKAGING_EVIDENCE_DIR: ${{ github.workspace }}/../mutter-edge-controls-${{ github.run_id }}-${{ github.run_attempt }}/emitted-functions
@@ -74,6 +74,9 @@ jobs:
 
       - name: Checkout API typecheck
         run: npm run typecheck:api
+
+      - name: Credential access API typecheck
+        run: npm run typecheck:access
 
       - name: Stock reconciliation API typecheck
         run: node node_modules/typescript/bin/tsc --noEmit --skipLibCheck --moduleResolution NodeNext --target ES2022 --module NodeNext --esModuleInterop api/internal/web-stock-reconcile.ts

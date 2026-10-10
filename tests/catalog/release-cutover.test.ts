@@ -1,9 +1,11 @@
 // @vitest-environment node
 import { readFileSync } from 'node:fs';
 import { afterAll, afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { initializeApp, deleteApp } from 'firebase-admin/app';
+import { deleteApp } from 'firebase-admin/app';
 import { getFirestore, Timestamp } from 'firebase-admin/firestore';
-const auth = vi.hoisted(() => ({ verify: vi.fn(async () => ({ uid: 'synthetic-cutover-buyer', firebase: { sign_in_provider: 'anonymous' } })) }));
+import { initializeDemoAdmin } from './demo-admin';
+const auth = vi.hoisted(() => ({ verify: vi.fn(async () => ({ uid: 'synthetic-cutover-buyer', firebase: { sign_in_provider: 'custom' },
+    mutterCredentialSession: 'b'.repeat(64), mutterCredentialEpoch: 'synthetic_cutover_epoch_v1', admin: false, superadmin: false })) }));
 vi.mock('firebase-admin/auth', () => ({ getAuth: () => ({ verifyIdToken: auth.verify }) }));
 const provider = vi.hoisted(() => ({ post: vi.fn(async () => ({ id: 'synthetic-preference', init_point: 'https://example.invalid/payment', collectorId: '200' })) }));
 vi.mock('../../api/_lib/mercado-pago', () => ({ createMercadoPagoPreference: provider.post }));
@@ -12,8 +14,9 @@ import { createSweepHandler } from '../../api/internal/web-stock-reconcile';
 import { assertCutoverOpen, CUTOVER_PATH } from '../../api/_lib/release-cutover';
 
 if (process.env.FIRESTORE_EMULATOR_HOST !== '127.0.0.1:8188') throw new Error('Exact demo emulator required');
-const app = initializeApp({ projectId: 'demo-mutter-cutover' }, 'catalog-checkout');
+const app = initializeDemoAdmin('catalog-checkout');
 const db = getFirestore(app);
+db.settings({ projectId: 'demo-mutter-cutover' });
 const secret = 'synthetic-release-secret-at-least-32-characters';
 const purchase = { items: [{ id: 'p', quantity: 1 }], shipping: { pickup: true, department: '', name: 'Synthetic', address: '', city: '', postalCode: '', phone: '123', email: 'test@example.invalid' } };
 function recorder() {
@@ -40,6 +43,10 @@ async function snapshot() {
 }
 beforeEach(async () => {
     for (const collection of await db.listCollections()) await db.recursiveDelete(collection);
+    const uid = 'synthetic-cutover-buyer', epoch = 'synthetic_cutover_epoch_v1';
+    await db.doc('operations/credentialAccessCutover').set({schema:1,phase:'ENFORCED',epoch,legacyCutoffMs:1});
+    await db.doc(`credentialAccess/${uid}`).set({schema:1,uid,epoch,status:'NATIVE_POST_CUTOVER',recoveryEmail:null,channelStatus:'UNVERIFIED',channelEvidenceSha256:null,roles:{admin:false,superadmin:false}});
+    await db.doc(`credentialSessions/${'b'.repeat(64)}`).set({schema:1,status:'ACTIVE',uid,epoch,expiresAtMs:Date.now()+60000,proofKind:'NEW_POST_CUTOVER',roles:{admin:false,superadmin:false}});
     await db.doc('products/p').set({ active: true, title: 'Synthetic', stockTotal: 5, priceUSD: 100,
         webReservations: { 'held-synthetic-reservation': { expiresAt: 1, lines: [{ slot: 'base', identity: 'base', quantity: 1 }] } } });
     await db.doc('orders/historical').set({ total: 100, items: [], createdAt: Timestamp.now() });

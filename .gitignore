@@ -31,6 +31,7 @@ firestore-debug.log
 backend/
 api/*
 !api/create-mp-preference.ts
+!api/access.ts
 !api/_lib/
 !api/internal/
 api/internal/*

@@ -3,19 +3,21 @@ import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { test, expect, vi } from 'vitest';
 import { initializeTestEnvironment } from '@firebase/rules-unit-testing';
-import { initializeApp, deleteApp } from 'firebase-admin/app';
+import { deleteApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 import { initializeApp as clientApp, deleteApp as deleteClientApp } from 'firebase/app';
 import { getAuth as clientAuth, connectAuthEmulator, signInAnonymously, signInWithCustomToken, linkWithCredential,
   EmailAuthProvider, reauthenticateWithCredential, signOut, signInWithEmailAndPassword } from 'firebase/auth';
 import handler from '../../api/create-mp-preference';
+import { createNativeSession } from '../../api/_lib/credential-session';
+import { initializeDemoAdmin } from './demo-admin';
 
 test('real custom/renewed/derived sessions at checkout and exact candidate Rules', async () => {
   expect(process.env.FIREBASE_AUTH_EMULATOR_HOST).toBe('127.0.0.1:9198');
   expect(process.env.FIRESTORE_EMULATOR_HOST).toBe('127.0.0.1:8188');
   const projectId = 'demo-mutter-r1';
-  const app = initializeApp({ projectId }, 'catalog-checkout');
+  const app = initializeDemoAdmin('catalog-checkout');
   const auth = getAuth(app), db = getFirestore(app);
   const client = clientApp({ projectId, apiKey: 'synthetic' }, `session-boundary-${randomUUID()}`);
   const browserAuth = clientAuth(client);
@@ -42,10 +44,19 @@ test('real custom/renewed/derived sessions at checkout and exact candidate Rules
     });
   }
   try {
+    await db.doc('operations/credentialAccessCutover').set({ schema: 1, phase: 'ENFORCED', epoch: 'synthetic-session-boundary-epoch', legacyCutoffMs: 1 });
     const anonymous = await signInAnonymously(browserAuth);
     try {
       for (const token of [await anonymous.user.getIdToken(), await anonymous.user.getIdToken(true)]) {
         expect((await auth.verifyIdToken(token, true)).firebase.sign_in_provider).toBe('anonymous');
+        expect(await call(token, 'availability', false)).toBe(403);
+        expect(await call(token, 'admin_orders', false)).toBe(403);
+      }
+      const native = await createNativeSession(auth, db, await auth.verifyIdToken(await anonymous.user.getIdToken(), true));
+      if (!native.customToken) throw Error('Expected synthetic native capability');
+      const admitted = await signInWithCustomToken(browserAuth, native.customToken);
+      expect(admitted.user.uid).toBe(anonymous.user.uid);
+      for (const token of [await admitted.user.getIdToken(), await admitted.user.getIdToken(true)]) {
         expect(await call(token, 'availability', false)).toBe(200);
         expect(await call(token, 'admin_orders', false)).toBe(403);
       }
@@ -72,9 +83,10 @@ test('real custom/renewed/derived sessions at checkout and exact candidate Rules
     const ordinary = await signInWithEmailAndPassword(browserAuth, email, password);
     const derived = await ordinary.user.getIdToken(true);
     expect((await auth.verifyIdToken(derived, true)).uid).toBe(uid);
-    // Characterization of the residual, NOT a security closure assertion.
-    expect(await call(derived, 'admin_orders', false)).toBe(200);
-    expect(await call(reauthenticated, 'admin_orders', false)).toBe(200);
+    // The exact historical destination regression is preserved separately in
+    // credential-closure-boundary. The corrected handler closes derived tokens.
+    expect(await call(derived, 'admin_orders', false)).toBe(403);
+    expect(await call(reauthenticated, 'admin_orders', false)).toBe(403);
 
     // Reissue after linking: account changes may invalidate an earlier session.
     const customAgain = await signInWithCustomToken(browserAuth, await auth.createCustomToken(uid));
@@ -103,7 +115,7 @@ test('real custom/renewed/derived sessions at checkout and exact candidate Rules
           });
         }
         await env.withSecurityRulesDisabled(context => context.firestore().doc('operations/webStockCutover').set({ schema: 1, state: 'open', revision: 'synthetic-boundary-rules', updatedAt: new Date() }));
-        expect((await firestore(rulesProject, derived, `carts/${uid}`)).status).toBe(200);
+        expect((await firestore(rulesProject, derived, `carts/${uid}`)).status).toBe(403);
         for (const path of ['products/p', 'categories/c', 'categories/c/subcategories/s']) expect.soft((await firestore(rulesProject, derived, path)).status, 'catalog stays server owned').toBe(403);
       } finally { await env.cleanup(); }
     }

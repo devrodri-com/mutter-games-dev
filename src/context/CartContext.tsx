@@ -6,6 +6,7 @@ import { enrichCartItems, isSameItem } from '../utils/cartUtils';
 import type { CartItem } from '../data/types';
 import { toast } from 'react-hot-toast';
 import { useLiveCartInventory } from '../hooks/useLiveCartInventory';
+import { useAuth } from './AuthContext';
 export type ShippingData = {
     name: string;
     address: string;
@@ -50,6 +51,9 @@ const store = (owner: string, next: CartItem[], dirty: boolean) => localStorage.
 export function CartProvider({ children }: {
     children: ReactNode;
 }) {
+    const { credentialAccess } = useAuth();
+    const accessState = useRef(credentialAccess);
+    accessState.current = credentialAccess;
     const [uid, setUid] = useState<string | null>(null);
     const [items, setItems] = useState<CartItem[]>([]);
     const itemsRef = useRef<CartItem[]>([]);
@@ -113,6 +117,10 @@ export function CartProvider({ children }: {
             return;
         }
         unsynced.current = dirty;
+        if (credentialAccess !== 'active') {
+            setCartError(credentialAccess === 'pending' ? 'Tu carrito se conserva. Recuperá el acceso para continuar.' : 'Estamos comprobando el acceso a tu carrito.');
+            return;
+        }
         const restore = async (next: CartItem[]) => {
             const version = ++revision.current;
             try {
@@ -137,7 +145,7 @@ export function CartProvider({ children }: {
                 if (dirty) {
                     const restoreRevision = revision.current;
                     const operation = queue.current.then(() => {
-                        if (activeUid.current !== uid) throw new Error('Cambió la sesión antes de restaurar.');
+                        if (activeUid.current !== uid || accessState.current !== 'active') throw new Error('Cambió el acceso antes de restaurar.');
                         return saveCartToFirebase(uid, cached);
                     });
                     queue.current = operation.catch(() => undefined);
@@ -161,10 +169,10 @@ export function CartProvider({ children }: {
         };
         void initialize();
         return () => { stopped = true; stop?.(); };
-    }, [uid]);
+    }, [uid, credentialAccess]);
     const persist = async (next: CartItem[]) => {
-        if (!uid || activeUid.current !== uid) {
-            fail(new Error('Esperá a que termine de cargar la sesión.'));
+        if (!uid || activeUid.current !== uid || accessState.current !== 'active') {
+            fail(new Error('Tu carrito se conserva. Comprobá o recuperá el acceso para continuar.'));
             return false;
         }
         const owner = uid;
@@ -182,8 +190,8 @@ export function CartProvider({ children }: {
             return false;
         }
         const operation = queue.current.then(async () => {
-            if (activeUid.current !== owner)
-                throw new Error('Cambió la sesión antes de guardar.');
+            if (activeUid.current !== owner || accessState.current !== 'active')
+                throw new Error('Cambió el acceso antes de guardar.');
             await saveCartToFirebase(owner, next);
         });
         queue.current = operation.catch(() => undefined);
@@ -217,6 +225,7 @@ export function CartProvider({ children }: {
         const version = ++revision.current;
         setCartReady(false);
         try {
+            if (accessState.current !== 'active') throw new Error('Tu carrito se conserva. Recuperá el acceso para continuar.');
             if (unsynced.current && uid && !pending.current) {
                 await saveCartToFirebase(uid, itemsRef.current);
                 unsynced.current = false;

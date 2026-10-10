@@ -14,7 +14,7 @@ function fixture(t) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mutter-edge-operational-'));
   t.after(() => fs.rmSync(root, { recursive: true }));
   for (const directory of ['api/internal', 'src', 'scripts', 'functions', '.github/workflows']) fs.mkdirSync(path.join(root, directory), { recursive: true });
-  for (const file of ['api/create-mp-preference.ts', 'api/internal/web-stock-reconcile.ts']) write(root, file, "import type { VercelRequest } from '@vercel/node';\nexport default function handler(req: VercelRequest) { return req; }\n");
+  for (const file of ['api/create-mp-preference.ts', 'api/internal/web-stock-reconcile.ts', 'api/access.ts']) write(root, file, "import type { VercelRequest } from '@vercel/node';\nexport default function handler(req: VercelRequest) { return req; }\n");
   for (const file of ['package.json', 'functions/package.json', 'vercel.json']) write(root, file, '{"scripts":{"dev":"vite"}}');
   write(root, 'vite.config.ts', 'export default {};');
   write(root, 'vitest.config.ts', "export default { test: { environment: 'happy-dom' } };");

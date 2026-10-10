@@ -54,7 +54,7 @@ function verifyAuthorityIsolation(evidence, input, installation) {
   demand(evidence.project === PROJECT && evidence.projectNumber === PROJECT_NUMBER && evidence.database === DATABASE,
     'containment project identity');
   const context = { synthetic: input.synthetic, revision: input.revision, window: input.window,
-    nowMs: input.nowMs, maxAgeMs: input.maxAgeMs };
+    nowMs: input.nowMs, maxAgeMs: input.maxAgeMs, targets: input.targets };
   const sources = [];
   const add = s => { sources.push(s); return s; };
   const project = readSource(add(evidence.projectSource), { method: 'projects.get', resource: PROJECT_RESOURCE }, context).response;
@@ -141,7 +141,7 @@ function verifyAuthorityIsolation(evidence, input, installation) {
   const authorityReview = staged ? evidence.installationReview : evidence.review;
   const credentialsAt = staged ? verifyPendingCredentials(installation ? evidence.credentials : evidence.installationCredentials,
     sources.map(digest), negative.effectiveAt, context)
-    : verifyCredentials(evidence.credentials, sources.map(digest), negative.effectiveAt, context);
+    : verifyCredentials(evidence.credentials, sources.map(digest), negative.effectiveAt, context, evidence.authDestinationContainment);
   requireReview(authorityReview, sources, context, staged ? categories.filter(c => c !== 'PREEXISTING_CREDENTIALS') : categories);
   demand(authorityReview.method === evidence.method && instant(authorityReview.reviewedAtMs)
     && authorityReview.reviewedAtMs >= credentialsAt && authorityReview.reviewedAtMs <= input.nowMs, 'review method/chronology');
@@ -172,7 +172,7 @@ function verifyAuthorityIsolation(evidence, input, installation) {
   if (!installation && staged) {
     // Grant depends on the prior IAM review. Credential treatment belongs after
     // the migration it enables; its final verifier and complete review stay strict.
-    const closedAt = verifyCredentials(evidence.credentials, sources.map(digest), candidate.grantedProject.observedAtMs, context);
+    const closedAt = verifyCredentials(evidence.credentials, sources.map(digest), candidate.grantedProject.observedAtMs, context, evidence.authDestinationContainment);
     requireReview(evidence.review, sources, context, categories);
     demand(evidence.review.method === evidence.method && instant(evidence.review.reviewedAtMs)
       && evidence.review.reviewedAtMs >= closedAt && evidence.review.reviewedAtMs <= input.nowMs, 'final credential review method/chronology');

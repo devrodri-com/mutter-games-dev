@@ -4,7 +4,7 @@ const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
 const { buildEnvironment, isolatedCiEnvironment, rejectImplicitEnvironment } = require('../environment.cjs');
-const { declaredDuration, digest, jsonBytes } = require('../identity.cjs');
+const { declaredDuration, digest, jsonBytes, outputConfiguration } = require('../identity.cjs');
 const { destination, inventory, verifyInventory, inspectBytes } = require('../files.cjs');
 const publicConfig = require('../public-production.json');
 const { normalizeSourceMap } = require('../sourcemaps.cjs');
@@ -85,6 +85,39 @@ test('maxDuration comes from actual exported source config', () => {
   for (const source of ['export default function handler() {}', 'export const config = duration;',
     'export const config = { maxDuration: Number(process.env.TIMEOUT) };', 'export const config = { maxDuration: 0 };'])
     assert.throws(() => declaredDuration(source, 'handler.ts'));
+});
+test('actual source emits every credential endpoint into the single access function', async () => {
+  const source = path.resolve(__dirname, '../../..');
+  const output = await outputConfiguration(source);
+  const access = output.functions.find(entry => entry.key === 'access');
+  assert(access);
+  assert.equal(access.directory, 'functions/api/access.func');
+  assert.equal(access.handler, 'api/access.js');
+  assert.equal(access.config.runtime, 'nodejs22.x');
+  for (const endpoint of ['/api/access/session', '/api/access/recovery/request', '/api/access/recovery/complete']) {
+    assert.deepEqual(output.config.routes.find(route => route.src === endpoint), { src: endpoint, dest: '/api/access' });
+  }
+});
+test('a missing or redirected credential endpoint cannot produce an accepted prebuilt configuration', async () => {
+  const source = path.resolve(__dirname, '../../..');
+  const original = JSON.parse(await fs.readFile(path.join(source, 'vercel.json'), 'utf8'));
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'mutter-access-topology-'));
+  try {
+    for (const file of ['api/create-mp-preference.ts', 'api/internal/web-stock-reconcile.ts', 'api/access.ts']) {
+      await fs.mkdir(path.dirname(path.join(root, file)), { recursive: true });
+      await fs.copyFile(path.join(source, file), path.join(root, file));
+    }
+    for (const mutate of [
+      config => { config.routes = config.routes.filter(route => route.src !== '/api/access/recovery/complete'); },
+      config => { config.routes.find(route => route.src === '/api/access/session').dest = '/index.html'; },
+      config => { config.builds = config.builds.filter(entry => entry.src !== 'api/access.ts'); },
+    ]) {
+      const changed = structuredClone(original);
+      mutate(changed);
+      await fs.writeFile(path.join(root, 'vercel.json'), jsonBytes(changed));
+      await assert.rejects(outputConfiguration(root));
+    }
+  } finally { await fs.rm(root, { recursive: true }); }
 });
 test('artifact destinations cannot traverse or use absolute paths', () => {
   for (const value of ['../escape', '/absolute', 'a/../../escape', 'a\\b']) assert.throws(() => destination('/tmp/root', value));

@@ -21,7 +21,7 @@ function verifyNativeMatrix(native, expectedIdentity) {
     assert.equal(row.observation.node, 'v22.23.3');
     assert(row.observation.network && Object.values(row.observation.network).every(value => value === 0), 'Native business I/O was attempted');
   }
-  for (const handler of ['checkout', 'reconcile']) {
+  for (const handler of require('../checkout-packaging/function-definitions.cjs').DEFINITIONS.map(item => item.key)) {
     const authorized = native.cases.find(row => row.label === `attestation-${handler}-authorized`).observation;
     const retry = native.cases.find(row => row.label === `attestation-${handler}-retry`).observation;
     const missing = native.cases.find(row => row.label === `attestation-${handler}-missing-undici`).observation;

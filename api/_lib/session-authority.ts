@@ -1,8 +1,8 @@
 /**
  * Only call with Firebase-verified claims, never decoded client input.
- * The independently deployed Admin carries this same policy; paired tests
- * enforce byte identity. This rejects current custom sessions, not their
- * historical origin after account linking (see LEGACY_AUTH_CLOSURE.md).
+ * Legacy provider characterization only. It is never the credential-admission
+ * decision: credential-session verifies the server capability and account state.
+ * The paired Admin preserves this same historical filter for regression evidence.
  */
 export function admitsSession(claims: unknown, destination: 'buyer' | 'admin'): boolean {
   if (!claims || typeof claims !== 'object' || Array.isArray(claims) || !('firebase' in claims)) return false;

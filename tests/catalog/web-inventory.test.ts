@@ -12,6 +12,8 @@ import { checkout } from '../../api/_lib/checkout-service';
 import { reconcileOrder } from '../../api/_lib/order-reconciliation';
 import { createMercadoPagoPreference } from '../../api/_lib/mercado-pago';
 import { mercadoPagoGateway } from '../../api/_lib/mercado-pago-payments';
+import { createNativeSession } from '../../api/_lib/credential-session';
+import { initializeDemoAdmin } from './demo-admin';
 
 const emulator = process.env.FIRESTORE_EMULATOR_HOST;
 if (!emulator || !/^127\.0\.0\.1:\d+$/.test(emulator)) throw new Error('Loopback emulator required');
@@ -503,16 +505,20 @@ test('real handler withholds the existing payment link after actual Admin unpubl
     if (!authHost || !/^127\.0\.0\.1:\d+$/.test(authHost)) throw new Error('Loopback Auth emulator required');
     // Auth's API-key sign-in endpoint issues tokens for the emulator launch project.
     const admin = await adminModule('demo-mutter-r1');
-    const handlerApp = initializeApp({ projectId: 'demo-mutter-r1' }, 'catalog-checkout');
+    const handlerApp = initializeDemoAdmin('catalog-checkout');
     const handlerDb = getFirestore(handlerApp);
     const auth = getAuth(handlerApp);
     const uid = `handler-${randomUUID()}`;
     const productId = `handler-game-${randomUUID()}`;
     let authCreated = false;
+    let capabilityId: string | undefined;
     let createdOrderId: string | undefined;
     let reservationId: string | undefined;
     try {
         await handlerDb.doc('operations/webStockCutover').set({schema:1,state:'open',revision:'synthetic-coupled-handler-open',updatedAt:new Date()});
+        // Synthetic installation authority only; production bootstrap still verifies
+        // this newly created Auth account and issues a session through the real SDK.
+        await handlerDb.doc('operations/credentialAccessCutover').set({ schema: 1, phase: 'ENFORCED', epoch: 'synthetic-web-inventory-epoch', legacyCutoffMs: 1 });
         await auth.createUser({ uid, email: `${uid}@example.invalid`, password: `synthetic-${uid}` });
         authCreated = true;
         const signed = await fetch(`http://${authHost}/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=synthetic`, {
@@ -520,7 +526,7 @@ test('real handler withholds the existing payment link after actual Admin unpubl
         });
         const authResponse = record(await signed.json());
         if (typeof authResponse.idToken !== 'string') throw new Error('Expected emulator ID token');
-        const idToken = authResponse.idToken;
+        let idToken = authResponse.idToken;
         expect((await auth.verifyIdToken(idToken, true)).uid).toBe(uid);
         async function invoke(body: unknown) {
             let status = 0;
@@ -535,6 +541,20 @@ test('real handler withholds the existing payment link after actual Admin unpubl
         }
         await handlerDb.doc(`products/${productId}`).set(product());
         const selection = purchase([{ id: productId, quantity: 1, variantId: 'Color-Rojo' }]);
+        expect((await invoke({ action: 'quote', purchase: selection })).status).toBe(403);
+        const native = await createNativeSession(auth, handlerDb, await auth.verifyIdToken(idToken, true));
+        if (!native.customToken) throw new Error('Expected native capability token');
+        const exchanged = await fetch(`http://${authHost}/identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=synthetic`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: native.customToken, returnSecureToken: true }),
+        });
+        expect(exchanged.status).toBe(200);
+        const admitted = record(await exchanged.json());
+        if (typeof admitted.idToken !== 'string') throw new Error('Expected admitted emulator ID token');
+        idToken = admitted.idToken;
+        const claims = await auth.verifyIdToken(idToken, true);
+        expect(claims.uid).toBe(uid);
+        if (typeof claims.mutterCredentialSession !== 'string') throw new Error('Expected protected session capability');
+        capabilityId = claims.mutterCredentialSession;
         const quoted = await invoke({ action: 'quote', purchase: selection });
         expect(quoted.status).toBe(200);
         const input = { action: 'start', purchase: selection, key: randomUUID(), quoteHash: record(quoted.body.quote).hash };
@@ -571,6 +591,8 @@ test('real handler withholds the existing payment link after actual Admin unpubl
             await handlerDb.doc(`checkoutIntents/${createdOrderId}`).delete();
         }
         if (reservationId) await handlerDb.doc(`webReservationOwners/${reservationId}`).delete();
+        if (capabilityId) await handlerDb.doc(`credentialSessions/${capabilityId}`).delete();
+        await handlerDb.doc(`credentialAccess/${uid}`).delete();
         if (authCreated) await auth.deleteUser(uid);
         await handlerDb.terminate();
         await deleteApp(handlerApp);

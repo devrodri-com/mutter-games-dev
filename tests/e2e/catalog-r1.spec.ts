@@ -1,8 +1,8 @@
 import { test, expect, type APIRequestContext } from '@playwright/test';
-import { initializeApp } from 'firebase-admin/app';
+import { initializeDemoAdmin } from '../catalog/demo-admin';
 import { getFirestore } from 'firebase-admin/firestore';
 if(process.env.FIRESTORE_EMULATOR_HOST!=='127.0.0.1:8188')throw Error('Local demo emulator required');
-const db=getFirestore(initializeApp({projectId:'demo-mutter-r1'},'browser-fixtures'));
+const db=getFirestore(initializeDemoAdmin('browser-fixtures'));
 const product={active:true,title:{es:'Juego sintético R1',en:'Synthetic game R1'},priceUSD:100,stockTotal:5,slug:'r1-synthetic',description:'Prueba local',category:{id:'r1-games',name:'Games'},subcategory:{id:'r1-sub',name:'Sub',categoryId:'r1-games'},variants:[],images:[]};
 const item={id:'r1-ui-product',slug:'r1-synthetic',name:'Snapshot antiguo',title:product.title,priceUSD:50,price:50,quantity:1,image:''};
 test.beforeEach(async({page})=>{
@@ -47,7 +47,15 @@ async function syntheticBuyer(request: APIRequestContext): Promise<{ Authorizati
  expect(authResponse.ok()).toBe(true);
  const identity: unknown = await authResponse.json();
  if (!identity || typeof identity !== 'object' || !('idToken' in identity) || typeof identity.idToken !== 'string') throw new Error('Synthetic auth token missing');
- return { Authorization: `Bearer ${identity.idToken}` };
+ const admitted = await request.post('/api/access/session', { headers: { Authorization: `Bearer ${identity.idToken}` }, data: {} });
+ expect(admitted.status()).toBe(200);
+ const session: unknown = await admitted.json();
+ if (!session || typeof session !== 'object' || !('customToken' in session) || typeof session.customToken !== 'string') throw Error('Real session admission missing');
+ const custom = await request.post('http://127.0.0.1:9198/identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=synthetic', { data: { token: session.customToken, returnSecureToken: true } });
+ expect(custom.status()).toBe(200);
+ const signed: unknown = await custom.json();
+ if (!signed || typeof signed !== 'object' || !('idToken' in signed) || typeof signed.idToken !== 'string') throw Error('Real admitted token missing');
+ return { Authorization: `Bearer ${signed.idToken}` };
 }
 
 test('real checkout reserves the last unit and the open product stops offering it', async ({ page, request }, testInfo) => {

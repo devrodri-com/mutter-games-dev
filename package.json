@@ -19,9 +19,9 @@
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:codegen": "playwright codegen http://localhost:5173",
     "test:catalog:run": "vitest run --fileParallelism=false",
-    "test:catalog": "firebase emulators:exec --only firestore,auth --project demo-mutter-r1 --config firebase.catalog-emulators.json \"npm run test:catalog:run\"",
+    "test:catalog": "node scripts/run-private-demo-emulators.cjs node_modules/firebase-tools/lib/bin/firebase.js firebase.catalog-emulators.json \"npm run test:catalog:run\"",
     "typecheck:api": "tsc --noEmit --skipLibCheck --moduleResolution NodeNext --target ES2022 --module NodeNext --esModuleInterop api/create-mp-preference.ts",
-    "test:catalog:browser": "firebase emulators:exec --only firestore,auth --project demo-mutter-r1 --config firebase.catalog-emulators.json \"node scripts/run-catalog-browser.mjs\"",
+    "test:catalog:browser": "node scripts/run-private-demo-emulators.cjs node_modules/firebase-tools/lib/bin/firebase.js firebase.catalog-emulators.json \"node scripts/run-catalog-browser.mjs\"",
     "check:checkout-packaging": "node scripts/verify-checkout-packaging.cjs",
     "audit:prod": "npm audit --omit=dev --audit-level=moderate",
     "audit:all": "npm audit --audit-level=high",
@@ -31,7 +31,7 @@
     "test:prebuilt-output": "node scripts/release-prebuilt/test-output.cjs",
     "compare:prebuilt": "node scripts/release-prebuilt/compare.cjs",
     "test:release-cutover": "node --test scripts/release-cutover/*.check.mjs",
-    "test:first-cutover": "node --test scripts/first-cutover/policy.check.mjs scripts/first-cutover/backup-recovery.check.mjs scripts/first-cutover/containment.check.mjs scripts/first-cutover/iam-wire.check.mjs scripts/first-cutover/installation.check.mjs",
+    "test:first-cutover": "node --test scripts/first-cutover/policy.check.mjs scripts/first-cutover/backup-recovery.check.mjs scripts/first-cutover/containment.check.mjs scripts/first-cutover/iam-wire.check.mjs scripts/first-cutover/installation.check.mjs scripts/first-cutover/auth-destination.check.mjs",
     "test:first-cutover:emulator": "node --test scripts/first-cutover/emulator.check.mjs",
     "install:controlled": "node scripts/braces-remediation/install.cjs",
     "check:braces": "node scripts/braces-remediation/control.cjs verify",
@@ -62,7 +62,9 @@
     "pretest:braces": "node scripts/braces-remediation/control.cjs verify",
     "test:release-gate": "node --test scripts/release-gate/*.check.cjs",
     "release:verify": "node scripts/release-gate/cli.cjs verify-pair",
-    "release:publication-check": "node scripts/release-gate/cli.cjs publication-check"
+    "release:publication-check": "node scripts/release-gate/cli.cjs publication-check",
+    "typecheck:access": "tsc --noEmit --strict --skipLibCheck --moduleResolution NodeNext --target ES2022 --module NodeNext --esModuleInterop api/access.ts",
+    "pretypecheck:access": "node scripts/braces-remediation/control.cjs verify"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

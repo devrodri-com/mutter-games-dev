@@ -1,5 +1,6 @@
 import { DATABASE, PLANNED_ACCOUNT, LEGACY_ACCOUNTS, demand, digest } from './common.mjs';
 import { readSource, same, instant, PROJECT_RESOURCE, accountResource, OPERATOR } from './iam-evidence.mjs';
+import { verifyAuthDestinationContainment } from './auth-destination-proof.mjs';
 
 export const CREDENTIAL_FAMILIES = Object.freeze([
   'LEGACY_KEYS_AND_REPRESENTING_TOKENS', 'FOREIGN_ACCESS_TOKENS', 'SIGNED_JWT_AND_BLOB', 'OIDC_TOKENS', 'FIREBASE_SESSIONS',
@@ -102,7 +103,7 @@ export function verifyNegativeProofs(proofs, accounts, afterAt, context) {
  * reviewer must close each credential family against bounded primary evidence.
  * Unknown issuance/validity remains PENDING, outside the accepted late-write risk.
  */
-export function verifyCredentials(value, sourceHashes, effectiveAt, context) {
+export function verifyCredentials(value, sourceHashes, effectiveAt, context, authDestinationContainment = null) {
   demand(value?.status === 'REVIEWED_NO_UNRESOLVED_ROUTE' && value.noIntrusionOrIssuanceInferred === true
     && value.keyDeletionRevokesIssuedTokens === false && value.tokenCreatorRemovalRevokesIssuedTokens === false
     && value.unresolved === 0 && Array.isArray(value.families)
@@ -123,6 +124,13 @@ export function verifyCredentials(value, sourceHashes, effectiveAt, context) {
       && family.familySpecificValidity === true, 'elapsed time/universal access-token TTL is insufficient');
     if (family.family === 'LEGACY_KEYS_AND_REPRESENTING_TOKENS') demand(
       family.disposition === 'DESTINATION_AUTHORITY_CONTAINED' && same([...family.representedPrincipals].sort(), [...LEGACY_ACCOUNTS].sort()), 'legacy keys rely on destination authority, not deletion');
+    if (['FIREBASE_SESSIONS', 'SIGNED_JWT_AND_BLOB'].includes(family.family)
+      && family.disposition === 'DESTINATION_AUTHORITY_CONTAINED') {
+      const auth = verifyAuthDestinationContainment(authDestinationContainment, { ...context, effectiveAt });
+      demand(family.authDestinationContainmentSha256 === auth.proofSha256
+        && family.reviewedAtMs >= authDestinationContainment.observedAtMs,
+      'Firebase destination closure is not bound to the protected account/session proof');
+    }
     // The candidate must never be hidden among unidentified/untreated destinations.
     if (family.representedPrincipals.includes(PLANNED_ACCOUNT)) demand(family.disposition === 'BOUNDED_VALIDITY_AND_ISSUANCE_CLOSED', 'preexisting candidate credential authority unresolved');
   }

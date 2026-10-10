@@ -1,19 +1,65 @@
 {
   "version": 2,
-  "git": { "deploymentEnabled": { "codex/mutter-web-stock-prep-20260928": false } },
+  "git": {
+    "deploymentEnabled": {
+      "codex/mutter-web-stock-prep-20260928": false
+    }
+  },
   "builds": [
-    { "src": "package.json", "use": "@vercel/static-build" },
-    { "src": "api/create-mp-preference.ts", "use": "@vercel/node" },
-    { "src": "api/internal/web-stock-reconcile.ts", "use": "@vercel/node" }
+    {
+      "src": "package.json",
+      "use": "@vercel/static-build"
+    },
+    {
+      "src": "api/create-mp-preference.ts",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "api/internal/web-stock-reconcile.ts",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "api/access.ts",
+      "use": "@vercel/node"
+    }
   ],
   "crons": [
-    { "path": "/api/internal/web-stock-reconcile", "schedule": "*/5 * * * *" }
+    {
+      "path": "/api/internal/web-stock-reconcile",
+      "schedule": "*/5 * * * *"
+    }
   ],
   "routes": [
-    { "src": "/api/orders", "dest": "https://mutter-games-admin-api-prod.vercel.app/api/orders" },
-    { "src": "/api/create-mp-preference", "dest": "/api/create-mp-preference.ts" },
-    { "src": "/api/internal/web-stock-reconcile", "dest": "/api/internal/web-stock-reconcile.ts" },
-    { "handle": "filesystem" },
-    { "src": ".*", "dest": "/index.html" }
+    {
+      "src": "/api/orders",
+      "dest": "https://mutter-games-admin-api-prod.vercel.app/api/orders"
+    },
+    {
+      "src": "/api/create-mp-preference",
+      "dest": "/api/create-mp-preference.ts"
+    },
+    {
+      "src": "/api/internal/web-stock-reconcile",
+      "dest": "/api/internal/web-stock-reconcile.ts"
+    },
+    {
+      "src": "/api/access/session",
+      "dest": "/api/access.ts"
+    },
+    {
+      "src": "/api/access/recovery/request",
+      "dest": "/api/access.ts"
+    },
+    {
+      "src": "/api/access/recovery/complete",
+      "dest": "/api/access.ts"
+    },
+    {
+      "handle": "filesystem"
+    },
+    {
+      "src": ".*",
+      "dest": "/index.html"
+    }
   ]
 }

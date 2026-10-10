@@ -19,6 +19,11 @@ async function testOutput(source, artifact) {
       ['changed routes', '.vercel/output/config.json', bytes => jsonBytes({ ...JSON.parse(bytes), routes: [{ src: '.*', dest: '/index.html' }] })],
       ['missing attestation', '.vercel/output/functions/api/internal/web-stock-reconcile.func/api/_lib/release-attestation.js', () => null],
       ['missing function dependency', '.vercel/output/functions/api/create-mp-preference.func/api/_lib/checkout-domain.js', () => null],
+      ['missing access entrypoint', '.vercel/output/functions/api/access.func/api/access.js', () => null],
+      ['missing credential authority', '.vercel/output/functions/api/access.func/api/_lib/credential-access-state.js', () => null],
+      ['missing recovery completion route', '.vercel/output/config.json', bytes => {
+        const config = JSON.parse(bytes); config.routes = config.routes.filter(route => route.src !== '/api/access/recovery/complete'); return jsonBytes(config);
+      }],
       ['credential in sourcemap', '.vercel/output/functions/api/create-mp-preference.func/api/create-mp-preference.js.map', bytes => Buffer.concat([bytes, Buffer.from(`APP_USR-${'9'.repeat(40)}`)])],
       ['changed sourcemap mappings', '.vercel/output/functions/api/create-mp-preference.func/api/create-mp-preference.js.map', bytes => Buffer.from(JSON.stringify({ ...JSON.parse(bytes), mappings: 'tampered' }))],
       ['unattributed sourcemap transformation', 'manifest.json', bytes => {

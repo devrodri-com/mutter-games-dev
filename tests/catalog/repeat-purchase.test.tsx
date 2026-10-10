@@ -6,6 +6,9 @@ const sdk = vi.hoisted(() => {
     type User = { uid: string; isAnonymous: boolean; getIdToken: () => Promise<string> };
     return { stock: 5, listeners: [] as ((value: unknown) => void)[], authListeners: [] as ((user: User | null) => void)[], user: { uid: 'repeat-anonymous', isAnonymous: true, getIdToken: async () => 'synthetic' } as User | null };
 });
+// This stock/checkout suite supplies an admitted session at the Auth boundary.
+// Real Auth/SDK/Rules and access UI suites cover capability authorization.
+vi.mock('../../src/context/AuthContext', () => ({ useAuth: () => ({ credentialAccess: 'active' }) }));
 vi.mock('../../src/firebase', () => ({ auth: { get currentUser() { return sdk.user; } }, db: {} }));
 vi.mock('../../src/firebaseUtils', () => ({ db: {}, upsertClientFromCheckout: vi.fn() }));
 vi.mock('firebase/auth', () => ({ onAuthStateChanged: (_auth: unknown, fn: (user: typeof sdk.user) => void) => { sdk.authListeners.push(fn); fn(sdk.user); return () => { sdk.authListeners = sdk.authListeners.filter(listener => listener !== fn); }; } }));

@@ -95,7 +95,7 @@ async function verifyFiles(root, records, fingerprints) {
   return verified;
 }
 async function inspectNodeArtifacts(source, workspace, entries) {
-  requireEvidence(Array.isArray(entries) && JSON.stringify(entries.map(item => item.key)) === '["checkout","reconcile"]', 'Both Node artifact inspections are required');
+  requireEvidence(Array.isArray(entries) && JSON.stringify(entries.map(item => item.key)) === JSON.stringify(require('../checkout-packaging/function-definitions.cjs').DEFINITIONS.map(item => item.key)), 'Every prepared Node artifact inspection is required');
   const fingerprints = await fingerprintSource(source);
   const artifacts = [];
   for (const entry of entries) {
@@ -121,7 +121,7 @@ async function inspectNodeArtifacts(source, workspace, entries) {
     }
     artifacts.push({ key: entry.key, manifestPath: entry.manifestPath, manifestSha256: digest(bytes), packageScopes: manifest.packageScopes, files });
   }
-  return { status: 'PASS', exceptionId: exception.exceptionId, fingerprintSource: fingerprints.identity, artifacts, evidenceBoundary: 'Official output.files graph and exact materialized files; both Node handlers' };
+  return { status: 'PASS', exceptionId: exception.exceptionId, fingerprintSource: fingerprints.identity, artifacts, evidenceBoundary: 'Official output.files graph and exact materialized files; all prepared Node handlers' };
 }
 async function inspectSpaArtifacts(source, dist, inventory) {
   requireEvidence(inventory?.schemaVersion === 1 && inventory.stage === 'POST_BUILD_WRITTEN_BYTES' && inventory.source === source && inventory.dist === dist, 'SPA final-write inspection is missing or belongs to another build');

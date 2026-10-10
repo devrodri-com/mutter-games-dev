@@ -3,10 +3,12 @@ import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { test, expect, vi } from 'vitest';
 import { initializeTestEnvironment, assertSucceeds, assertFails } from '@firebase/rules-unit-testing';
-import { initializeApp, deleteApp } from 'firebase-admin/app';
+import { deleteApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
 import handler from '../../api/create-mp-preference';
+import { createNativeSession } from '../../api/_lib/credential-session';
+import { initializeDemoAdmin } from './demo-admin';
 function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw Error('Expected object');
   return Object.fromEntries(Object.entries(value));
@@ -18,7 +20,7 @@ test('real Auth + checkout handler + candidate Rules persist one canonical order
   const projectId = 'demo-mutter-r1';
   const uid = `handler-buyer-${randomUUID()}`;
   const env = await initializeTestEnvironment({ projectId, firestore: { host: '127.0.0.1', port: 8188, rules: readFileSync('firebase.catalog-r1b.rules', 'utf8') } });
-  const app = initializeApp({ projectId }, 'catalog-checkout');
+  const app = initializeDemoAdmin('catalog-checkout');
   const db = getFirestore(app); const auth = getAuth(app);
   const actualFetch = globalThis.fetch;
   let posts = 0; let externalReference = '';
@@ -46,10 +48,16 @@ test('real Auth + checkout handler + candidate Rules persist one canonical order
   try {
     await env.clearFirestore();
     await db.doc('operations/webStockCutover').set({schema:1,state:'open',revision:'synthetic-open-rules-handler',updatedAt:new Date()});
+    await db.doc('operations/credentialAccessCutover').set({ schema: 1, phase: 'ENFORCED', epoch: 'synthetic-rules-handler-epoch', legacyCutoffMs: 1 });
     await auth.createUser({ uid, email: `${uid}@example.invalid`, password: 'synthetic-handler-buyer-password' });
     const signed = await fetch('http://127.0.0.1:9198/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=synthetic', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: `${uid}@example.invalid`, password: 'synthetic-handler-buyer-password', returnSecureToken: true }) });
-    const token = string(object(await signed.json()).idToken);
-    await auth.verifyIdToken(token, true);
+    const ordinaryToken = string(object(await signed.json()).idToken);
+    const native = await createNativeSession(auth, db, await auth.verifyIdToken(ordinaryToken, true));
+    if (!native.customToken) throw Error('Expected synthetic native capability');
+    const custom = await fetch('http://127.0.0.1:9198/identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=synthetic', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: native.customToken, returnSecureToken: true }) });
+    expect(custom.status).toBe(200);
+    const token = string(object(await custom.json()).idToken);
+    const claims = await auth.verifyIdToken(token, true);
     await db.doc('products/p').set({ active: true, title: 'P', stockTotal: 2, priceUSD: 100 });
     const purchase = { items: [{ id: 'p', quantity: 1 }], shipping: { pickup: true, department: '', name: 'Synthetic', address: '', city: '', postalCode: '', phone: '123', email: 'buyer@example.invalid' } };
     expect((await call({ action: 'quote', purchase }, 'invalid')).status).toBe(401);
@@ -60,7 +68,8 @@ test('real Auth + checkout handler + candidate Rules persist one canonical order
     const id = string(started.body.id); expect(externalReference).toBe(id);
     expect((await db.doc(`orders/${id}`).get()).data()).toMatchObject({ uid, total: 100, currency: 'UYU', paymentStatus: 'pending', checkoutIntentId: id, preferenceId: 'synthetic-preference' });
     expect((await db.doc(`checkoutIntents/${id}`).get()).data()).toMatchObject({ uid, state: 'ready', preferenceId: 'synthetic-preference' });
-    const buyer = env.authenticatedContext(uid, { firebase: { sign_in_provider: 'password', identities: {} } }).firestore();
+    const buyer = env.authenticatedContext(uid, { firebase: { sign_in_provider: 'custom', identities: {} },
+      mutterCredentialSession: string(claims.mutterCredentialSession), mutterCredentialEpoch: string(claims.mutterCredentialEpoch) }).firestore();
     await assertSucceeds(buyer.doc(`orders/${id}`).get());
     await assertFails(buyer.doc(`orders/${id}`).update({ paymentStatus: 'paid' }));
     await assertFails(buyer.doc(`checkoutIntents/${id}`).get());

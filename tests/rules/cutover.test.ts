@@ -2,13 +2,14 @@
 import { readFileSync } from 'node:fs';
 import { afterAll, beforeAll, expect, test } from 'vitest';
 import { assertFails, assertSucceeds, initializeTestEnvironment } from '@firebase/rules-unit-testing';
+import { credentialClaims, seedCredentialAuthority } from './credential-fixtures';
 
 if (process.env.FIRESTORE_EMULATOR_HOST !== '127.0.0.1:8188') throw new Error('Demo emulator required');
 const env = await initializeTestEnvironment({ projectId: 'demo-mutter-cutover-rules', firestore: {
     host: '127.0.0.1', port: 8188, rules: readFileSync('firebase.catalog-cutover.rules', 'utf8'),
 } });
-const admin = env.authenticatedContext('admin', { email: 'admin@example.invalid', firebase: { sign_in_provider: 'password', identities: {} } }).firestore();
-const buyer = env.authenticatedContext('buyer', { email: 'buyer@example.invalid', firebase: { sign_in_provider: 'password', identities: {} } }).firestore();
+const admin = env.authenticatedContext('admin', credentialClaims('admin', { email: 'admin@example.invalid', admin: true })).firestore();
+const buyer = env.authenticatedContext('buyer', credentialClaims('buyer', { email: 'buyer@example.invalid' })).firestore();
 const publicDb = env.unauthenticatedContext().firestore();
 const controlPath = 'operations/webStockCutover';
 async function control(state: 'open' | 'closed' | 'reconciling') {
@@ -18,6 +19,7 @@ async function control(state: 'open' | 'closed' | 'reconciling') {
 }
 beforeAll(async () => {
     await env.clearFirestore();
+    await seedCredentialAuthority(env, [{ uid: 'admin', admin: true }, { uid: 'buyer' }]);
     await env.withSecurityRulesDisabled(async context => {
         const db = context.firestore();
         for (const [path, data] of Object.entries({

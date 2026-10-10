@@ -10,12 +10,12 @@ const exception = require('../exception.json');
 const source = path.resolve(__dirname, '../../..');
 
 async function fixture(t) {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'mutter-edge-emission-negative-'));
+  const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'mutter-edge-emission-negative-')));
   assert(!root.startsWith(`${source}${path.sep}`), 'Canary must be outside publishable source/artifacts');
   t.after(() => fs.rm(root, { recursive: true }));
   const emitted = path.join(root, 'emitted');
   const entries = [];
-  for (const key of ['checkout', 'reconcile']) {
+  for (const key of require('../../checkout-packaging/function-definitions.cjs').DEFINITIONS.map(item => item.key)) {
     const directory = path.join(emitted, key);
     await fs.mkdir(directory, { recursive: true });
     await fs.writeFile(path.join(directory, 'handler.js'), 'export const synthetic = true;\n');

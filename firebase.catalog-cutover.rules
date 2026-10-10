@@ -4,19 +4,59 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     // ---- helpers ----
-    // Firebase request.auth is the authority; client fields cannot choose a provider.
-    function isAuthed() {
+    // A Firebase identity alone cannot admit an old credential. Admission belongs
+    // to one protected session, never to every token for the same UID.
+    function hasCredentialSession() {
       return request.auth != null
         && 'firebase' in request.auth.token && request.auth.token.firebase is map
         && 'sign_in_provider' in request.auth.token.firebase
-        && request.auth.token.firebase.sign_in_provider in ['password', 'anonymous'];
+        && request.auth.token.firebase.sign_in_provider == 'custom'
+        && 'mutterCredentialSession' in request.auth.token
+        && request.auth.token.mutterCredentialSession is string
+        && request.auth.token.mutterCredentialSession.matches('[a-f0-9]{64}')
+        && 'mutterCredentialEpoch' in request.auth.token
+        && request.auth.token.mutterCredentialEpoch is string
+        && request.auth.token.mutterCredentialEpoch.matches('[a-zA-Z0-9_-]{16,100}');
+    }
+    function credentialSessionMatches() {
+      let control = get(/databases/$(database)/documents/operations/credentialAccessCutover).data;
+      let session = get(/databases/$(database)/documents/credentialSessions/$(request.auth.token.mutterCredentialSession)).data;
+      let account = get(/databases/$(database)/documents/credentialAccess/$(request.auth.uid)).data;
+      return control.schema == 1 && control.phase == 'ENFORCED'
+        && control.epoch is string && control.epoch.matches('[a-zA-Z0-9_-]{16,100}')
+        && control.legacyCutoffMs is int && control.legacyCutoffMs > 0 && control.legacyCutoffMs <= 9007199254740991
+        && request.auth.token.mutterCredentialEpoch == control.epoch
+        && session.schema == 1 && session.status == 'ACTIVE'
+        && session.uid == request.auth.uid && session.epoch == control.epoch
+        && session.expiresAtMs is int && session.expiresAtMs > request.time.toMillis() && session.expiresAtMs <= 9007199254740991
+        // Same seven-day upper bound as credential-access-state.ts (Rules has no module imports).
+        && session.expiresAtMs <= request.time.toMillis() + 604800000
+        && session.proofKind in ['NEW_POST_CUTOVER', 'RECOVERY_CHANNEL']
+        && session.roles is map && session.roles.admin is bool && session.roles.superadmin is bool
+        && account.schema == 1 && account.uid == request.auth.uid && account.epoch == control.epoch
+        && account.roles is map && account.roles.admin is bool && account.roles.superadmin is bool
+        && account.channelStatus in ['UNVERIFIED', 'INDEPENDENTLY_VERIFIED']
+        && (account.recoveryEmail == null || (account.recoveryEmail is string && account.recoveryEmail.size() <= 254
+          && account.recoveryEmail.matches('[^\\s@]+@[^\\s@]+\\.[^\\s@]+')))
+        && (account.channelEvidenceSha256 == null || (account.channelEvidenceSha256 is string
+          && account.channelEvidenceSha256.matches('[a-f0-9]{64}')))
+        && (account.channelStatus != 'INDEPENDENTLY_VERIFIED'
+          || (account.recoveryEmail is string && account.channelEvidenceSha256 is string))
+        && ((session.proofKind == 'NEW_POST_CUTOVER' && account.status == 'NATIVE_POST_CUTOVER')
+          || (session.proofKind == 'RECOVERY_CHANNEL' && account.status == 'RECOVERED'
+            && account.channelStatus == 'INDEPENDENTLY_VERIFIED'));
+    }
+    function isAuthed() {
+      return hasCredentialSession() && credentialSessionMatches();
     }
     function isAdmin() {
-      return isAuthed()
-    && request.auth.token.firebase.sign_in_provider == 'password'
-    && request.auth.token.email != null
-    && exists(/databases/$(database)/documents/adminUsers/$(request.auth.token.email));
-}
+      let session = get(/databases/$(database)/documents/credentialSessions/$(request.auth.token.mutterCredentialSession)).data;
+      let account = get(/databases/$(database)/documents/credentialAccess/$(request.auth.uid)).data;
+      return isAuthed() && (
+        ('admin' in request.auth.token && request.auth.token.admin == true && session.roles.admin == true && account.roles.admin == true)
+        || ('superadmin' in request.auth.token && request.auth.token.superadmin == true && session.roles.superadmin == true && account.roles.superadmin == true)
+      );
+    }
 
     // Prepared cutover variant only. Apply under a separately authorized release.
     // Admin SDK bypasses Rules and must also use the server admission guard.
@@ -27,6 +67,9 @@ service cloud.firestore {
         && control.updatedAt is timestamp;
     }
     match /operations/{document=**} { allow read, write: if false; }
+    match /credentialSessions/{document=**} { allow read, write: if false; }
+    match /credentialAccess/{document=**} { allow read, write: if false; }
+    match /credentialRecoveryChallenges/{document=**} { allow read, write: if false; }
 
     // ---- catálogo público ----
     match /products/{id} {
@@ -71,27 +114,22 @@ match /orders/{orderId} {
 
     // ---- adminUsers (para validar admin) ----
     match /adminUsers/{id} {
-  allow read: if isAuthed();   // o if isAdmin() → tu panel lo usa para traer la lista
+  allow read: if isAdmin();
   allow write: if false;       // nadie escribe desde front — solo backend o consola
 }
 
     // ---- clients (para el panel “Clientes”) ----
     match /clients/{id} {
-      // crear su ficha si el id es su UID o su EMAIL
-      allow create: if cutoverOpen() && isAuthed() && (
-        id == request.auth.uid ||
-        (request.auth.token.email != null && id == request.auth.token.email)
-      );
+      // Buyer ownership stays at the UID; changing Auth email cannot claim
+      // a historical email-keyed record. Administrators retain bounded reads.
+      allow create: if cutoverOpen() && isAuthed() && id == request.auth.uid;
 
       // leer/actualizar: el dueño o cualquier admin
       allow read: if isAuthed() && (
-        isAdmin() || id == request.auth.uid ||
-        (request.auth.token.email != null && id == request.auth.token.email)
+        isAdmin() || id == request.auth.uid
       );
       allow update: if cutoverOpen() && isAuthed() && (
-        isAdmin() ||
-        id == request.auth.uid ||
-        (request.auth.token.email != null && id == request.auth.token.email)
+        isAdmin() || id == request.auth.uid
       );
 
       // borrar: solo admin

@@ -1,6 +1,5 @@
-// Test-only host: real SPA + real checkout handler, isolated Auth/Firestore and a synthetic MP HTTP boundary.
+// Test-only host: real SPA + real access/checkout handlers, isolated Auth/Firestore and a synthetic MP HTTP boundary.
 import { createServer } from 'vite';
-import { initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 if (process.env.FIRESTORE_EMULATOR_HOST !== '127.0.0.1:8188' || process.env.FIREBASE_AUTH_EMULATOR_HOST !== '127.0.0.1:9198' || process.env.VITE_FIREBASE_PROJECT_ID !== 'demo-mutter-r1') {
   throw new Error('Exact local demo emulators required');
@@ -8,8 +7,6 @@ if (process.env.FIRESTORE_EMULATOR_HOST !== '127.0.0.1:8188' || process.env.FIRE
 for (const key of ['FIREBASE_PRIVATE_KEY', 'FIREBASE_CLIENT_EMAIL', 'GOOGLE_APPLICATION_CREDENTIALS', 'MP_ACCESS_TOKEN', 'IMAGEKIT_PRIVATE_KEY', 'WEB_ADMISSION_HMAC_SECRET', 'CRON_SECRET']) {
   if (process.env[key]) throw new Error(`Credential environment forbidden: ${key}`);
 }
-const app = initializeApp({ projectId: 'demo-mutter-r1' }, 'catalog-checkout');
-await getFirestore(app).doc('operations/webStockCutover').set({schema:1,state:'open',revision:'synthetic-browser-open',updatedAt:new Date()});
 process.env.MP_ACCESS_TOKEN = 'synthetic-browser-only';
 process.env.MP_COLLECTOR_ID = '200';
 process.env.VERCEL = '1';
@@ -29,14 +26,15 @@ globalThis.fetch = async (input, init) => {
   }
   throw new Error(`External server fetch forbidden: ${url.origin}`);
 };
-let handlerPromise;
+const handlers = new Map();
 const server = await createServer({
   envDir: false,
   server: { host: '127.0.0.1', port: 5277, strictPort: true },
   plugins: [{
     name: 'isolated-real-checkout-handler',
     configureServer(vite) {
-      vite.middlewares.use('/api/create-mp-preference', async (req, res) => {
+      function mount(path, modulePath) {
+        vite.middlewares.use(path, async (req, res) => {
         try {
           const chunks = []; let size = 0;
           for await (const chunk of req) {
@@ -44,22 +42,31 @@ const server = await createServer({
             if (size > 1024 * 1024) throw new Error('Oversized test request');
             chunks.push(chunk);
           }
-          handlerPromise ??= vite.ssrLoadModule('/api/create-mp-preference.ts').then(module => module.default);
-          const handler = await handlerPromise;
+          if (!handlers.has(modulePath)) handlers.set(modulePath, vite.ssrLoadModule(modulePath).then(module => module.default));
+          const handler = await handlers.get(modulePath);
           const response = {
             setHeader(name, value) { res.setHeader(name, value); },
             status(code) { res.statusCode = code; return response; },
             json(body) { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(body)); },
           };
           // Emulate the trusted platform overwriting its header, never a browser-selected IP.
-          await handler({ method: req.method, headers: { ...req.headers, 'x-vercel-forwarded-for': '192.0.2.34' }, rawHeaders: ['x-vercel-forwarded-for', '192.0.2.34'], body: Buffer.concat(chunks).toString('utf8') }, response);
+          await handler({ url: req.originalUrl, method: req.method, headers: { ...req.headers, 'x-vercel-forwarded-for': '192.0.2.34' }, rawHeaders: ['x-vercel-forwarded-for', '192.0.2.34'], body: Buffer.concat(chunks).toString('utf8') }, response);
         } catch (error) {
-          console.error('Isolated checkout handler failed:', error);
+          console.error('Isolated HTTP handler failed');
           res.statusCode = 500; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ error: 'Isolated handler unavailable' }));
         }
-      });
+        });
+      }
+      mount('/api/create-mp-preference', '/api/create-mp-preference.ts');
+      mount('/api/access', '/api/access.ts');
     },
   }],
 });
+// Reuse the real SDK's in-memory RSA demo fixture. No ADC discovery or Auth replacement.
+const { initializeDemoAdmin } = await server.ssrLoadModule('/tests/catalog/demo-admin.ts');
+const app = initializeDemoAdmin('catalog-checkout');
+const db = getFirestore(app);
+await db.doc('operations/webStockCutover').set({ schema: 1, state: 'open', revision: 'synthetic-browser-open', updatedAt: new Date() });
+await db.doc('operations/credentialAccessCutover').set({ schema: 1, phase: 'ENFORCED', epoch: 'synthetic-browser-credential-epoch', legacyCutoffMs: 1 });
 await server.listen();
 process.on('SIGTERM', () => { void server.close().then(() => process.exit(0)); });
