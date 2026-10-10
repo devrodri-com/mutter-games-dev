@@ -15,8 +15,12 @@ export default function LoginForm() {
   const navigate = useNavigate();
   const { refreshAccess, credentialAccess } = useAuth();
   const finish = async (result: CredentialAdmission) => {
-    await refreshAccess();
-    navigate(result.admin || result.superadmin ? '/admin' : '/carrito', { replace: true });
+    const changedAccount = () => auth.currentUser?.uid !== result.uid;
+    const cancelled = () => new CredentialAccessError('ACCESS_UNAVAILABLE', 'Cambió la cuenta. Ingreso anterior cancelado; tu cuenta actual y sus datos se conservan.');
+    if (changedAccount()) throw cancelled();
+    const fresh = await refreshAccess().catch((error: unknown) => { if (changedAccount()) throw cancelled(); throw error; });
+    if (fresh.uid !== result.uid || auth.currentUser?.uid !== fresh.uid) throw cancelled();
+    navigate(fresh.admin || fresh.superadmin ? '/admin' : '/carrito', { replace: true });
   };
   const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault(); if (busy) return; setBusy(true); setMessage(null);

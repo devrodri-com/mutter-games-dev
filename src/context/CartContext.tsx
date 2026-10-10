@@ -76,14 +76,18 @@ export function CartProvider({ children }: {
         catch { setCartError('No pudimos guardar los datos de entrega en este dispositivo.'); }
     }, [shippingInfo]);
     const revision = useRef(0);
+    const accessGeneration = useRef(0);
     const pending = useRef(0);
     const queue = useRef<Promise<void>>(Promise.resolve());
     const activeUid = useRef<string | null>(null);
     const unsynced = useRef(false);
     const fail = (error: unknown) => { const message = error instanceof Error ? error.message : 'No pudimos sincronizar el carrito.'; setCartError(message); toast.error(message); };
     const show = (next: CartItem[]) => { itemsRef.current = next; setItems(next); };
-    useEffect(() => onAuthStateChanged(auth, user => { activeUid.current = user?.uid ?? null; setUid(user?.uid ?? null); revision.current++; }), []);
+    const ownsAccess = (owner: string, generation: number) => activeUid.current === owner && accessState.current === 'active' && accessGeneration.current === generation;
+    useEffect(() => onAuthStateChanged(auth, user => { activeUid.current = user?.uid ?? null; setUid(user?.uid ?? null); revision.current++; accessGeneration.current++; }), []);
     useEffect(() => {
+        const generation = ++accessGeneration.current;
+        revision.current++;
         if (!uid)
             return;
         let stopped = false;
@@ -122,10 +126,12 @@ export function CartProvider({ children }: {
             return;
         }
         const restore = async (next: CartItem[]) => {
+            if (stopped || !ownsAccess(uid, generation))
+                return;
             const version = ++revision.current;
             try {
                 const current = await enrichCartItems(next);
-                if (stopped || version !== revision.current || activeUid.current !== uid)
+                if (stopped || version !== revision.current || !ownsAccess(uid, generation))
                     return;
                 show(current);
                 store(uid, current, false);
@@ -133,7 +139,7 @@ export function CartProvider({ children }: {
                 setCartError(null);
             }
             catch (error) {
-                if (!stopped && version === revision.current) {
+                if (!stopped && version === revision.current && ownsAccess(uid, generation)) {
                     setCartReady(false);
                     fail(error);
                 }
@@ -145,25 +151,25 @@ export function CartProvider({ children }: {
                 if (dirty) {
                     const restoreRevision = revision.current;
                     const operation = queue.current.then(() => {
-                        if (activeUid.current !== uid || accessState.current !== 'active') throw new Error('Cambió el acceso antes de restaurar.');
+                        if (!ownsAccess(uid, generation)) throw new Error('Cambió el acceso antes de restaurar.');
                         return saveCartToFirebase(uid, cached);
                     });
                     queue.current = operation.catch(() => undefined);
                     await operation;
-                    if (stopped)
+                    if (stopped || !ownsAccess(uid, generation))
                         return;
                     if (restoreRevision === revision.current) {
                         store(uid, cached, false);
                         unsynced.current = false;
                     }
                 }
-                if (stopped)
+                if (stopped || !ownsAccess(uid, generation))
                     return;
-                stop = listenToCartChanges(uid, (next, exists) => { if (!pending.current && !unsynced.current)
-                    void restore(exists ? next : []); }, fail);
+                stop = listenToCartChanges(uid, (next, exists) => { if (!stopped && ownsAccess(uid, generation) && !pending.current && !unsynced.current)
+                    void restore(exists ? next : []); }, error => { if (!stopped && ownsAccess(uid, generation)) fail(error); });
             }
             catch (error) {
-                if (!stopped)
+                if (!stopped && ownsAccess(uid, generation))
                     fail(error);
             }
         };
@@ -176,6 +182,7 @@ export function CartProvider({ children }: {
             return false;
         }
         const owner = uid;
+        const generation = accessGeneration.current;
         revision.current++;
         pending.current++;
         unsynced.current = true;
@@ -190,62 +197,75 @@ export function CartProvider({ children }: {
             return false;
         }
         const operation = queue.current.then(async () => {
-            if (activeUid.current !== owner || accessState.current !== 'active')
+            if (!ownsAccess(owner, generation))
                 throw new Error('Cambió el acceso antes de guardar.');
             await saveCartToFirebase(owner, next);
         });
         queue.current = operation.catch(() => undefined);
         try {
             await operation;
+            if (!ownsAccess(owner, generation))
+                return false;
             if (activeUid.current === owner && pending.current === 1) {
                 store(owner, next, false);
                 unsynced.current = false;
                 setCartError(null);
+                try {
+                    // Keep the write's acknowledgement from starting a competing restore.
+                    await refreshCurrentCart(1);
+                }
+                catch {
+                    return false;
+                }
             }
         }
         catch (error) {
-            if (activeUid.current === owner)
+            if (ownsAccess(owner, generation))
                 fail(error);
             return false;
         }
         finally {
             pending.current--;
         }
-        if (activeUid.current === owner && pending.current === 0) {
-            try {
-                await refreshCart();
-            }
-            catch {
-                return false;
-            }
-        }
         return true;
     };
-    const refreshCart = async (): Promise<CartItem[]> => {
+    const refreshCurrentCart = async (expectedPending: 0 | 1): Promise<CartItem[]> => {
+        const owner = uid;
+        const generation = accessGeneration.current;
         const version = ++revision.current;
         setCartReady(false);
         try {
-            if (accessState.current !== 'active') throw new Error('Tu carrito se conserva. Recuperá el acceso para continuar.');
-            if (unsynced.current && uid && !pending.current) {
-                await saveCartToFirebase(uid, itemsRef.current);
+            if (!owner || !ownsAccess(owner, generation)) throw new Error('Tu carrito se conserva. Recuperá el acceso para continuar.');
+            if (pending.current !== expectedPending) throw new Error('El carrito cambió. Revisalo antes de continuar.');
+            if (unsynced.current && !pending.current) {
+                const next = itemsRef.current;
+                const operation = queue.current.then(() => {
+                    if (!ownsAccess(owner, generation) || version !== revision.current || pending.current) throw new Error('Cambió el carrito o el acceso antes de guardar.');
+                    return saveCartToFirebase(owner, next);
+                });
+                queue.current = operation.catch(() => undefined);
+                await operation;
+                if (!ownsAccess(owner, generation)) throw new Error('Cambió el acceso mientras guardábamos el carrito.');
+                if (version !== revision.current || pending.current) throw new Error('El carrito cambió. Revisalo antes de continuar.');
                 unsynced.current = false;
-                store(uid, itemsRef.current, false);
+                store(owner, next, false);
             }
             const current = await enrichCartItems(itemsRef.current);
-            if (version !== revision.current || pending.current)
+            if (!ownsAccess(owner, generation)) throw new Error('Cambió el acceso mientras comprobábamos el carrito.');
+            if (version !== revision.current || pending.current !== expectedPending)
                 throw new Error('El carrito cambió. Revisalo antes de continuar.');
             show(current);
-            if (uid)
-                store(uid, current, false);
+            store(owner, current, false);
             setCartReady(true);
             setCartError(null);
             return current;
         }
         catch (error) {
-            fail(error);
+            if (owner && ownsAccess(owner, generation)) fail(error);
             throw error;
         }
     };
+    const refreshCart = (): Promise<CartItem[]> => refreshCurrentCart(0);
     const addToCart = async (item: CartItem) => {
         try {
             const version = revision.current;

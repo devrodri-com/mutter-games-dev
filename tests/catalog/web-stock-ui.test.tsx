@@ -9,12 +9,20 @@ const sdk = vi.hoisted(() => ({
   product: undefined as unknown,
   listeners: [] as ((snapshot: unknown) => void)[],
   user: { uid: 'stock-ui', getIdToken: async () => 'synthetic' },
+  credentialAccess: 'active' as 'loading' | 'active' | 'pending' | 'unavailable',
+  credentialError: null as string | null,
+  cartReady: true,
+  cartError: null as string | null,
+  addToCart: vi.fn(async (_item: unknown) => true),
 }));
 vi.mock('../../src/firebase', () => ({ auth: { currentUser: sdk.user }, db: {} }));
 vi.mock('../../src/firebase/products', () => ({ fetchProductBySlug: async () => mapCatalogProduct('p', sdk.product) }));
 vi.mock('firebase/firestore', () => ({ doc: vi.fn(), onSnapshot: (_ref: unknown, _options: unknown, callback: (value: unknown) => void) => { sdk.listeners.push(callback); return () => undefined; } }));
 vi.mock('firebase/auth', () => ({ onAuthStateChanged: (_auth: unknown, callback: (user: typeof sdk.user) => void) => { callback(sdk.user); return () => undefined; } }));
-vi.mock('../../src/context/CartContext', () => ({ useCart: () => ({ addToCart: vi.fn(), items: [] }) }));
+// This UI boundary supplies dispositions only; real SDK/Rules/browser suites
+// independently exercise admission and authority without replacing Auth.
+vi.mock('../../src/context/AuthContext', () => ({ useAuth: () => ({ credentialAccess: sdk.credentialAccess, credentialError: sdk.credentialError }) }));
+vi.mock('../../src/context/CartContext', () => ({ useCart: () => ({ addToCart: sdk.addToCart, items: [], cartReady: sdk.cartReady, cartError: sdk.cartError }) }));
 vi.mock('../../src/components/ProductPageNavbar', () => ({ default: () => null }));
 vi.mock('../../src/components/RelatedProducts', () => ({ default: () => null }));
 vi.mock('../../src/components/Footer', () => ({ default: () => null }));
@@ -29,8 +37,69 @@ const holdId = 'opaque-reservation-00000001';
 const baseHold = { [holdId]: { expiresAt: 1, lines: [{ slot: 'base', identity: 'base', quantity: 1 }] } };
 beforeEach(() => {
   sdk.listeners = [];
+  sdk.credentialAccess = 'active'; sdk.credentialError = null;
+  sdk.cartReady = true; sdk.cartError = null; sdk.addToCart.mockReset().mockResolvedValue(true);
   vi.stubGlobal('IntersectionObserver', class { observe() {} disconnect() {} });
   vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ checked: true }))));
+});
+
+async function renderProduct() {
+  if (!root) {
+    const element = document.createElement('div'); document.body.append(element); root = createRoot(element);
+  }
+  await act(async () => root?.render(<MemoryRouter initialEntries={['/product/p']}><Routes><Route path="/product/:slug" element={<ProductPage />} /></Routes></MemoryRouter>));
+}
+function purchaseButtons() {
+  const add = document.querySelector<HTMLButtonElement>('button[aria-label="Agregar al carrito"]');
+  const quick = document.querySelector<HTMLButtonElement>('button[aria-label="Comprar ahora"]');
+  if (!add || !quick) throw new Error('Missing responsive purchase controls');
+  return { add, quick };
+}
+
+test('both purchase controls wait for admission and cart readiness, and remain blocked while adding', async () => {
+  vi.useFakeTimers(); sdk.product = base; sdk.credentialAccess = 'loading'; sdk.cartReady = false;
+  await renderProduct();
+  const { add, quick } = purchaseButtons();
+  expect(add.disabled).toBe(true); expect(quick.disabled).toBe(true);
+  expect(document.body.textContent).toContain('Comprobando el acceso a tu carrito');
+  await act(async () => { add.click(); quick.click(); }); expect(sdk.addToCart).not.toHaveBeenCalled();
+  sdk.credentialAccess = 'active'; await renderProduct();
+  expect(add.disabled).toBe(true); expect(quick.disabled).toBe(true);
+  expect(document.body.textContent).toContain('Preparando tu carrito');
+  sdk.cartReady = true; await renderProduct();
+  expect(add.disabled).toBe(false); expect(quick.disabled).toBe(false);
+  let finishAdd: ((added: boolean) => void) | undefined;
+  sdk.addToCart.mockImplementationOnce(() => new Promise<boolean>(resolve => { finishAdd = resolve; }));
+  await act(async () => add.click());
+  expect(sdk.addToCart).toHaveBeenCalledTimes(1);
+  expect(sdk.addToCart).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'p', priceUSD: 100, quantity: 1 }));
+  expect(add.disabled).toBe(true); expect(quick.disabled).toBe(true);
+  if (!finishAdd) throw new Error('Missing pending add operation');
+  await act(async () => finishAdd?.(true));
+  await act(async () => vi.advanceTimersByTimeAsync(800));
+  expect(add.disabled).toBe(false); expect(quick.disabled).toBe(false);
+  await act(async () => quick.click()); expect(sdk.addToCart).toHaveBeenCalledTimes(2);
+  await act(async () => vi.advanceTimersByTimeAsync(800));
+});
+
+test.each(['pending', 'unavailable'] as const)('purchase controls retain recovery for %s without adding', async status => {
+  sdk.product = base; sdk.credentialAccess = status; sdk.credentialError = 'No pudimos comprobar el acceso.';
+  await renderProduct(); const { add, quick } = purchaseButtons();
+  expect(add.disabled).toBe(true); expect(quick.disabled).toBe(true);
+  expect(document.querySelector('a[href="/login?return=cart"]')?.textContent).toBe('Entrar con mi cuenta o recuperar el acceso');
+  if (status === 'pending') expect(document.body.textContent).toContain('contactá a Mutter para recuperar el acceso');
+  await act(async () => { add.click(); quick.click(); }); expect(sdk.addToCart).not.toHaveBeenCalled();
+});
+
+test('an active account cannot buy through a cart error until the error clears', async () => {
+  sdk.product = base; sdk.cartError = 'No pudimos sincronizar el carrito.';
+  await renderProduct(); const { add, quick } = purchaseButtons();
+  expect(add.disabled).toBe(true); expect(quick.disabled).toBe(true);
+  expect(document.querySelector('a[href="/carrito"]')?.textContent).toBe('Revisar mi carrito');
+  await act(async () => { add.click(); quick.click(); }); expect(sdk.addToCart).not.toHaveBeenCalled();
+  sdk.cartError = null; await renderProduct();
+  expect(add.disabled).toBe(false); expect(quick.disabled).toBe(false);
+  expect(mapCatalogProduct('p', sdk.product).stockTotal).toBe(5);
 });
 afterEach(async () => { await act(async () => root?.unmount()); root = undefined; document.body.innerHTML = ''; vi.unstubAllGlobals(); vi.useRealTimers(); });
 

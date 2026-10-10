@@ -21,7 +21,8 @@ function current() { if (!context) throw new Error('Context unavailable'); retur
 function firebaseUser() { const user = auth.currentUser; if (!user) throw new Error('Demo user unavailable'); return user; }
 function Probe() { context = useAuth(); return <p>{context.credentialAccess}</p>; }
 async function mount() { const element = document.createElement('div'); document.body.append(element); root = createRoot(element); await act(async () => { root?.render(<AuthProvider><Probe /></AuthProvider>); }); }
-const active = (admin = false) => ({ status: 'ACTIVE', uid: sdk.user.uid, admin, superadmin: false, expiresAtMs: Date.now() + 86400000 });
+const active = (admin = false, uid = sdk.user.uid) => ({ status: 'ACTIVE', uid, admin, superadmin: false, expiresAtMs: Date.now() + 86400000 });
+const nextBuyer = () => ({ ...sdk.user, uid: 'next-demo-buyer', email: 'next-buyer@example.invalid', getIdToken: async () => 'next-demo-id-token' });
 beforeEach(() => { sdk.currentUser = sdk.user; sdk.token = 'old-demo-id-token'; sdk.listeners = []; sdk.exchange.mockReset(); sdk.signOut.mockReset(); localStorage.clear(); discardRecoveryNonce(); });
 afterEach(async () => { await act(async () => root?.unmount()); root = null; context = null; document.body.innerHTML = ''; vi.unstubAllGlobals(); });
 
@@ -68,4 +69,48 @@ test('completion uses bearer and mail proof, then confirms capability with the s
   expect(calls[0].header).toBe('Bearer old-demo-id-token'); expect(calls[1].header).toBe('Bearer new-demo-id-token'); expect(sdk.signOut).not.toHaveBeenCalled();
   vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 403 })));
   await expect(completeCredentialRecovery(firebaseUser(), 'c'.repeat(64))).rejects.toThrow(); expect(sdk.currentUser.uid).toBe(sdk.user.uid);
+});
+
+test.each([403, 503])('a late refresh failure %s from the previous UID cannot replace the current buyer admission', async status => {
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(active(true)))));
+  await mount();
+  let resolveResponse: ((value: Response) => void) | undefined;
+  const buyer = nextBuyer();
+  vi.stubGlobal('fetch', vi.fn(async (_url: string, options: RequestInit) => new Headers(options.headers).get('authorization') === 'Bearer next-demo-id-token'
+    ? new Response(JSON.stringify(active(false, buyer.uid)))
+    : new Promise<Response>(resolve => { resolveResponse = resolve; })));
+  let refreshing: Promise<unknown> | undefined;
+  await act(async () => { refreshing = current().refreshAccess().catch((error: unknown) => error); });
+  await act(async () => { sdk.currentUser = buyer; sdk.listeners.forEach(listener => listener(buyer)); });
+  expect(current().credentialAccess).toBe('active'); expect(current().user).toBeNull();
+  await act(async () => { resolveResponse?.(new Response('{}', { status })); expect(await refreshing).toBeInstanceOf(Error); });
+  expect(current().credentialAccess).toBe('active'); expect(current().credentialError).toBeNull(); expect(current().user).toBeNull();
+  expect(sdk.currentUser.uid).toBe(buyer.uid); expect(sdk.exchange).not.toHaveBeenCalled(); expect(sdk.signOut).not.toHaveBeenCalled();
+});
+
+test('a late successful response from the previous UID cannot grant its administrative UI to the current buyer', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(active(true)))));
+  await mount();
+  let resolveBody: ((value: unknown) => void) | undefined;
+  const oldResponse = new Response('{}');
+  vi.spyOn(oldResponse, 'json').mockImplementation(() => new Promise<unknown>(resolve => { resolveBody = resolve; }));
+  const buyer = nextBuyer();
+  vi.stubGlobal('fetch', vi.fn(async (_url: string, options: RequestInit) => new Headers(options.headers).get('authorization') === 'Bearer next-demo-id-token'
+    ? new Response(JSON.stringify(active(false, buyer.uid))) : oldResponse));
+  let refreshing: Promise<unknown> | undefined;
+  await act(async () => { refreshing = current().refreshAccess(); });
+  await act(async () => { sdk.currentUser = buyer; sdk.listeners.forEach(listener => listener(buyer)); });
+  await act(async () => { resolveBody?.(active(true)); expect(await refreshing).toMatchObject({ uid: sdk.user.uid, admin: true }); });
+  expect(current().credentialAccess).toBe('active'); expect(current().credentialError).toBeNull(); expect(current().user).toBeNull();
+  expect(sdk.currentUser.uid).toBe(buyer.uid); expect(sdk.exchange).not.toHaveBeenCalled();
+});
+
+test('refresh exchange for the same UID allows the new token observer to admit it once', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(active()))));
+  await mount();
+  let count = 0;
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(++count === 1 ? { ...active(), customToken: 'demo-custom-token' } : active()))));
+  await act(async () => { expect(await current().refreshAccess()).toMatchObject({ uid: sdk.user.uid, admin: false }); });
+  expect(current().credentialAccess).toBe('active'); expect(current().credentialError).toBeNull(); expect(current().user).toBeNull();
+  expect(sdk.exchange).toHaveBeenCalledTimes(1); expect(count).toBe(2); expect(sdk.currentUser.uid).toBe(sdk.user.uid);
 });

@@ -60,13 +60,45 @@ async function syntheticBuyer(request: APIRequestContext): Promise<{ Authorizati
 
 test('real checkout reserves the last unit and the open product stops offering it', async ({ page, request }, testInfo) => {
  await db.collection('products').doc(item.id).set({ ...product, stockTotal: 1 });
- await page.goto('/producto/r1-synthetic');
+ let releaseAdmission: (() => void) | undefined;
+ const admissionGate = new Promise<void>(resolve => { releaseAdmission = resolve; });
+ let firstAdmission = true;
+ await page.route('http://127.0.0.1:5277/api/access/session', async route => {
+  if (firstAdmission && route.request().method() === 'POST') {
+   firstAdmission = false; await admissionGate;
+  }
+  await route.continue(); // Keep the official Auth process and real admission response.
+ });
+ const admissionRequested = page.waitForRequest(req => req.url() === 'http://127.0.0.1:5277/api/access/session' && req.method() === 'POST');
+ try {
+  await page.goto('/producto/r1-synthetic'); await admissionRequested;
+  await expect(page.getByRole('button', { name: 'Agregar al carrito', exact: true })).toBeDisabled();
+  const quickBuy = page.getByRole('button', { name: 'Comprar ahora', exact: true, includeHidden: true });
+  // The responsive sticky control is absent while the main buy block is in view.
+  if (await quickBuy.count()) await expect(quickBuy).toBeDisabled();
+  await expect(page.getByText('Comprobando el acceso a tu carrito…', { exact: true })).toBeVisible();
+ } finally { if (releaseAdmission) releaseAdmission(); }
  await expect(page.getByRole('button', { name: 'Agregar al carrito', exact: true })).toBeEnabled();
  await page.getByRole('button', { name: 'Agregar al carrito', exact: true }).click();
+ await expect(page.getByText('Agregado al carrito', { exact: true })).toBeVisible();
+ await expect.poll(() => page.evaluate(id => {
+  const keys = Object.keys(localStorage).filter(key => key.startsWith('mutter-cart:'));
+  if (keys.length !== 1) return false;
+  const cached: unknown = JSON.parse(localStorage.getItem(keys[0]) || 'null');
+  if (!cached || typeof cached !== 'object' || !('dirty' in cached) || cached.dirty !== false || !('items' in cached) || !Array.isArray(cached.items)) return false;
+  return cached.items.some((entry: unknown) => Boolean(entry && typeof entry === 'object' && 'id' in entry && entry.id === id && 'quantity' in entry && entry.quantity === 1));
+ }, item.id)).toBe(true);
+ const cartUid = await page.evaluate(() => Object.keys(localStorage).find(key => key.startsWith('mutter-cart:'))?.slice('mutter-cart:'.length));
+ if (!cartUid) throw new Error('Confirmed cart UID missing');
+ await expect.poll(async () => {
+  const saved: unknown = (await db.collection('carts').doc(cartUid).get()).data()?.cartItems;
+  return Array.isArray(saved) && saved.some((entry: unknown) => Boolean(entry && typeof entry === 'object' && 'id' in entry && entry.id === item.id && 'quantity' in entry && entry.quantity === 1));
+ }).toBe(true);
  const cartPage = await page.context().newPage();
  await cartPage.route('**/*', route => ['127.0.0.1', 'localhost'].includes(new URL(route.request().url()).hostname) ? route.continue() : route.abort());
  await cartPage.goto('/carrito');
  await expect(cartPage.getByText('$100.00 c/u', { exact: true })).toBeVisible();
+ expect(await cartPage.evaluate(() => Object.keys(localStorage).find(key => key.startsWith('mutter-cart:'))?.slice('mutter-cart:'.length))).toBe(cartUid);
  await expect(cartPage.getByText('No disponible para compra', { exact: true })).toHaveCount(0);
  const headers = await syntheticBuyer(request);
  const purchase = { items: [{ id: item.id, quantity: 1 }], shipping: { pickup: true, department: '', name: 'Synthetic Buyer', address: '', city: '', postalCode: '', phone: '00000000', email: 'browser@example.invalid' } };

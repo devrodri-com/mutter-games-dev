@@ -140,3 +140,96 @@ test('pending access keeps the same UID cached cart dirty without private synchr
  expect(context?.items[0]).toMatchObject({ customName: 'Cached selection', quantity: 2, priceUSD: 20 });
  expect(boundary.write).toHaveBeenCalledTimes(1);
 });
+
+test('a delayed refresh cannot acknowledge dirty selections after access becomes pending for the same UID', async () => {
+ await act(async () => boundary.listeners[0](snapshot([item])));
+ boundary.write.mockRejectedValueOnce(new Error('Remote unavailable'));
+ await act(async () => context?.updateItem(item, { quantity: 2 }));
+ const cached = localStorage.getItem('mutter-cart:synthetic-cart');
+ let resolveWrite: (() => void) | undefined;
+ boundary.write.mockImplementationOnce(() => new Promise<void>(resolve => { resolveWrite = resolve; }));
+ let refreshing: Promise<unknown> | undefined;
+ await act(async () => { refreshing = context?.refreshCart().catch((error: unknown) => error); });
+ await act(async () => { boundary.credentialAccess = 'pending'; root.render(<CartProvider><Probe /></CartProvider>); });
+ const pendingError = context?.cartError;
+ await act(async () => { resolveWrite?.(); expect(await refreshing).toBeInstanceOf(Error); });
+ expect(context?.cartReady).toBe(false);
+ expect(context?.cartError).toBe(pendingError);
+ expect(context?.cartError).toContain('Tu carrito se conserva');
+ expect(context?.items).toMatchObject([{ id: 'p', quantity: 2 }]);
+ expect(localStorage.getItem('mutter-cart:synthetic-cart')).toBe(cached);
+ expect(JSON.parse(cached ?? '{}').dirty).toBe(true);
+ expect(boundary.listeners).toHaveLength(0);
+ expect(boundary.write).toHaveBeenCalledTimes(2);
+ await act(async () => { boundary.credentialAccess = 'active'; root.render(<CartProvider><Probe /></CartProvider>); });
+ expect(boundary.write).toHaveBeenCalledTimes(3);
+ expect(boundary.write.mock.calls[2]?.[1].cartItems).toMatchObject([{ id: 'p', quantity: 2 }]);
+ expect(boundary.listeners).toHaveLength(1);
+ await act(async () => boundary.listeners[0](snapshot([{ ...item, quantity: 2 }])));
+ expect(context?.cartReady).toBe(true);
+ expect(context?.cartError).toBeNull();
+ expect(JSON.parse(localStorage.getItem('mutter-cart:synthetic-cart') ?? '{}')).toMatchObject({ dirty: false, items: [{ quantity: 2 }] });
+ expect(boundary.write).toHaveBeenCalledTimes(3);
+});
+
+test('a late catalog refresh cannot overwrite the pending-access state for the same UID', async () => {
+ await act(async () => boundary.listeners[0](snapshot([item])));
+ const cached = localStorage.getItem('mutter-cart:synthetic-cart');
+ let resolveRead: ((value: ReturnType<typeof current>) => void) | undefined;
+ boundary.read.mockImplementationOnce(() => new Promise(resolve => { resolveRead = resolve; }));
+ let refreshing: Promise<unknown> | undefined;
+ await act(async () => { refreshing = context?.refreshCart().catch((error: unknown) => error); });
+ await act(async () => { boundary.credentialAccess = 'pending'; root.render(<CartProvider><Probe /></CartProvider>); });
+ const pendingError = context?.cartError;
+ await act(async () => { resolveRead?.(current()); expect(await refreshing).toBeInstanceOf(Error); });
+ expect(context?.cartReady).toBe(false);
+ expect(context?.cartError).toBe(pendingError);
+ expect(localStorage.getItem('mutter-cart:synthetic-cart')).toBe(cached);
+ expect(boundary.write).not.toHaveBeenCalled();
+ expect(boundary.listeners).toHaveLength(0);
+});
+
+test('queued edits from an earlier admission cannot write after recovery; the latest dirty selection resumes once', async () => {
+ await act(async () => boundary.listeners[0](snapshot([item])));
+ let resolveWrite: (() => void) | undefined;
+ boundary.write.mockImplementationOnce(() => new Promise<void>(resolve => { resolveWrite = resolve; }));
+ let first: Promise<void> | undefined;
+ let queued: Promise<void> | undefined;
+ await act(async () => { first = context?.updateItem(item, { quantity: 2 }); });
+ await act(async () => { queued = context?.updateItem(item, { quantity: 1 }); });
+ expect(boundary.write).toHaveBeenCalledTimes(1);
+ await act(async () => { boundary.credentialAccess = 'pending'; root.render(<CartProvider><Probe /></CartProvider>); });
+ expect(context?.cartReady).toBe(false);
+ expect(JSON.parse(localStorage.getItem('mutter-cart:synthetic-cart') ?? '{}')).toMatchObject({ dirty: true, items: [{ quantity: 1 }] });
+ await act(async () => { boundary.credentialAccess = 'active'; root.render(<CartProvider><Probe /></CartProvider>); });
+ await act(async () => { resolveWrite?.(); await first; await queued; });
+ expect(boundary.write).toHaveBeenCalledTimes(2);
+ expect(boundary.write.mock.calls[1]?.[1].cartItems).toMatchObject([{ quantity: 1 }]);
+ expect(boundary.listeners).toHaveLength(1);
+ await act(async () => boundary.listeners[0](snapshot([item])));
+ expect(context?.cartReady).toBe(true);
+ expect(context?.cartError).toBeNull();
+ expect(context?.items).toMatchObject([{ quantity: 1 }]);
+ expect(JSON.parse(localStorage.getItem('mutter-cart:synthetic-cart') ?? '{}')).toMatchObject({ dirty: false, items: [{ quantity: 1 }] });
+ expect(boundary.write).toHaveBeenCalledTimes(2);
+});
+
+test('a confirmed write echo cannot cancel its own inventory refresh or report a failed add', async () => {
+ await act(async () => boundary.listeners[0](snapshot([])));
+ let resolveWrite: (() => void) | undefined;
+ let resolveRead: ((value: ReturnType<typeof current>) => void) | undefined;
+ boundary.write.mockImplementationOnce(() => new Promise<void>(resolve => { resolveWrite = resolve; }));
+ boundary.read.mockResolvedValueOnce(current()).mockImplementationOnce(() => new Promise(resolve => { resolveRead = resolve; }));
+ let adding: Promise<boolean> | undefined;
+ await act(async () => { adding = context?.addToCart(item); });
+ expect(boundary.write).toHaveBeenCalledTimes(1);
+ await act(async () => resolveWrite?.());
+ expect(resolveRead).toBeTypeOf('function');
+ await act(async () => boundary.listeners[0](snapshot([item])));
+ await act(async () => { resolveRead?.(current()); expect(await adding).toBe(true); });
+ expect(context?.cartReady).toBe(true);
+ expect(context?.cartError).toBeNull();
+ expect(context?.items).toMatchObject([{ id: 'p', quantity: 1, priceUSD: 20 }]);
+ expect(JSON.parse(localStorage.getItem('mutter-cart:synthetic-cart') ?? '{}')).toMatchObject({ dirty: false, items: [{ quantity: 1 }] });
+ expect(boundary.write).toHaveBeenCalledTimes(1);
+});

@@ -29,8 +29,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refreshAccess = async () => {
     const current = auth.currentUser;
     if (!current) throw new CredentialAccessError('ACCESS_UNAVAILABLE', 'Esperá a que termine de cargar tu cuenta.');
-    try { const result = await ensureCredentialSession(current); accept(result); return result; }
-    catch (error: unknown) { reject(error); throw error; }
+    const uid = current.uid;
+    const version = generation.current;
+    const isCurrent = () => version === generation.current && auth.currentUser?.uid === uid;
+    try { const result = await ensureCredentialSession(current); if (isCurrent()) accept(result); return result; }
+    catch (error: unknown) { if (isCurrent()) reject(error); throw error; }
   };
   useEffect(() => onIdTokenChanged(auth, current => {
     const version = ++generation.current;
