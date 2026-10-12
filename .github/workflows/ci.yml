@@ -16,7 +16,7 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     env:
-      WEB_INVENTORY_ADMIN_SHA: ac4a8d3f97461e4c9fdf3f37ee465a4a9dc5f526
+      WEB_INVENTORY_ADMIN_SHA: fba9c3c0c07ee93a291a7a0afa5ea085d613a351
       MUTTER_ADMIN_API_SOURCE: ${{ github.workspace }}/paired-admin-api
       EDGE_TOOLING_EVIDENCE_DIR: ${{ github.workspace }}/../mutter-edge-controls-${{ github.run_id }}-${{ github.run_attempt }}
       CHECKOUT_PACKAGING_EVIDENCE_DIR: ${{ github.workspace }}/../mutter-edge-controls-${{ github.run_id }}-${{ github.run_attempt }}/emitted-functions
@@ -138,6 +138,11 @@ jobs:
       - name: Install paired Admin dependencies
         working-directory: paired-admin-api
         run: npm run install:controlled
+
+      - name: Six repaired dependency consumer regressions
+        env:
+          MUTTER_ADMIN_API_SOURCE: ${{ github.workspace }}/paired-admin-api
+        run: npm run test:dependency-six
 
       - name: Busboy regressions across the exact pair and functions
         run: node paired-admin-api/scripts/test-busboy.cjs . functions paired-admin-api

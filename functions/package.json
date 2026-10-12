@@ -25,7 +25,8 @@
       "uuid": "11.1.1"
     },
     "firebase-admin": {
-      "@fastify/busboy": "3.2.1"
-    }
+      "@fastify/busboy": "3.2.2"
+    },
+    "proxy-addr": "2.0.8"
   }
 }

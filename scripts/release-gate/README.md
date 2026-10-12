@@ -13,6 +13,18 @@ It must never be regenerated from installed packages. Drift blocks. Retiring the
 repair for a future official compatible release requires a new scoped target and
 review of this policy; another advisory cannot inherit this disposition.
 
+## Scoped October 12 candidate references
+
+The guest reentry and six dependency correction preserves `audited` as historical
+identity. `resolutionReferences` binds only the three explicitly updated locks
+and the Edge exception's matching lock references. `candidateRevalidation`
+separately binds the temporary synthetic audit-receipt test adaptation and remains
+`PENDING_INDEPENDENT_REVALIDATION`. Neither field extends the braces advisory
+allowlist, changes its evaluator or grants an independent audit PASS. The original
+fixture files, source repair and native audit results remain intact. Both current
+repositories must share the exact policy; all other protected components still
+require their original hashes. New artifacts stay bound to their new targets.
+
 ## CI and external verification
 
 Original native audit commands, thresholds, JSON, stderr and exits remain intact.

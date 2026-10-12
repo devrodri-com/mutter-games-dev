@@ -1,7 +1,7 @@
 import type { Auth, DecodedIdToken } from 'firebase-admin/auth';
 import type { Firestore } from 'firebase-admin/firestore';
 import { CredentialAccessError, object } from './credential-access-state.js';
-import { createNativeSession, renewCredentialSession, type SessionResponse } from './credential-session.js';
+import { createNativeSession, resumeCredentialSession, type SessionResponse } from './credential-session.js';
 import { completeCredentialRecovery, requestCredentialRecovery } from './credential-recovery.js';
 export type AccessRequest = { method?: string; headers: Record<string, unknown>; body?: unknown };
 export type AccessResponse = { setHeader(name: string, value: string): unknown; status(code: number): AccessResponse; json(body: unknown): unknown };
@@ -43,7 +43,7 @@ export async function handleCredentialAccess(action: AccessAction, auth: Auth, d
       // authoritative creation after the cutoff and protected roles=false.
       result = await createNativeSession(auth, db, claims);
     } else {
-      result = await renewCredentialSession(auth, db, claims);
+      result = await resumeCredentialSession(auth, db, claims);
     }
     return res.status(200).json(result);
   } catch (error: unknown) {

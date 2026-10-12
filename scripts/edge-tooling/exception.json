@@ -39,11 +39,11 @@
   "locks": [
     {
       "path": "package-lock.json",
-      "sha256": "630889b504ae75ae0a4087b26698d2847e461b5d42ff6f14dbadebf17b69777e"
+      "sha256": "4e5471c6447a530f91a44f6cb5fda85af7e3111ed87068c7e62154a4ef1039e5"
     },
     {
       "path": "functions/package-lock.json",
-      "sha256": "c7ed52e37904ae10746299b3a15ff10816fccf02f9ea70dad654aa25aaa73471"
+      "sha256": "58faa11846af3f9965c3d5d54d1f871321d3cfd2e69168f8d9a6dd41ca8843a0"
     }
   ],
   "packages": [

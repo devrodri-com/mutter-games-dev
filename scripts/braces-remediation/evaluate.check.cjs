@@ -11,10 +11,13 @@ test('native advisory graph is classified without waiving raw red; malformed/unk
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'mutter-braces-audit-'));
   const original = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures/all.json')));
   const receipt = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures/all.receipt.json')));
+  // The unchanged historical corpus is synthetic gate input, not a fresh audit.
+  // Bind only its temporary receipt to this explicitly remediated lock target.
+  const currentLockSha256 = sha(fs.readFileSync(path.join(root, 'package-lock.json')));
   function write(audit, extra = {}) {
     const bytes = JSON.stringify(audit);
     fs.writeFileSync(path.join(temp, 'all.json'), bytes);
-    fs.writeFileSync(path.join(temp, 'all.receipt.json'), JSON.stringify({ ...receipt, rawSha256: sha(bytes), ...extra }));
+    fs.writeFileSync(path.join(temp, 'all.receipt.json'), JSON.stringify({ ...receipt, lockSha256: currentLockSha256, rawSha256: sha(bytes), ...extra }));
   }
   try {
     write(original); const classified = evaluate(root, temp, 'all');

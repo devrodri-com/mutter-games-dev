@@ -3,12 +3,13 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 const sdk = vi.hoisted(() => {
   const user = { uid: 'same-demo-uid', email: 'holder@example.invalid', displayName: null, providerData: [], getIdToken: async () => sdk.token };
-  return { user, token: 'old-demo-id-token', currentUser: user, listeners: [] as ((value: typeof user) => void)[], exchange: vi.fn(), signOut: vi.fn() };
+  return { user, token: 'old-demo-id-token', currentUser: user, listeners: [] as ((value: typeof user) => void)[], before: [] as ((value: typeof user) => void)[], exchange: vi.fn(), signOut: vi.fn() };
 });
 vi.mock('../../src/firebase', () => ({ auth: { get currentUser() { return sdk.currentUser; } } }));
 vi.mock('firebase/auth', () => ({
   onIdTokenChanged: (_auth: unknown, listener: (value: typeof sdk.user) => void) => { sdk.listeners.push(listener); listener(sdk.currentUser); return () => { sdk.listeners = sdk.listeners.filter(value => value !== listener); }; },
-  signInWithCustomToken: async (_auth: unknown, customToken: string) => { sdk.exchange(customToken); sdk.token = 'new-demo-id-token'; sdk.listeners.forEach(listener => listener(sdk.currentUser)); return { user: sdk.currentUser }; },
+  beforeAuthStateChanged: (_auth: unknown, listener: (value: typeof sdk.user) => void) => { sdk.before.push(listener); return () => { sdk.before = sdk.before.filter(value => value !== listener); }; },
+  signInWithCustomToken: async (_auth: unknown, customToken: string) => { for (const before of sdk.before) before(sdk.currentUser); sdk.exchange(customToken); sdk.token = 'new-demo-id-token'; sdk.listeners.forEach(listener => listener(sdk.currentUser)); return { user: sdk.currentUser }; },
   signOut: async () => { sdk.signOut(); },
 }));
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -23,7 +24,7 @@ function Probe() { context = useAuth(); return <p>{context.credentialAccess}</p>
 async function mount() { const element = document.createElement('div'); document.body.append(element); root = createRoot(element); await act(async () => { root?.render(<AuthProvider><Probe /></AuthProvider>); }); }
 const active = (admin = false, uid = sdk.user.uid) => ({ status: 'ACTIVE', uid, admin, superadmin: false, expiresAtMs: Date.now() + 86400000 });
 const nextBuyer = () => ({ ...sdk.user, uid: 'next-demo-buyer', email: 'next-buyer@example.invalid', getIdToken: async () => 'next-demo-id-token' });
-beforeEach(() => { sdk.currentUser = sdk.user; sdk.token = 'old-demo-id-token'; sdk.listeners = []; sdk.exchange.mockReset(); sdk.signOut.mockReset(); localStorage.clear(); discardRecoveryNonce(); });
+beforeEach(() => { sdk.currentUser = sdk.user; sdk.token = 'old-demo-id-token'; sdk.listeners = []; sdk.before = []; sdk.exchange.mockReset(); sdk.signOut.mockReset(); localStorage.clear(); discardRecoveryNonce(); });
 afterEach(async () => { await act(async () => root?.unmount()); root = null; context = null; document.body.innerHTML = ''; vi.unstubAllGlobals(); });
 
 test('old credential leaves the same account pending; local login data cannot grant admin or erase saved data', async () => {
@@ -98,9 +99,11 @@ test('a late successful response from the previous UID cannot grant its administ
   vi.stubGlobal('fetch', vi.fn(async (_url: string, options: RequestInit) => new Headers(options.headers).get('authorization') === 'Bearer next-demo-id-token'
     ? new Response(JSON.stringify(active(false, buyer.uid))) : oldResponse));
   let refreshing: Promise<unknown> | undefined;
-  await act(async () => { refreshing = current().refreshAccess(); });
+  await act(async () => { refreshing = current().refreshAccess().catch((error: unknown) => error); });
   await act(async () => { sdk.currentUser = buyer; sdk.listeners.forEach(listener => listener(buyer)); });
-  await act(async () => { resolveBody?.(active(true)); expect(await refreshing).toMatchObject({ uid: sdk.user.uid, admin: true }); });
+  // The admission helper now rejects the obsolete result itself, in addition
+  // to preserving the current buyer's UI authority through the provider.
+  await act(async () => { resolveBody?.(active(true)); expect(await refreshing).toMatchObject({ code: 'ACCESS_UNAVAILABLE' }); });
   expect(current().credentialAccess).toBe('active'); expect(current().credentialError).toBeNull(); expect(current().user).toBeNull();
   expect(sdk.currentUser.uid).toBe(buyer.uid); expect(sdk.exchange).not.toHaveBeenCalled();
 });

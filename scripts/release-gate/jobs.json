@@ -25,6 +25,7 @@
       "Checkout exact paired Admin inventory target",
       "Verify paired Admin identity",
       "Install paired Admin dependencies",
+      "Six repaired dependency consumer regressions",
       "Busboy regressions across the exact pair and functions",
       "Setup Java for declared Firebase emulator tooling",
       "Catalog regressions and existing suites in isolation",

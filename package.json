@@ -64,7 +64,11 @@
     "release:verify": "node scripts/release-gate/cli.cjs verify-pair",
     "release:publication-check": "node scripts/release-gate/cli.cjs publication-check",
     "typecheck:access": "tsc --noEmit --strict --skipLibCheck --moduleResolution NodeNext --target ES2022 --module NodeNext --esModuleInterop api/access.ts",
-    "pretypecheck:access": "node scripts/braces-remediation/control.cjs verify"
+    "pretypecheck:access": "node scripts/braces-remediation/control.cjs verify",
+    "test:dependency-six": "node --test scripts/dependency-six/*.check.cjs scripts/dependency-six-tests/*.check.cjs",
+    "check:dependency-six": "node scripts/dependency-six/inventory.cjs",
+    "pretest:dependency-six": "node scripts/dependency-six/preflight.cjs",
+    "precheck:dependency-six": "node scripts/braces-remediation/control.cjs verify"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -193,6 +197,10 @@
     "readdirp": {
       "picomatch": "2.3.2"
     },
-    "@fastify/busboy": "3.2.1"
+    "@fastify/busboy": "3.2.2",
+    "proxy-addr": "2.0.8",
+    "source-map-js": "1.2.2",
+    "compression": "1.8.2",
+    "postcss-selector-parser": "7.1.6"
   }
 }

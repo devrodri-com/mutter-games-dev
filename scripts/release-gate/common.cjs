@@ -5,6 +5,7 @@ const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const { createHash } = require('node:crypto');
 const policy = require('./policy.json');
+const { componentFiles } = require('./resolution.cjs');
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 const read = file => JSON.parse(fs.readFileSync(file, 'utf8'));
 const write = (file, value) => fs.writeFileSync(file, JSON.stringify(value, null, 2) + '\n', { flag: 'wx' });
@@ -14,8 +15,9 @@ function identity(root) {
 }
 function components(root, role, clean = false) {
   assert(Object.hasOwn(policy.audited, role), 'Unknown repository role');
-  const expected = policy.audited[role];
-  for (const [file, hash] of Object.entries(expected.files))
+  // Historical audit identity stays unchanged. Resolution references and the
+  // separately pending candidate fixture test never grant historical audit PASS.
+  for (const [file, hash] of Object.entries(componentFiles(policy, role)))
     assert.equal(sha(fs.readFileSync(path.join(root, file))), hash, `Audited component changed: ${file}`);
   assert.equal(fs.readFileSync(path.join(root, 'scripts/release-gate/policy.json'), 'utf8'), fs.readFileSync(path.join(__dirname, 'policy.json'), 'utf8'), 'Different trust policy');
   if (clean) assert.equal(git(root, 'status', '--porcelain=v1', '--untracked-files=normal'), '', 'Exact source must be clean');

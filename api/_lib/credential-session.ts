@@ -14,6 +14,20 @@ export type SessionResponse = {
 function recoveryRequired(): never {
   throw new CredentialAccessError(403, 'RECOVERY_REQUIRED', 'Necesitás recuperar el acceso. Tu cuenta y tus datos se conservan.');
 }
+type SessionSource = { kind: 'RENEW'; id: string; claims: unknown }
+  | { kind: 'NATIVE_REENTRY'; id: string; claims: unknown; cutover: CredentialCutover; createdAtMs: number };
+function nativeReentryState(claims: unknown, cutover: CredentialCutover, account: CredentialAccount | null,
+  session: CredentialSession | null, rawAccount: unknown): { account: CredentialAccount; sessionId: string } {
+  const identity = verifiedClaimIdentity(claims);
+  if (!identity || identity.provider !== 'custom' || !object(claims) || !validSecret(claims.mutterCredentialSession)
+    || claims.mutterCredentialEpoch !== cutover.epoch || claims.admin !== false || claims.superadmin !== false
+    || !account || account.uid !== identity.uid || account.epoch !== cutover.epoch || account.status !== 'NATIVE_POST_CUTOVER'
+    || account.roles.admin !== false || account.roles.superadmin !== false
+    || !session || session.uid !== identity.uid || session.epoch !== cutover.epoch || session.proofKind !== 'NEW_POST_CUTOVER'
+    || session.roles.admin !== false || session.roles.superadmin !== false || session.expiresAtMs > Date.now()
+    || !object(rawAccount) || rawAccount.restrictionAction != null || rawAccount.restrictedAtMs != null) recoveryRequired();
+  return { account, sessionId: claims.mutterCredentialSession };
+}
 function admissionForState(claims: unknown, cutover: CredentialCutover, account: CredentialAccount | null,
   session: CredentialSession | null, destination: 'buyer' | 'admin'): CredentialAdmission {
   const identity = verifiedClaimIdentity(claims);
@@ -47,6 +61,25 @@ export async function requireCredentialSession(_auth: Auth, db: Firestore, claim
 export async function mintCredentialSession(auth: Auth, db: Firestore, account: CredentialAccount, proofKind: CredentialProofKind): Promise<SessionResponse> {
   return issueCredentialSession(auth, db, account, proofKind);
 }
+/** A Firebase session retains identity after capability expiry. Only a protected
+ * ordinary post-cutover account may receive a new capability through reentry. */
+export async function resumeCredentialSession(auth: Auth, db: Firestore, claims: unknown): Promise<SessionResponse> {
+  const identity = verifiedClaimIdentity(claims);
+  if (!identity || identity.provider !== 'custom' || !object(claims) || !validSecret(claims.mutterCredentialSession)) recoveryRequired();
+  const session = parseSession((await db.doc(`credentialSessions/${claims.mutterCredentialSession}`).get()).data());
+  if (!session || session.expiresAtMs > Date.now()) return renewCredentialSession(auth, db, claims);
+  const [controlSnapshot, accountSnapshot] = await Promise.all([
+    db.doc('operations/credentialAccessCutover').get(), db.doc(`credentialAccess/${identity.uid}`).get(),
+  ]);
+  const cutover = parseCutover(controlSnapshot.data());
+  const state = nativeReentryState(claims, cutover, parseAccount(accountSnapshot.data()), session, accountSnapshot.data());
+  const user = await auth.getUser(identity.uid);
+  const createdAtMs = Date.parse(user.metadata.creationTime);
+  if (user.uid !== identity.uid || user.disabled || !Number.isSafeInteger(createdAtMs) || createdAtMs <= cutover.legacyCutoffMs) recoveryRequired();
+  return issueCredentialSession(auth, db, state.account, 'NEW_POST_CUTOVER', {
+    kind: 'NATIVE_REENTRY', id: state.sessionId, claims, cutover, createdAtMs,
+  });
+}
 /** Only a still-valid session can renew; checking state again in the issuance transaction closes revocation races. */
 export async function renewCredentialSession(auth: Auth, db: Firestore, claims: unknown): Promise<SessionResponse> {
   const admission = await requireCredentialSession(auth, db, claims, 'buyer');
@@ -59,10 +92,10 @@ export async function renewCredentialSession(auth: Auth, db: Firestore, claims: 
   ]);
   const account = parseAccount(accountSnapshot.data()), session = parseSession(sessionSnapshot.data());
   if (!account || !session) recoveryRequired();
-  return issueCredentialSession(auth, db, account, session.proofKind, { id: admission.sessionId, claims });
+  return issueCredentialSession(auth, db, account, session.proofKind, { kind: 'RENEW', id: admission.sessionId, claims });
 }
 async function issueCredentialSession(auth: Auth, db: Firestore, account: CredentialAccount,
-  proofKind: CredentialProofKind, source?: { id: string; claims: unknown }): Promise<SessionResponse> {
+  proofKind: CredentialProofKind, source?: SessionSource): Promise<SessionResponse> {
   const sessionId = randomBytes(32).toString('hex');
   const expiresAtMs = Date.now() + CREDENTIAL_SESSION_TTL_MS;
   const issuedRoles = await db.runTransaction(async tx => {
@@ -79,9 +112,17 @@ async function issueCredentialSession(auth: Auth, db: Firestore, account: Creden
     let sessionRoles = account.roles;
     if (source) {
       const previous = parseSession((await tx.get(db.doc(`credentialSessions/${source.id}`))).data());
-      const admitted = admissionForState(source.claims, control, current, previous, 'buyer');
-      if (admitted.sessionId !== source.id || previous?.proofKind !== proofKind) recoveryRequired();
-      sessionRoles = { admin: admitted.admin, superadmin: admitted.superadmin };
+      if (source.kind === 'NATIVE_REENTRY') {
+        if (proofKind !== 'NEW_POST_CUTOVER' || control.epoch !== source.cutover.epoch
+          || control.legacyCutoffMs !== source.cutover.legacyCutoffMs || source.createdAtMs <= control.legacyCutoffMs) recoveryRequired();
+        const admitted = nativeReentryState(source.claims, control, current, previous, accountSnapshot.data());
+        if (admitted.sessionId !== source.id) recoveryRequired();
+        sessionRoles = { admin: false, superadmin: false };
+      } else {
+        const admitted = admissionForState(source.claims, control, current, previous, 'buyer');
+        if (admitted.sessionId !== source.id || previous?.proofKind !== proofKind) recoveryRequired();
+        sessionRoles = { admin: admitted.admin, superadmin: admitted.superadmin };
+      }
     }
     tx.create(db.doc(`credentialSessions/${sessionId}`), { schema: 1, status: 'ACTIVE', uid: account.uid,
       epoch: account.epoch, expiresAtMs, proofKind, roles: sessionRoles });

@@ -242,4 +242,3 @@ test('fresh ordinary password and anonymous accounts bootstrap at the same UID; 
     expect((await h.db.doc(`carts/${guestUid}`).get()).data()).toEqual({ cartItems: [{ id: 'p', quantity: 2 }] });
   } finally { await env.cleanup(); await h.dispose(); }
 }, 60_000);
-

@@ -41,6 +41,37 @@ test('same identity on another device observes explicit clear',async({page,brows
  }finally{await device.close();}
 });
 
+test('post-cutover guest retains the same UID and selections after expiry, Firebase refresh and SPA reload', async ({ page }) => {
+ await page.addInitScript(value => { if (!localStorage.getItem('guest-reentry-seeded')) { localStorage.setItem('cartItems', JSON.stringify([{ ...value, quantity: 2 }])); localStorage.setItem('guest-reentry-seeded', 'yes'); } }, item);
+ await page.goto('/carrito'); await expect(page.getByText('$100.00 c/u', { exact: true })).toBeVisible();
+ const modulePath = '/tests/e2e/guest-reentry-client.ts';
+ async function identity(): Promise<{ uid: string; sessionId: string; provider: string }> {
+  const observed: unknown = await page.evaluate(async path => { const client = await import(path); return client.guestIdentity(); }, modulePath);
+  if (!observed || typeof observed !== 'object' || !('uid' in observed) || typeof observed.uid !== 'string'
+    || !('sessionId' in observed) || typeof observed.sessionId !== 'string' || !('provider' in observed) || typeof observed.provider !== 'string') throw Error('Expected real browser guest identity');
+  return { uid: observed.uid, sessionId: observed.sessionId, provider: observed.provider };
+ }
+ const first = await identity(); expect(first.provider).toBe('custom');
+ await expect.poll(async () => page.evaluate(uid => JSON.parse(localStorage.getItem(`mutter-cart:${uid}`) ?? '{}').dirty, first.uid)).toBe(false);
+ const durable = (await db.doc(`carts/${first.uid}`).get()).data(); expect(durable?.cartItems).toMatchObject([{ id: item.id, quantity: 2 }]);
+ // Simulate capability inactivity only. Auth is refreshed by its real SDK;
+ // this does not claim weeks of remote provider persistence in one local run.
+ for (const elapsed of [1, 2 * 7 * 24 * 60 * 60 * 1000 + 1]) {
+  const source = await identity();
+  await db.doc(`credentialSessions/${source.sessionId}`).update({ expiresAtMs: Date.now() - elapsed });
+  await page.evaluate(async path => { const client = await import(path); await client.refreshGuestToken(); }, modulePath);
+  // A forced emulator refresh within the same second may return identical
+  // token bytes without an observer event. Exercise the actual SPA return.
+  await page.reload(); await expect(page.getByText('$100.00 c/u', { exact: true })).toBeVisible();
+  await expect.poll(async () => (await identity()).sessionId).not.toBe(source.sessionId);
+  await expect.poll(async () => page.evaluate(uid => JSON.parse(localStorage.getItem(`mutter-cart:${uid}`) ?? '{}').dirty, first.uid)).toBe(false);
+  const returned = await identity(); expect(returned.uid).toBe(first.uid); expect(returned.provider).toBe('custom'); expect(returned.sessionId).not.toBe(source.sessionId);
+  expect((await db.doc(`carts/${first.uid}`).get()).data()).toEqual(durable);
+  const selected: unknown = await page.evaluate(uid => JSON.parse(localStorage.getItem(`mutter-cart:${uid}`) ?? '{}').items, first.uid);
+  expect(selected).toMatchObject([{ id: item.id, quantity: 2 }]);
+ }
+});
+
 
 async function syntheticBuyer(request: APIRequestContext): Promise<{ Authorization: string }> {
  const authResponse = await request.post('http://127.0.0.1:9198/identitytoolkit.googleapis.com/v1/accounts:signUp?key=synthetic', { data: { returnSecureToken: true } });

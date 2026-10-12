@@ -52,5 +52,36 @@
         "scripts/braces-remediation/regression.check.cjs": "4b04ae4bdb61d8b20495558f5bcb05d03950c43abea1f8baaf02b660be6e70d9"
       }
     }
+  },
+  "resolutionReferences": {
+    "schema": 1,
+    "task": "MUTTER_GUEST_REENTRY_AND_SIX_DEPENDENCY_REMEDIATION_20261012",
+    "authorizationContractSha256": "76b6bf46e8e0051d2d9cd944dfc64235db194abf3e50f1979da9ce6fffaf12dc",
+    "status": "RESOLUTION_REFERENCE_ONLY_NOT_INDEPENDENT_AUDIT",
+    "files": {
+      "frontend": {
+        "functions/package-lock.json": "58faa11846af3f9965c3d5d54d1f871321d3cfd2e69168f8d9a6dd41ca8843a0",
+        "package-lock.json": "4e5471c6447a530f91a44f6cb5fda85af7e3111ed87068c7e62154a4ef1039e5",
+        "scripts/edge-tooling/exception.json": "71057d951073c9d5d1898cce46ad04c45859644ae3063618a1857f7b44770716"
+      },
+      "admin": {
+        "package-lock.json": "c3fa0963f50601f3ea6ca77baf9593ac5ab3a05b55e0778342e4db9ef08bc580"
+      }
+    }
+  },
+  "candidateRevalidation": {
+    "schema": 1,
+    "task": "MUTTER_GUEST_REENTRY_AND_SIX_DEPENDENCY_REMEDIATION_20261012",
+    "authorizationContractSha256": "76b6bf46e8e0051d2d9cd944dfc64235db194abf3e50f1979da9ce6fffaf12dc",
+    "status": "PENDING_INDEPENDENT_REVALIDATION",
+    "purpose": "TEMP_SYNTHETIC_RECEIPT_LOCK_BINDING",
+    "files": {
+      "frontend": {
+        "scripts/braces-remediation/evaluate.check.cjs": "8f021a11c17acdf406f06e4e5cd639ee91ce13caa96210eb5c7fa284bd8be68b"
+      },
+      "admin": {
+        "scripts/braces-remediation/evaluate.check.cjs": "8f021a11c17acdf406f06e4e5cd639ee91ce13caa96210eb5c7fa284bd8be68b"
+      }
+    }
   }
 }

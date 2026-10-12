@@ -1,4 +1,4 @@
-import { signInWithCustomToken, type User } from 'firebase/auth';
+import { beforeAuthStateChanged, signInWithCustomToken, type User } from 'firebase/auth';
 import { auth } from '../firebase';
 
 export type CredentialAdmission = {
@@ -22,12 +22,25 @@ async function post(path: string, user: User, body: Record<string, string>): Pro
     throw new CredentialAccessError('ACCESS_UNAVAILABLE', 'No pudimos comprobar el acceso. Intentá nuevamente.');
   }
   if (auth.currentUser?.uid !== user.uid) throw new CredentialAccessError('ACCESS_UNAVAILABLE', 'Cambió la cuenta durante el ingreso. Intentá nuevamente.');
-  return response.json();
+  const result: unknown = await response.json();
+  if (auth.currentUser?.uid !== user.uid) throw new CredentialAccessError('ACCESS_UNAVAILABLE', 'Cambió la cuenta durante el ingreso. Intentá nuevamente.');
+  return result;
 }
 async function exchange(user: User, result: unknown): Promise<CredentialAdmission> {
   const parsed = admission(result, user.uid);
+  if (auth.currentUser?.uid !== user.uid) throw new CredentialAccessError('ACCESS_UNAVAILABLE', 'Cambió la cuenta durante el ingreso. Intentá nuevamente.');
   if (object(result) && typeof result.customToken === 'string') {
-    const credential = await signInWithCustomToken(auth, result.customToken);
+    // Block applying this exchange if another account signed in while the real
+    // Auth HTTP request was pending. Other accounts remain free to sign in.
+    const stop = beforeAuthStateChanged(auth, next => {
+      if (next?.uid === user.uid && auth.currentUser?.uid !== user.uid) throw new CredentialAccessError('ACCESS_UNAVAILABLE', 'Cambió la cuenta durante el ingreso. Intentá nuevamente.');
+    });
+    let credential;
+    try { credential = await signInWithCustomToken(auth, result.customToken); }
+    catch (error: unknown) {
+      if (auth.currentUser?.uid !== user.uid) throw new CredentialAccessError('ACCESS_UNAVAILABLE', 'Cambió la cuenta durante el ingreso. Intentá nuevamente.');
+      throw error;
+    } finally { stop(); }
     if (credential.user.uid !== user.uid) throw new CredentialAccessError('ACCESS_UNAVAILABLE', 'No pudimos comprobar la misma cuenta.');
     const confirmed = await post('/api/access/session', credential.user, {});
     if (object(confirmed) && 'customToken' in confirmed) throw new CredentialAccessError('ACCESS_UNAVAILABLE', 'No pudimos confirmar el acceso.');
