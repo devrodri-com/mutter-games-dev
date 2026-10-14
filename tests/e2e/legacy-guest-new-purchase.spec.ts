@@ -163,6 +163,9 @@ test('double action and two tabs create one new identity and preserve unrelated 
 test('offline before the explicit check preserves the old identity and reports a retryable failure', async ({ page, context }, testInfo) => {
   currentLegacy = await seedLegacy(page);
   const signups = observeSignups(page), oldUid = currentLegacy.uid;
+  // Load the readonly helper before taking the page offline. Fetching a new
+  // test module while offline would test its loader instead of the app state.
+  expect((await identity(page))?.uid).toBe(oldUid);
   await context.setOffline(true);
   try {
     await action(page).click();

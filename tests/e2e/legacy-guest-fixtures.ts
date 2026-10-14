@@ -42,7 +42,9 @@ export async function signIn(page: Page, token: string) {
   return page.evaluate(async ({ path, token: value }) => (await import(path)).signIn(value), { path: clientPath, token });
 }
 export async function localOnly(page: Page) {
-  await page.route('**/*', route => ['127.0.0.1', 'localhost'].includes(new URL(route.request().url()).hostname) ? route.continue() : route.abort());
+  // Continue through the remaining handlers so context-level timing probes can
+  // hold real loopback responses. External destinations remain hard-aborted.
+  await page.route('**/*', route => ['127.0.0.1', 'localhost'].includes(new URL(route.request().url()).hostname) ? route.fallback() : route.abort());
 }
 async function save(path: string, value: Record<string, unknown>) { documents.add(path); await db.doc(path).set(value); }
 export async function seedLegacy(page: Page) {
