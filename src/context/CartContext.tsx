@@ -7,6 +7,7 @@ import type { CartItem } from '../data/types';
 import { toast } from 'react-hot-toast';
 import { useLiveCartInventory } from '../hooks/useLiveCartInventory';
 import { useAuth } from './AuthContext';
+import { observeGuestPurchaseState, readGuestPurchaseTransition } from '../utils/guestPurchaseState';
 export type ShippingData = {
     name: string;
     address: string;
@@ -77,23 +78,36 @@ export function CartProvider({ children }: {
     }, [shippingInfo]);
     const revision = useRef(0);
     const accessGeneration = useRef(0);
-    const pending = useRef(0);
+    const pending = useRef({ count: 0 });
     const queue = useRef<Promise<void>>(Promise.resolve());
     const activeUid = useRef<string | null>(null);
     const unsynced = useRef(false);
     const fail = (error: unknown) => { const message = error instanceof Error ? error.message : 'No pudimos sincronizar el carrito.'; setCartError(message); toast.error(message); };
     const show = (next: CartItem[]) => { itemsRef.current = next; setItems(next); };
     const ownsAccess = (owner: string, generation: number) => activeUid.current === owner && accessState.current === 'active' && accessGeneration.current === generation;
-    useEffect(() => onAuthStateChanged(auth, user => { activeUid.current = user?.uid ?? null; setUid(user?.uid ?? null); revision.current++; accessGeneration.current++; }), []);
+    useEffect(() => onAuthStateChanged(auth, user => {
+        if (activeUid.current !== (user?.uid ?? null)) {
+            pending.current = { count: 0 }; queue.current = Promise.resolve(); unsynced.current = false;
+        }
+        activeUid.current = user?.uid ?? null; setUid(user?.uid ?? null); revision.current++; accessGeneration.current++;
+    }), []);
+    useEffect(() => observeGuestPurchaseState(() => {
+        try {
+            const transition = readGuestPurchaseTransition(auth);
+            if (!transition || transition.phase !== 'PREPARING' || auth.currentUser?.uid !== transition.uid) return;
+            revision.current++; accessGeneration.current++; activeUid.current = null;
+            pending.current = { count: 0 }; queue.current = Promise.resolve(); unsynced.current = false;
+            show([]); setCartReady(false); setCartError(null); setShippingInfo({ ...emptyShipping });
+        } catch (error: unknown) { setCartReady(false); fail(error); }
+    }), []);
     useEffect(() => {
         const generation = ++accessGeneration.current;
         revision.current++;
-        if (!uid)
-            return;
         let stopped = false;
         setCartReady(false);
         setCartError(null);
         show([]);
+        if (!uid) return;
         let cached: CartItem[] = [];
         let dirty = false;
         try {
@@ -165,7 +179,7 @@ export function CartProvider({ children }: {
                 }
                 if (stopped || !ownsAccess(uid, generation))
                     return;
-                stop = listenToCartChanges(uid, (next, exists) => { if (!stopped && ownsAccess(uid, generation) && !pending.current && !unsynced.current)
+                stop = listenToCartChanges(uid, (next, exists) => { if (!stopped && ownsAccess(uid, generation) && !pending.current.count && !unsynced.current)
                     void restore(exists ? next : []); }, error => { if (!stopped && ownsAccess(uid, generation)) fail(error); });
             }
             catch (error) {
@@ -178,13 +192,14 @@ export function CartProvider({ children }: {
     }, [uid, credentialAccess]);
     const persist = async (next: CartItem[]) => {
         if (!uid || activeUid.current !== uid || accessState.current !== 'active') {
-            fail(new Error('Tu carrito se conserva. Comprobá o recuperá el acceso para continuar.'));
+            if (activeUid.current === uid) fail(new Error('Tu carrito se conserva. Comprobá o recuperá el acceso para continuar.'));
             return false;
         }
         const owner = uid;
         const generation = accessGeneration.current;
         revision.current++;
-        pending.current++;
+        const operations = pending.current;
+        operations.count++;
         unsynced.current = true;
         show(next);
         setCartReady(false);
@@ -192,7 +207,7 @@ export function CartProvider({ children }: {
             store(owner, next, true);
         }
         catch (error) {
-            pending.current--;
+            operations.count--;
             fail(error);
             return false;
         }
@@ -206,7 +221,7 @@ export function CartProvider({ children }: {
             await operation;
             if (!ownsAccess(owner, generation))
                 return false;
-            if (activeUid.current === owner && pending.current === 1) {
+            if (activeUid.current === owner && operations === pending.current && operations.count === 1) {
                 store(owner, next, false);
                 unsynced.current = false;
                 setCartError(null);
@@ -225,7 +240,7 @@ export function CartProvider({ children }: {
             return false;
         }
         finally {
-            pending.current--;
+            operations.count--;
         }
         return true;
     };
@@ -236,23 +251,23 @@ export function CartProvider({ children }: {
         setCartReady(false);
         try {
             if (!owner || !ownsAccess(owner, generation)) throw new Error('Tu carrito se conserva. Recuperá el acceso para continuar.');
-            if (pending.current !== expectedPending) throw new Error('El carrito cambió. Revisalo antes de continuar.');
-            if (unsynced.current && !pending.current) {
+            if (pending.current.count !== expectedPending) throw new Error('El carrito cambió. Revisalo antes de continuar.');
+            if (unsynced.current && !pending.current.count) {
                 const next = itemsRef.current;
                 const operation = queue.current.then(() => {
-                    if (!ownsAccess(owner, generation) || version !== revision.current || pending.current) throw new Error('Cambió el carrito o el acceso antes de guardar.');
+                    if (!ownsAccess(owner, generation) || version !== revision.current || pending.current.count) throw new Error('Cambió el carrito o el acceso antes de guardar.');
                     return saveCartToFirebase(owner, next);
                 });
                 queue.current = operation.catch(() => undefined);
                 await operation;
                 if (!ownsAccess(owner, generation)) throw new Error('Cambió el acceso mientras guardábamos el carrito.');
-                if (version !== revision.current || pending.current) throw new Error('El carrito cambió. Revisalo antes de continuar.');
+                if (version !== revision.current || pending.current.count) throw new Error('El carrito cambió. Revisalo antes de continuar.');
                 unsynced.current = false;
                 store(owner, next, false);
             }
             const current = await enrichCartItems(itemsRef.current);
             if (!ownsAccess(owner, generation)) throw new Error('Cambió el acceso mientras comprobábamos el carrito.');
-            if (version !== revision.current || pending.current !== expectedPending)
+            if (version !== revision.current || pending.current.count !== expectedPending)
                 throw new Error('El carrito cambió. Revisalo antes de continuar.');
             show(current);
             store(owner, current, false);
@@ -267,8 +282,8 @@ export function CartProvider({ children }: {
     };
     const refreshCart = (): Promise<CartItem[]> => refreshCurrentCart(0);
     const addToCart = async (item: CartItem) => {
+        const version = revision.current;
         try {
-            const version = revision.current;
             const next = [...itemsRef.current];
             const index = next.findIndex(existing => isSameItem(existing, item));
             if (index >= 0)
@@ -282,7 +297,7 @@ export function CartProvider({ children }: {
             return await persist(current);
         }
         catch (error) {
-            fail(error);
+            if (version === revision.current) fail(error);
             return false;
         }
     };

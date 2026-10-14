@@ -2,29 +2,62 @@ import { createContext, useContext, useState, useEffect, useRef, type ReactNode 
 import { onIdTokenChanged, signOut } from 'firebase/auth';
 import type { User } from '../data/types';
 import { auth } from '../firebase';
-import { CredentialAccessError, ensureCredentialSession, type CredentialAdmission } from '../utils/credentialAccess';
+import { CredentialAccessError, ensureCredentialSession, type CredentialAdmission, type LegacyGuestNewPurchase } from '../utils/credentialAccess';
+import { startLegacyGuestPurchase } from '../utils/guestPurchase';
+import { GuestPurchaseStateError, observeGuestPurchaseState, readGuestPurchaseTransition, writeGuestPurchaseTransition } from '../utils/guestPurchaseState';
 
 type AccessState = 'loading' | 'active' | 'pending' | 'unavailable';
 interface AuthContextType {
   user: User | null; login: (localUser?: User) => Promise<void>; logout: () => void; isLoading: boolean;
   credentialAccess: AccessState; credentialError: string | null; refreshAccess: () => Promise<CredentialAdmission>;
+  newPurchaseOffer: LegacyGuestNewPurchase | null; purchaseStarting: boolean; startNewPurchase: () => Promise<void>;
 }
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [credentialAccess, setCredentialAccess] = useState<AccessState>('loading');
   const [credentialError, setCredentialError] = useState<string | null>(null);
+  const [newPurchaseOffer, setNewPurchaseOffer] = useState<LegacyGuestNewPurchase | null>(null);
+  const [purchaseStarting, setPurchaseStarting] = useState(false);
+  const starting = useRef(false);
+  const admittedIdentity = useRef<CredentialAdmission | null>(null);
   const generation = useRef(0);
   const accept = (result: CredentialAdmission) => {
     const current = auth.currentUser;
     if (!current || current.uid !== result.uid) return;
+    admittedIdentity.current = result;
     setUser(result.admin || result.superadmin ? { id: current.uid, uid: current.uid, name: current.displayName || current.email || '', email: current.email || '', password: '' } : null);
     setCredentialAccess('active'); setCredentialError(null);
+    setNewPurchaseOffer(null);
+    if (result.admin || result.superadmin) {
+      const transition = readGuestPurchaseTransition(auth);
+      if (transition && transition.uid !== result.uid && transition.phase !== 'SETTLED') writeGuestPurchaseTransition(auth, { ...transition, phase: 'SETTLED' });
+    }
   };
   const reject = (error: unknown) => {
+    admittedIdentity.current = null;
     setUser(null);
     setCredentialAccess(error instanceof CredentialAccessError && error.code === 'RECOVERY_REQUIRED' ? 'pending' : 'unavailable');
-    setCredentialError(error instanceof CredentialAccessError ? error.message : 'No pudimos comprobar el acceso. Tu cuenta y tus datos se conservan.');
+    setCredentialError(error instanceof CredentialAccessError || error instanceof GuestPurchaseStateError ? error.message : 'No pudimos comprobar el acceso. Tu cuenta y tus datos se conservan.');
+    setNewPurchaseOffer(error instanceof CredentialAccessError ? error.newPurchase : null);
+  };
+  const restoreTransitionChoice = () => {
+    try {
+      const saved = readGuestPurchaseTransition(auth), current = auth.currentUser;
+      if (!saved) return;
+      if (saved.phase === 'SETTLED') { setNewPurchaseOffer(null); return; }
+      if (current && current.uid !== saved.uid && (current.email || current.phoneNumber || current.providerData.length > 0)) {
+        writeGuestPurchaseTransition(auth, { ...saved, phase: 'SETTLED' }); setNewPurchaseOffer(null); return;
+      }
+      setNewPurchaseOffer({ kind: saved.kind, uid: saved.uid, epoch: saved.epoch });
+      if (!current) {
+        setCredentialAccess('pending');
+        setCredentialError(previous => previous ?? 'La sesión anterior se cerró. Continuá la compra nueva para empezar con un carrito vacío.');
+      }
+    } catch (error: unknown) {
+      setNewPurchaseOffer(null); setCredentialAccess('unavailable');
+      setCredentialError(error instanceof Error ? error.message : 'No pudimos comprobar el inicio guardado.');
+    }
   };
   const refreshAccess = async () => {
     const current = auth.currentUser;
@@ -37,12 +70,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
   useEffect(() => onIdTokenChanged(auth, current => {
     const version = ++generation.current;
-    setUser(null); setCredentialAccess('loading'); setCredentialError(null);
-    if (!current) return;
+    admittedIdentity.current = null; setUser(null); setCredentialAccess('loading'); setCredentialError(null); setNewPurchaseOffer(null);
+    if (!current) { restoreTransitionChoice(); return; }
+    restoreTransitionChoice();
     void ensureCredentialSession(current).then(result => { if (version === generation.current) accept(result); }).catch((error: unknown) => { if (version === generation.current) reject(error); });
   }), []);
+  useEffect(() => observeGuestPurchaseState(restoreTransitionChoice), []);
+  const startNewPurchase = async () => {
+    if (starting.current || !newPurchaseOffer) return;
+    const offered = newPurchaseOffer;
+    const current = auth.currentUser;
+    if (current && current.uid !== offered.uid) {
+      if (admittedIdentity.current?.uid === current.uid || credentialAccess === 'loading' || credentialAccess === 'active') return;
+      let saved;
+      try { saved = readGuestPurchaseTransition(auth); }
+      catch (error: unknown) { reject(error); return; }
+      if (!saved || saved.uid !== offered.uid || (saved.phase !== 'CREATED' && saved.phase !== 'SIGNED_OUT')
+        || current.email || current.phoneNumber || current.providerData.length > 0) return;
+    }
+    starting.current = true; setPurchaseStarting(true);
+    ++generation.current; setUser(null); setCredentialAccess('pending'); setCredentialError(null);
+    try { accept(await startLegacyGuestPurchase(offered)); }
+    catch (error: unknown) {
+      if (admittedIdentity.current && admittedIdentity.current.uid !== offered.uid) { accept(admittedIdentity.current); return; }
+      let saved = null;
+      try { saved = readGuestPurchaseTransition(auth); }
+      catch (stateError: unknown) { reject(stateError); return; }
+      if (!auth.currentUser || auth.currentUser.uid === offered.uid || saved) {
+        reject(error);
+        // A fresh authoritative denial without eligibility invalidates the
+        // cached choice. Only unavailable transport or an unfinished explicit
+        // transition may keep a retry; neither can bypass server admission.
+        if (saved || !(error instanceof CredentialAccessError) || error.code !== 'RECOVERY_REQUIRED' || error.newPurchase)
+          setNewPurchaseOffer(offered);
+        restoreTransitionChoice();
+      }
+    } finally { starting.current = false; setPurchaseStarting(false); }
+  };
   const login = async (_localUser?: User) => { await refreshAccess(); };
   const logout = () => { void signOut(auth).catch(() => setCredentialError('No pudimos cerrar la sesión. Intentá nuevamente.')); };
-  return <AuthContext.Provider value={{ user, login, logout, isLoading: credentialAccess === 'loading', credentialAccess, credentialError, refreshAccess }}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={{ user, login, logout, isLoading: credentialAccess === 'loading', credentialAccess, credentialError, refreshAccess, newPurchaseOffer, purchaseStarting, startNewPurchase }}>{children}</AuthContext.Provider>;
 }
 export function useAuth() { const context = useContext(AuthContext); if (!context) throw new Error('useAuth debe usarse dentro de AuthProvider'); return context; }

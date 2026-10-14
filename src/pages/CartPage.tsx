@@ -3,6 +3,7 @@
 import { CartFormData } from "@/data/types";
 import EmptyCart from "@/components/cart/EmptyCart";
 import CheckoutAccountOption from "../components/cart/CheckoutAccountOption";
+import LegacyGuestNewPurchase from '../components/LegacyGuestNewPurchase';
 import { useCart } from "../context/CartContext";
 import { Link, useNavigate } from "react-router-dom";
 import { useState, Fragment, useRef } from "react";
@@ -144,6 +145,7 @@ const isValidEmail = (email: string): boolean => {
           <main className="flex-grow">
             <div className="max-w-5xl mx-auto px-6 pt-2 pb-10">
               <h1 className="text-3xl font-bold text-gray-900 mb-4">Tu carrito</h1>
+              <LegacyGuestNewPurchase />
 
               {items.length === 0 ? (
                 <div>

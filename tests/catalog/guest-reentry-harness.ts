@@ -41,6 +41,7 @@ export async function guestHarness(rulesFile = 'firebase.catalog-r1b.rules') {
   connectFirestoreEmulator(browserDb, '127.0.0.1', 8188);
   const users = new Set<string>(), clients = [client], holds: HeldBody[] = [];
   let nextHold: HeldBody | undefined, observedHold: HeldBody | undefined, nextAuthHold: HeldBody | undefined;
+  let nextSignupHold: HeldBody | undefined, nextEligibilityHold: HeldBody | undefined;
   const actualFetch = globalThis.fetch;
   const server = createServer(async (req, res) => {
     const authPath = req.url?.startsWith('/identitytoolkit.googleapis.com/') || req.url?.startsWith('/securetoken.googleapis.com/');
@@ -63,9 +64,13 @@ export async function guestHarness(rulesFile = 'firebase.catalog-r1b.rules') {
         ...(req.method !== 'GET' ? { body: Buffer.concat(chunks) } : {}) });
       res.statusCode = upstream.status; res.setHeader('Content-Type', 'application/json');
       const serialized = await upstream.text();
-      const hold = upstream.ok && req.url?.includes('/accounts:signInWithCustomToken') ? nextAuthHold : undefined;
+      const identity: unknown = JSON.parse(serialized);
+      if (identity && typeof identity === 'object' && 'localId' in identity && typeof identity.localId === 'string') users.add(identity.localId);
+      const signup = upstream.ok && req.url?.includes('/accounts:signUp');
+      const hold = signup ? nextSignupHold : upstream.ok && req.url?.includes('/accounts:signInWithCustomToken') ? nextAuthHold : undefined;
       if (!hold) { res.end(serialized); return; }
-      nextAuthHold = undefined; res.write(serialized.slice(0, 1)); hold.onReading();
+      if (signup) nextSignupHold = undefined; else nextAuthHold = undefined;
+      res.write(serialized.slice(0, 1)); hold.onReading();
       await hold.released; res.end(serialized.slice(1)); return;
     }
     const reply: AccessResponse = {
@@ -74,9 +79,11 @@ export async function guestHarness(rulesFile = 'firebase.catalog-r1b.rules') {
       json(body) {
         res.setHeader('Content-Type', 'application/json');
         const serialized = JSON.stringify(body), data = record(body);
-        const hold = typeof data.customToken === 'string' ? nextHold : undefined;
+        const eligibility = data.newPurchase !== undefined;
+        const hold = eligibility ? nextEligibilityHold : typeof data.customToken === 'string' ? nextHold : undefined;
         if (!hold) { res.end(serialized); return; }
-        nextHold = undefined; observedHold = hold;
+        if (eligibility) nextEligibilityHold = undefined; else nextHold = undefined;
+        observedHold = hold;
         res.setHeader('x-synthetic-held-body', '1');
         res.write(serialized.slice(0, 1));
         return hold.released.then(() => { res.end(serialized.slice(1)); });
@@ -136,7 +143,9 @@ export async function guestHarness(rulesFile = 'firebase.catalog-r1b.rules') {
   async function expire(sessionId: string, expiresAtMs = Date.now() - 1) { await db.doc(`credentialSessions/${sessionId}`).update({ expiresAtMs }); }
   function holdNextCustomBody() { const hold = heldBody(); nextHold = hold; holds.push(hold); return hold; }
   function holdNextAuthResponse() { const hold = heldBody(); nextAuthHold = hold; holds.push(hold); return hold; }
-  return { auth, db, browserAuth, origin, identity, access, newGuest, otherGuest, seedData, privateReads, privateRequest, expire, holdNextCustomBody, holdNextAuthResponse,
+  function holdNextSignupResponse() { const hold = heldBody(); nextSignupHold = hold; holds.push(hold); return hold; }
+  function holdNextEligibilityBody() { const hold = heldBody(); nextEligibilityHold = hold; holds.push(hold); return hold; }
+  return { auth, db, browserAuth, origin, identity, access, newGuest, otherGuest, seedData, privateReads, privateRequest, expire, holdNextCustomBody, holdNextAuthResponse, holdNextSignupResponse, holdNextEligibilityBody,
     switchToOther: async (token: string) => { await signInWithCustomToken(browserAuth, token); },
     dispose: async () => {
       for (const hold of holds) hold.release();

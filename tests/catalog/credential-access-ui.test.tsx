@@ -117,3 +117,58 @@ test('refresh exchange for the same UID allows the new token observer to admit i
   expect(current().credentialAccess).toBe('active'); expect(current().credentialError).toBeNull(); expect(current().user).toBeNull();
   expect(sdk.exchange).toHaveBeenCalledTimes(1); expect(count).toBe(2); expect(sdk.currentUser.uid).toBe(sdk.user.uid);
 });
+
+test('only the server-bound legacy choice appears; a generic 403 or a foreign UID never offers an identity replacement', async () => {
+  const offer = { kind: 'LEGACY_ANONYMOUS', uid: sdk.user.uid, epoch: 'synthetic-legacy-choice-epoch' };
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ code: 'RECOVERY_REQUIRED', newPurchase: offer }), { status: 403 })));
+  await mount(); expect(current().newPurchaseOffer).toEqual(offer); expect(sdk.signOut).not.toHaveBeenCalled();
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ code: 'RECOVERY_REQUIRED', newPurchase: { ...offer, uid: 'foreign-demo-uid' } }), { status: 403 })));
+  await act(async () => { await expect(current().refreshAccess()).rejects.toThrow(); });
+  expect(current().newPurchaseOffer).toBeNull(); expect(sdk.signOut).not.toHaveBeenCalled();
+  vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 403 })));
+  await act(async () => { await expect(current().refreshAccess()).rejects.toThrow(); });
+  expect(current().newPurchaseOffer).toBeNull(); expect(sdk.currentUser.uid).toBe(sdk.user.uid);
+});
+
+test('unsupported browser coordination fails before sign-out and preserves the legacy choice for a safe retry', async () => {
+  Object.assign(auth, { app: { options: { projectId: 'demo-mutter-r1' } } });
+  const offer = { kind: 'LEGACY_ANONYMOUS', uid: sdk.user.uid, epoch: 'synthetic-legacy-choice-epoch' };
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ code: 'RECOVERY_REQUIRED', newPurchase: offer }), { status: 403 })));
+  localStorage.setItem('mutter-cart:same-demo-uid', 'historical-local-cart-kept');
+  await mount();
+  await act(async () => { await current().startNewPurchase(); });
+  expect(current().credentialError).toContain('navegador'); expect(current().newPurchaseOffer).toEqual(offer);
+  expect(sdk.signOut).not.toHaveBeenCalled(); expect(sdk.currentUser.uid).toBe(sdk.user.uid);
+  expect(localStorage.getItem('mutter-cart:same-demo-uid')).toBe('historical-local-cart-kept');
+});
+
+test('an old rendered purchase action cannot downgrade the administrator already admitted at a different SDK UID', async () => {
+  const offered = { kind: 'LEGACY_ANONYMOUS', uid: sdk.user.uid, epoch: 'synthetic-legacy-choice-epoch' };
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ code: 'RECOVERY_REQUIRED', newPurchase: offered }), { status: 403 })));
+  await mount(); const staleAction = current().startNewPurchase;
+  const administrator = { ...nextBuyer(), email: 'synthetic-admin@example.invalid' };
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(active(true, administrator.uid)))));
+  await act(async () => { sdk.currentUser = administrator; sdk.listeners.forEach(listener => listener(administrator)); });
+  expect(current().credentialAccess).toBe('active'); expect(current().user?.uid).toBe(administrator.uid);
+  await act(async () => { await staleAction(); });
+  expect(current().credentialAccess).toBe('active'); expect(current().credentialError).toBeNull(); expect(current().user?.uid).toBe(administrator.uid);
+  expect(sdk.currentUser.uid).toBe(administrator.uid); expect(sdk.signOut).not.toHaveBeenCalled(); expect(sdk.exchange).not.toHaveBeenCalled();
+});
+
+test('the explicit action hides a cached offer when fresh server state no longer confirms eligibility', async () => {
+  Object.assign(auth, { app: { options: { projectId: 'demo-mutter-r1' } }, authStateReady: async () => undefined });
+  const originalLocks = Object.getOwnPropertyDescriptor(navigator, 'locks');
+  Object.defineProperty(navigator, 'locks', { configurable: true, value: { request: (_key: string, _options: unknown, task: () => Promise<unknown>) => task() } });
+  try {
+    const offered = { kind: 'LEGACY_ANONYMOUS', uid: sdk.user.uid, epoch: 'synthetic-legacy-choice-epoch' };
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ code: 'RECOVERY_REQUIRED', newPurchase: offered }), { status: 403 })));
+    await mount(); expect(current().newPurchaseOffer).toEqual(offered);
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ code: 'RECOVERY_REQUIRED' }), { status: 403 })));
+    await act(async () => { await current().startNewPurchase(); });
+    expect(current().newPurchaseOffer).toBeNull(); expect(current().credentialAccess).toBe('pending');
+    expect(sdk.currentUser.uid).toBe(sdk.user.uid); expect(sdk.signOut).not.toHaveBeenCalled();
+  } finally {
+    if (originalLocks) Object.defineProperty(navigator, 'locks', originalLocks);
+    else Reflect.deleteProperty(navigator, 'locks');
+  }
+});

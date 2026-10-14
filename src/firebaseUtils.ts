@@ -1,8 +1,8 @@
 // src/firebaseUtils.ts
 
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, getAuth, signInAnonymously, onAuthStateChanged } from "firebase/auth";
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, getAuth } from "firebase/auth";
 import { getFirestore, initializeFirestore, doc as firestoreDoc, setDoc, getDoc as firestoreGetDoc, collection, getDocs, addDoc, doc, updateDoc, deleteDoc, getDoc, query, orderBy, serverTimestamp, where } from "firebase/firestore";
-import app from "./firebase";
+import app, { ensureAuthReady } from "./firebase";
 // Firestore: inicialización segura (evita crash si ya fue inicializado en otro módulo)
 export const db = (() => {
   try {
@@ -31,27 +31,7 @@ export async function getCurrentUid(): Promise<string> {
 
 // ✅ Garantiza que haya un usuario autenticado (anónimo si es necesario)
 export async function ensureAuthedUid(): Promise<string> {
-  const a = auth || getAuth(app);
-  if (a.currentUser) return a.currentUser.uid;
-
-  await signInAnonymously(a);
-
-  // Esperar a que onAuthStateChanged nos devuelva el usuario
-  const uid = await new Promise<string>((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error("Timeout esperando uid anónimo")), 5000);
-    const unsub = onAuthStateChanged(a, (user) => {
-      if (user) {
-        clearTimeout(timeout);
-        unsub();
-        resolve(user.uid);
-      }
-    }, (err) => {
-      clearTimeout(timeout);
-      reject(err);
-    });
-  });
-
-  return uid;
+  return ensureAuthReady();
 }
 
 import { Product, ClientWithId } from "./data/types";

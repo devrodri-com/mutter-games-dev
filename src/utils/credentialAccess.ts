@@ -4,8 +4,10 @@ import { auth } from '../firebase';
 export type CredentialAdmission = {
   status: 'ACTIVE'; uid: string; admin: boolean; superadmin: boolean; expiresAtMs: number;
 };
+export type LegacyGuestNewPurchase = { kind: 'LEGACY_ANONYMOUS'; uid: string; epoch: string };
 export class CredentialAccessError extends Error {
-  constructor(public readonly code: 'RECOVERY_REQUIRED' | 'ACCESS_UNAVAILABLE', message: string) { super(message); }
+  constructor(public readonly code: 'RECOVERY_REQUIRED' | 'ACCESS_UNAVAILABLE', message: string,
+    public readonly newPurchase: LegacyGuestNewPurchase | null = null) { super(message); }
 }
 const inflight = new Map<string, Promise<CredentialAdmission>>();
 let recoveryNonce: string | null = null;
@@ -18,7 +20,16 @@ async function post(path: string, user: User, body: Record<string, string>): Pro
   const token = await user.getIdToken();
   const response = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(body), cache: 'no-store' });
   if (!response.ok) {
-    if (response.status === 403) throw new CredentialAccessError('RECOVERY_REQUIRED', 'Tu cuenta y tus datos se conservan. Necesitás recuperar el acceso para continuar.');
+    if (response.status === 403) {
+      const result: unknown = await response.json();
+      if (auth.currentUser?.uid !== user.uid) throw new CredentialAccessError('ACCESS_UNAVAILABLE', 'Cambió la cuenta durante el ingreso. Intentá nuevamente.');
+      const offered = object(result) ? result.newPurchase : null;
+      const newPurchase: LegacyGuestNewPurchase | null = object(result) && result.code === 'RECOVERY_REQUIRED'
+        && object(offered) && offered.kind === 'LEGACY_ANONYMOUS' && offered.uid === user.uid
+        && typeof offered.epoch === 'string' && /^[a-zA-Z0-9_-]{16,100}$/.test(offered.epoch)
+        ? { kind: 'LEGACY_ANONYMOUS', uid: user.uid, epoch: offered.epoch } : null;
+      throw new CredentialAccessError('RECOVERY_REQUIRED', 'Tu cuenta y tus datos se conservan. Necesitás recuperar el acceso para continuar.', newPurchase);
+    }
     throw new CredentialAccessError('ACCESS_UNAVAILABLE', 'No pudimos comprobar el acceso. Intentá nuevamente.');
   }
   if (auth.currentUser?.uid !== user.uid) throw new CredentialAccessError('ACCESS_UNAVAILABLE', 'Cambió la cuenta durante el ingreso. Intentá nuevamente.');

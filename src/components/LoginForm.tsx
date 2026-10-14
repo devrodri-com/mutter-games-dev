@@ -4,6 +4,7 @@ import { EmailAuthProvider, linkWithCredential, signInWithEmailAndPassword } fro
 import { auth } from '../firebase';
 import { useAuth } from '../context/AuthContext';
 import { captureRecoveryNonce, completeCredentialRecovery, CredentialAccessError, discardRecoveryNonce, ensureCredentialSession, requestCredentialRecovery, type CredentialAdmission } from '../utils/credentialAccess';
+import LegacyGuestNewPurchase from './LegacyGuestNewPurchase';
 
 export default function LoginForm() {
   const [email, setEmail] = useState('');
@@ -58,6 +59,7 @@ export default function LoginForm() {
     <img src="/logo1.png" alt="Mutter Games" className="w-24 h-24 object-contain mb-4" />
     <h1 className="text-2xl font-bold text-gray-800 mb-2">{register ? 'Guardar mi cuenta' : 'Ingresar a mi cuenta'}</h1>
     <p className="text-gray-500 text-sm mb-8 text-center">{nonce ? 'Ya volviste del enlace. Ingresá con la contraseña que acabás de elegir.' : register ? 'Es opcional. Conservaremos el mismo usuario y su carrito.' : 'Conservamos tu cuenta, tus pedidos y tu carrito.'}</p>
+    <LegacyGuestNewPurchase />
     <form onSubmit={handleLogin} className="w-full max-w-md bg-white shadow-lg rounded-xl px-8 pt-8 pb-6">
       <div className="mb-4"><label htmlFor="access-email" className="block text-gray-700 text-sm font-medium mb-1">Correo electrónico</label><input id="access-email" type="email" value={email} required autoComplete="email" disabled={busy} onChange={event => setEmail(event.target.value)} className="w-full border border-gray-300 px-4 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-black" /></div>
       <div className="mb-6"><label htmlFor="access-password" className="block text-gray-700 text-sm font-medium mb-1">Contraseña</label><input id="access-password" type="password" value={password} required autoComplete={register ? 'new-password' : 'current-password'} disabled={busy} onChange={event => setPassword(event.target.value)} className="w-full border border-gray-300 px-4 py-2 rounded-md focus:outline-none focus:ring-2 focus:ring-black" /></div>

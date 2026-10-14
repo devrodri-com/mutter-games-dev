@@ -3,12 +3,13 @@ import { initializeApp, getApps } from "firebase/app";
 import { getFirestore, connectFirestoreEmulator } from "firebase/firestore";
 import {
   getAuth,
-  signInAnonymously,
   onAuthStateChanged,
   setPersistence,
   browserLocalPersistence,
   connectAuthEmulator,
 } from "firebase/auth";
+import { bootstrapAnonymousVisitor } from './utils/anonymousBootstrap';
+import { readGuestPurchaseTransition } from './utils/guestPurchaseState';
 
 const firebaseConfig = {
   // Siempre usamos la env; eliminamos la API key hardcodeada
@@ -33,7 +34,8 @@ if (import.meta.env.VITE_USE_FIREBASE_EMULATORS === 'true') {
 }
 
 // Persistencia local + sesión anónima para invitados
-setPersistence(auth, browserLocalPersistence).catch(() => {});
+const persistenceReady = setPersistence(auth, browserLocalPersistence);
+persistenceReady.catch(() => { if (import.meta.env.DEV) console.error('Local authentication persistence unavailable'); });
 
 let _authResolved = false;
 let _resolveAuthReady: ((uid: string) => void) | null = null;
@@ -43,9 +45,13 @@ export const authReady: Promise<string> = new Promise((res) => {
 
 onAuthStateChanged(auth, (user) => {
   if (!user) {
-    // Si no hay usuario, creamos uno anónimo
-    signInAnonymously(auth).catch((err) => {
-      if (import.meta.env.DEV) console.error("Anonymous sign-in failed", err);
+    // Explicit identity transitions suppress this ordinary visitor bootstrap.
+    void persistenceReady.then(() => {
+      const transition = readGuestPurchaseTransition(auth);
+      if (transition && transition.phase !== 'SETTLED') return;
+      return bootstrapAnonymousVisitor(auth);
+    }).catch(() => {
+      if (import.meta.env.DEV) console.error("Anonymous sign-in unavailable");
     });
     return; // esperamos el próximo callback con el user
   }
@@ -59,8 +65,12 @@ onAuthStateChanged(auth, (user) => {
 
 // Utilidad para cuando quieras el UID ya listo
 export const ensureAuthReady = async (): Promise<string> => {
+  await persistenceReady;
+  await auth.authStateReady();
   if (auth.currentUser?.uid) return auth.currentUser.uid;
-  return authReady; // espera a que se resuelva
+  const transition = readGuestPurchaseTransition(auth);
+  if (transition && transition.phase !== 'SETTLED') throw new Error('Terminá de iniciar la compra nueva antes de continuar.');
+  return (await bootstrapAnonymousVisitor(auth)).uid;
 };
 
 export const getCurrentUid = (): string | null => auth.currentUser?.uid ?? null;

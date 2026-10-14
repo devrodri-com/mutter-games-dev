@@ -12,6 +12,8 @@ vi.mock('firebase/auth',()=>({onAuthStateChanged:(_auth:unknown,callback:(user:u
 vi.mock('firebase/firestore',()=>({doc:(_db:unknown,collection:string,id:string)=>({collection,id}),collection:vi.fn(),query:vi.fn(),where:vi.fn(),limit:vi.fn(),startAfter:vi.fn(),getDocsFromServer:vi.fn(),getDocFromServer:(ref:unknown)=>boundary.read(ref),setDoc:(...args:unknown[])=>boundary.write(...args),serverTimestamp:()=>0,onSnapshot:(ref:{collection:string;id:string},_options:unknown,callback:(snapshot:unknown)=>void,error:()=>void)=>{if(ref.collection==='products'){const listener={id:ref.id,callback,error};boundary.productListeners.push(listener);return ()=>{boundary.productListeners=boundary.productListeners.filter(entry=>entry!==listener);};}boundary.listeners.push(callback);return ()=>{boundary.listeners=boundary.listeners.filter(cb=>cb!==callback);};},addDoc:vi.fn(),updateDoc:vi.fn(),deleteDoc:vi.fn()}));
 Object.assign(globalThis,{IS_REACT_ACT_ENVIRONMENT:true});
 import { CartProvider,useCart } from '../../src/context/CartContext';
+import { auth } from '../../src/firebase';
+import { writeGuestPurchaseTransition } from '../../src/utils/guestPurchaseState';
 let context:ReturnType<typeof useCart>|undefined;let root:ReturnType<typeof createRoot>;
 const item={id:'p',slug:'p-game',name:'Old',title:{es:'Old',en:''},priceUSD:10,price:10,quantity:1,image:''};
 function Probe(){context=useCart();return <div>{context.items.length}</div>;}
@@ -232,4 +234,46 @@ test('a confirmed write echo cannot cancel its own inventory refresh or report a
  expect(context?.items).toMatchObject([{ id: 'p', quantity: 1, priceUSD: 20 }]);
  expect(JSON.parse(localStorage.getItem('mutter-cart:synthetic-cart') ?? '{}')).toMatchObject({ dirty: false, items: [{ quantity: 1 }] });
  expect(boundary.write).toHaveBeenCalledTimes(1);
+});
+
+test('a held write and queued edits from the historical UID neither block nor acknowledge the new UID cart', async () => {
+ await act(async () => boundary.listeners[0](snapshot([item])));
+ let releaseOld: (() => void) | undefined;
+ boundary.write.mockImplementationOnce(() => new Promise<void>(resolve => { releaseOld = resolve; }));
+ let oldWrite: Promise<void> | undefined, oldQueued: Promise<void> | undefined;
+ await act(async () => { oldWrite = context?.updateItem(item, { quantity: 2 }); oldQueued = context?.updateItem(item, { quantity: 1 }); });
+ const oldCached = localStorage.getItem('mutter-cart:synthetic-cart');
+ await act(async () => { boundary.auth.currentUser = { uid: 'synthetic-new-purchase' }; boundary.authListeners[0](boundary.auth.currentUser); });
+ await act(async () => boundary.listeners[0](snapshot([])));
+ expect(context?.items).toEqual([]); expect(context?.cartReady).toBe(true);
+ await act(async () => { expect(await context?.addToCart({ ...item, customName: 'New purchase only' })).toBe(true); });
+ expect(boundary.write).toHaveBeenCalledTimes(2);
+ expect(boundary.write.mock.calls[1]?.[0]).toMatchObject({ id: 'synthetic-new-purchase' });
+ expect(context?.items).toMatchObject([{ customName: 'New purchase only', quantity: 1 }]);
+ await act(async () => { releaseOld?.(); await oldWrite; await oldQueued; });
+ expect(boundary.write).toHaveBeenCalledTimes(2);
+ expect(localStorage.getItem('mutter-cart:synthetic-cart')).toBe(oldCached);
+ expect(context?.items).toMatchObject([{ customName: 'New purchase only', quantity: 1 }]);
+ expect(context?.cartReady).toBe(true); expect(context?.cartError).toBeNull();
+ await act(async () => { expect(await context?.addToCart({ ...item, customName: 'New purchase only' })).toBe(true); });
+ expect(context?.items).toMatchObject([{ customName: 'New purchase only', quantity: 2 }]);
+});
+
+test('explicit purchase preparation invalidates historical cart tasks and delivery state without clearing unrelated storage', async () => {
+ Object.assign(boundary.auth, { app: { options: { projectId: 'demo-mutter-r1' } } });
+ await act(async () => boundary.listeners[0](snapshot([item])));
+ await act(async () => context?.setShippingData({ name: 'Synthetic prior holder', address: 'Old address', city: 'Montevideo', departamento: '', state: 'Montevideo', postalCode: '', phone: '5550100', email: 'synthetic-previous@example.invalid' }));
+ localStorage.setItem('language', 'es');
+ localStorage.setItem('mutter-checkout:synthetic-cart', 'prior-attempt-kept');
+ const oldCached = localStorage.getItem('mutter-cart:synthetic-cart');
+ let releaseRead: ((value: ReturnType<typeof current>) => void) | undefined;
+ boundary.read.mockImplementationOnce(() => new Promise(resolve => { releaseRead = resolve; }));
+ let adding: Promise<boolean> | undefined;
+ await act(async () => { adding = context?.addToCart({ ...item, customName: 'Old queued selection' }); });
+ await act(async () => writeGuestPurchaseTransition(auth, { schema: 1, kind: 'LEGACY_ANONYMOUS', uid: 'synthetic-cart', epoch: 'synthetic-new-purchase-epoch', phase: 'PREPARING', startedAtMs: Date.now() }));
+ expect(context?.items).toEqual([]); expect(context?.cartReady).toBe(false); expect(context?.shippingInfo.name).toBe(''); expect(context?.shippingInfo.email).toBe('');
+ await act(async () => { releaseRead?.(current()); expect(await adding).toBe(false); });
+ expect(boundary.write).not.toHaveBeenCalled(); expect(context?.items).toEqual([]); expect(context?.cartError).toBeNull();
+ expect(localStorage.getItem('mutter-cart:synthetic-cart')).toBe(oldCached);
+ expect(localStorage.getItem('mutter-checkout:synthetic-cart')).toBe('prior-attempt-kept'); expect(localStorage.getItem('language')).toBe('es');
 });

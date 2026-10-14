@@ -73,6 +73,5 @@ var setCustomUserClaim = function (email) { return __awaiter(void 0, void 0, voi
         }
     });
 }); };
-// 📌 Reemplazar con el email del admin (John)
-var emailDelAdmin = 'lilianpresa@hotmail.com';
-setCustomUserClaim(emailDelAdmin);
+// Historical generated helper; it is not a configured entrypoint.
+// No implicit account selection or role mutation is executed here.

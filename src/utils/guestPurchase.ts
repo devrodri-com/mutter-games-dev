@@ -1,0 +1,102 @@
+import { beforeAuthStateChanged, signInAnonymously, signOut, type User } from 'firebase/auth';
+import { auth } from '../firebase';
+import { CredentialAccessError, ensureCredentialSession, type CredentialAdmission, type LegacyGuestNewPurchase } from './credentialAccess';
+import { readGuestPurchaseTransition, withAnonymousIdentityLock, writeGuestPurchaseTransition, type GuestPurchaseTransition } from './guestPurchaseState';
+
+function changed(): never { throw new CredentialAccessError('ACCESS_UNAVAILABLE', 'Cambió la cuenta. Tu cuenta actual y sus datos se conservan.'); }
+// Read again after asynchronous SDK transitions; an earlier null snapshot does
+// not describe the identity the provider now owns.
+function sdkCurrentUser(): User | null { return auth.currentUser; }
+const ordinaryIdentity = () => {
+  const current = auth.currentUser;
+  return current && !current.email && !current.phoneNumber && current.providerData.length === 0 ? current : null;
+};
+
+/** Called only by the explained visitor action. No historical document is read,
+ * written, linked or deleted, and retries inspect the SDK before any signup. */
+export function startLegacyGuestPurchase(offer: LegacyGuestNewPurchase): Promise<CredentialAdmission> {
+  return withAnonymousIdentityLock(auth, async () => {
+    await auth.authStateReady();
+    let saved = readGuestPurchaseTransition(auth);
+    if (saved && (saved.uid !== offer.uid || saved.epoch !== offer.epoch)) changed();
+    const initial = auth.currentUser;
+    if (saved?.phase === 'SETTLED' && (!initial || initial.uid === offer.uid))
+      throw new CredentialAccessError('ACCESS_UNAVAILABLE', 'La cuenta cambió en otra pestaña. Recargá la página para continuar con tu cuenta actual.');
+    if (initial && initial.uid !== offer.uid) {
+      if ((saved && saved.phase === 'PREPARING') || !ordinaryIdentity()) changed();
+      // An earlier SDK signup may already have succeeded. Admission, rather
+      // than another signup, is the only retry for that existing identity.
+      const admitted = await ensureCredentialSession(initial);
+      if (auth.currentUser?.uid !== admitted.uid) changed();
+      if (admitted.admin || admitted.superadmin) changed();
+      if (saved) writeGuestPurchaseTransition(auth, { ...saved, phase: 'SETTLED' });
+      return admitted;
+    }
+    if (initial) {
+      let trusted: LegacyGuestNewPurchase | null = null;
+      try { await ensureCredentialSession(initial); }
+      catch (error: unknown) {
+        if (!(error instanceof CredentialAccessError)) throw error;
+        trusted = error.newPurchase;
+        if (!trusted) throw error;
+      }
+      if (!trusted || trusted.uid !== offer.uid || trusted.epoch !== offer.epoch || auth.currentUser?.uid !== initial.uid) changed();
+      saved = { ...trusted, schema: 1, phase: 'PREPARING', startedAtMs: Date.now() };
+      writeGuestPurchaseTransition(auth, saved);
+      // These unscoped values belong to this explained purchase form. The
+      // old UID's cart/checkout references remain separate and untouched.
+      localStorage.setItem('mutter-cart-migrated', 'yes');
+      localStorage.removeItem('shippingData');
+      localStorage.removeItem('lastOrderId');
+    } else if (!saved || saved.phase === 'PREPARING') {
+      throw new CredentialAccessError('ACCESS_UNAVAILABLE', 'No pudimos comprobar la sesión anterior. Tu cuenta y tus datos se conservan.');
+    }
+    if (!saved) changed();
+    const transition: GuestPurchaseTransition = saved;
+    let superseded = false;
+    let createdUid: string | null = null;
+    const stop = beforeAuthStateChanged(auth, next => {
+      const current = auth.currentUser;
+      if (!next) {
+        if (superseded || (current && current.uid !== offer.uid)) changed();
+        return;
+      }
+      if (!next.isAnonymous) {
+        if (next.uid !== offer.uid && next.uid !== createdUid) superseded = true;
+        return;
+      }
+      if (superseded || (current && current.uid !== next.uid)) changed();
+      createdUid = next.uid;
+    });
+    try {
+      if (initial) {
+        await signOut(auth);
+        if (auth.currentUser) changed();
+        writeGuestPurchaseTransition(auth, { ...transition, phase: 'SIGNED_OUT' });
+      }
+      if (auth.currentUser || superseded) changed();
+      const credential = await signInAnonymously(auth);
+      if (superseded || credential.user.uid === offer.uid || sdkCurrentUser()?.uid !== credential.user.uid || !ordinaryIdentity()) changed();
+      writeGuestPurchaseTransition(auth, { ...transition, phase: 'CREATED' });
+    } catch (error: unknown) {
+      const current = sdkCurrentUser();
+      if (current && current.uid !== offer.uid && !ordinaryIdentity()) {
+        writeGuestPurchaseTransition(auth, { ...transition, phase: 'SETTLED' });
+        changed();
+      }
+      if (!current) writeGuestPurchaseTransition(auth, { ...transition, phase: 'SIGNED_OUT' });
+      else if (current.uid !== offer.uid) writeGuestPurchaseTransition(auth, { ...transition, phase: 'CREATED' });
+      if (!current) throw new CredentialAccessError('ACCESS_UNAVAILABLE', 'La sesión anterior se cerró. No pudimos completar la compra nueva. Reintentá para continuar.');
+      throw error;
+    } finally { stop(); }
+    const current = sdkCurrentUser();
+    if (!current || current.uid === offer.uid) changed();
+    const admitted = await ensureCredentialSession(current);
+    if (sdkCurrentUser()?.uid !== admitted.uid || admitted.admin || admitted.superadmin) changed();
+    // Retain only a source-UID coordination barrier: another tab's SDK storage
+    // event may lag behind releasing the lock. This grants no access and stores
+    // no destination identity or credential. A stale action must not sign out.
+    writeGuestPurchaseTransition(auth, { ...transition, phase: 'SETTLED' });
+    return admitted;
+  });
+}

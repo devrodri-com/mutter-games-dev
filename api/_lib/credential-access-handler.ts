@@ -3,6 +3,7 @@ import type { Firestore } from 'firebase-admin/firestore';
 import { CredentialAccessError, object } from './credential-access-state.js';
 import { createNativeSession, resumeCredentialSession, type SessionResponse } from './credential-session.js';
 import { completeCredentialRecovery, requestCredentialRecovery } from './credential-recovery.js';
+import { legacyGuestNewPurchase } from './legacy-guest.js';
 export type AccessRequest = { method?: string; headers: Record<string, unknown>; body?: unknown };
 export type AccessResponse = { setHeader(name: string, value: string): unknown; status(code: number): AccessResponse; json(body: unknown): unknown };
 export type AccessAction = 'session' | 'request' | 'complete';
@@ -24,6 +25,7 @@ export async function handleCredentialAccess(action: AccessAction, auth: Auth, d
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('Referrer-Policy', 'no-referrer');
   if (req.method !== 'POST') return res.status(405).json({ code: 'METHOD_NOT_ALLOWED', error: 'Method not allowed' });
+  let claims: DecodedIdToken | undefined;
   try {
     const body = input(req.body);
     if (action === 'request') {
@@ -31,7 +33,7 @@ export async function handleCredentialAccess(action: AccessAction, auth: Auth, d
       await requestCredentialRecovery(auth, db, body.email);
       return res.status(202).json({ status: 'REQUEST_RECEIVED' });
     }
-    const claims = await verifiedClaims(auth, req);
+    claims = await verifiedClaims(auth, req);
     if (action === 'complete') {
       keys(body, ['nonce']);
       return res.status(200).json(await completeCredentialRecovery(auth, db, claims, body.nonce));
@@ -47,7 +49,19 @@ export async function handleCredentialAccess(action: AccessAction, auth: Auth, d
     }
     return res.status(200).json(result);
   } catch (error: unknown) {
-    if (error instanceof CredentialAccessError) return res.status(error.status).json({ code: error.code, error: error.message });
+    if (error instanceof CredentialAccessError) {
+      if (action === 'session' && claims && error.code === 'RECOVERY_REQUIRED') {
+        // Failure to read authoritative eligibility remains unavailable; never
+        // infer the new-purchase choice from a provider claim or a generic 403.
+        try {
+          const newPurchase = await legacyGuestNewPurchase(auth, db, claims);
+          return res.status(error.status).json({ code: error.code, error: error.message, ...(newPurchase ? { newPurchase } : {}) });
+        } catch {
+          return res.status(503).json({ code: 'ACCESS_UNAVAILABLE', error: 'No pudimos comprobar el acceso. Tu cuenta y tus datos se conservan.' });
+        }
+      }
+      return res.status(error.status).json({ code: error.code, error: error.message });
+    }
     if (error instanceof SyntaxError) return res.status(400).json({ code: 'INVALID_INPUT', error: 'Revisá los datos e intentá nuevamente.' });
     return res.status(503).json({ code: 'ACCESS_UNAVAILABLE', error: 'No pudimos comprobar el acceso. Tu cuenta y tus datos se conservan.' });
   }

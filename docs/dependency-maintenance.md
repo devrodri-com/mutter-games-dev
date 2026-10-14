@@ -75,7 +75,8 @@ The synthetic PDF regression supplies a local logo because this source tree lack
 It does not certify the production asset. With the same synthetic content and logo,
 jsPDF 3.0.1 and 4.2.1 render pixel-identical labels, including pre-existing overlap
 of long field names. The historical generated CommonJS
-`scripts/setAdminRole.js` is not a configured entrypoint and remains unchanged;
+`scripts/setAdminRole.js` is not a configured entrypoint. Its historical hardcoded
+account selection and implicit invocation were removed for private identity hygiene;
 the compatibility regression explicitly imports the TypeScript operation.
 
 Browser regressions retain every diagnostic. A WebKit network message is classified
