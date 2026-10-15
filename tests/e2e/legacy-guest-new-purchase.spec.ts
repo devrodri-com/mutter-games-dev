@@ -144,10 +144,15 @@ test('explicit new purchase uses another UID, empty state, real reservation and 
   expect(signups()).toBe(1); expect(next.provider).toBe('custom'); expect(next.email).toBeNull();
   await expect(page.getByRole('heading', { name: 'Tu carrito está vacío', exact: true })).toBeVisible();
   await expect(action(page)).toHaveCount(0);
+  // An admitted SDK identity and the empty render precede the cart listener's
+  // first server snapshot. Observe persistence without accepting another UID
+  // or waiting for an incorrect stored value to change into the expected one.
+  await page.evaluate(async ({ path, uid }) => (await import(path)).waitForPersistedCart(uid), { path: clientPath, uid: next.uid });
   const local = await page.evaluate(uid => ({ shipping: JSON.parse(localStorage.getItem('shippingData') ?? '{}'),
     cart: JSON.parse(localStorage.getItem(`mutter-cart:${uid}`) ?? '{}'), checkout: localStorage.getItem(`mutter-checkout:${uid}`),
     lastOrder: localStorage.getItem('lastOrderId'), unrelated: localStorage.getItem('unrelated-owner-storage') }), next.uid);
   expect(local.cart).toMatchObject({ items: [], dirty: false }); expect(local.checkout).toBeNull();
+  expect(await identity(page)).toEqual(next);
   expect(local.lastOrder).toBeNull();
   for (const field of ['name', 'address', 'email', 'phone']) expect(local.shipping[field]).toBe('');
   expect(local.unrelated).toBe('preserve-me');

@@ -1,6 +1,6 @@
 // Test-only Vite module. Exercise the real app singleton, official SDK and APIs.
 // Return identity/observable results only; never return an ID or refresh token.
-import { beforeAuthStateChanged, indexedDBLocalPersistence, setPersistence, signInWithCustomToken } from 'firebase/auth';
+import { beforeAuthStateChanged, indexedDBLocalPersistence, onAuthStateChanged, setPersistence, signInWithCustomToken } from 'firebase/auth';
 import { doc, getDocFromServer } from 'firebase/firestore';
 import { auth, db } from '../../src/firebase';
 
@@ -15,6 +15,36 @@ export async function identity() {
   return { uid: user.uid, provider: claims.signInProvider, email: user.email,
     admin: claims.claims.admin === true, superadmin: claims.claims.superadmin === true,
     sessionId: typeof claims.claims.mutterCredentialSession === 'string' ? claims.claims.mutterCredentialSession : null };
+}
+
+/** Admission precedes the cart's first authoritative Firestore snapshot. Wait
+ * only for a cache to exist, then let the caller assert its complete contents.
+ * A different SDK owner fails this observation instead of being retried. */
+export async function waitForPersistedCart(uid: string): Promise<void> {
+  if (auth.currentUser?.uid !== uid) throw Error('SDK identity changed before cart persistence');
+  return new Promise((resolve, reject) => {
+    let finished = false, frame = 0;
+    let stop = () => {};
+    const finish = (error?: Error) => {
+      if (finished) return;
+      finished = true;
+      window.clearTimeout(timeout); window.cancelAnimationFrame(frame); stop();
+      if (error) reject(error); else resolve();
+    };
+    const timeout = window.setTimeout(() => finish(new Error('Cart cache was not persisted for the admitted UID')), 5000);
+    stop = onAuthStateChanged(auth, user => {
+      if (user?.uid !== uid) finish(new Error('SDK identity changed while awaiting cart persistence'));
+    });
+    const inspect = () => {
+      if (finished) return;
+      if (auth.currentUser?.uid !== uid) { finish(new Error('SDK identity changed while awaiting cart persistence')); return; }
+      try {
+        if (localStorage.getItem(`mutter-cart:${uid}`) !== null) finish();
+        else frame = window.requestAnimationFrame(inspect);
+      } catch (error: unknown) { finish(error instanceof Error ? error : new Error('Cart cache could not be read')); }
+    };
+    inspect();
+  });
 }
 
 export async function signIn(token: string) {
