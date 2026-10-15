@@ -178,7 +178,7 @@ test('explicit new purchase uses another UID, empty state, real reservation and 
   await page.goto('/carrito'); await page.screenshot({ path: testInfo.outputPath('new-guest-cart.png'), fullPage: true });
 });
 
-test('revoked legacy token keeps an independent choice; modeled SDK loss blocks automatic signup across reload and tabs', async ({ page, context }, testInfo) => {
+test('revoked legacy token and official startup loss preserve explicit public choice across reload and tabs', async ({ page, context }, testInfo) => {
   currentLegacy = await seedLegacy(page); const old = currentLegacy;
   const signups = observeSignups(page);
   const other = await context.newPage(); await localOnly(other); const otherSignups = observeSignups(other);
@@ -197,8 +197,6 @@ test('revoked legacy token keeps an independent choice; modeled SDK loss blocks 
     await new Promise(resolve => setTimeout(resolve, Math.max(0, Math.floor(Date.now() / 1000) * 1000 + 1100 - Date.now())));
     await auth.revokeRefreshTokens(old.uid);
     expect(await session(page)).toMatchObject({ status: 401, body: { code: 'INVALID_SESSION' } });
-    const deniedSession = page.waitForResponse(response => response.url().includes('/api/access/session') && response.status() === 401);
-    await page.reload(); await (await deniedSession).finished();
     await expect(action(page)).toBeVisible(); expect((await identity(page))?.uid).toBe(old.uid);
     const oldSessions = await db.collection('credentialSessions').where('uid', '==', old.uid).get();
     expect(oldSessions.empty).toBe(true);
@@ -209,10 +207,14 @@ test('revoked legacy token keeps an independent choice; modeled SDK loss blocks 
     await unchanged(old);
     await page.screenshot({ path: testInfo.outputPath('revoked-token-independent-choice.png'), fullPage: true });
 
-    // Separate model of an SDK-null effect, through its public API. Auth's
-    // emulator does not enforce validSince on refresh; revoke is not credited
-    // with causing this signOut. The app must preserve its observed-UID guard.
-    await page.evaluate(async path => (await import(path)).loseSdkIdentity(), clientPath);
+    // The official startup lookup rejects this real revoked token. Unlike the
+    // emulator's refresh behavior, that path does clear the SDK's persisted
+    // user. Observe its actual error, not a simulated response or signOut.
+    const rejectedLookup = page.waitForResponse(response => response.url().includes('/accounts:lookup?') && response.status() === 400);
+    await page.reload();
+    const lookup = await rejectedLookup;
+    expect(await lookup.json()).toMatchObject({ error: { code: 400, message: 'TOKEN_EXPIRED' } });
+    await lookup.finished();
     for (const tab of [page, other]) await expect.poll(() => identity(tab)).toBeNull();
     for (const tab of [page, other]) {
       await tab.reload(); await expect(action(tab)).toBeVisible();
@@ -223,7 +225,7 @@ test('revoked legacy token keeps an independent choice; modeled SDK loss blocks 
       shipping: localStorage.getItem('shippingData'), checkout: localStorage.getItem(`mutter-checkout:${uid}`),
       lastOrder: localStorage.getItem('lastOrderId') }), old.uid)).toEqual(pendingLocal);
     await denied(page, 'orders', old.orderId); await unchanged(old);
-    await page.screenshot({ path: testInfo.outputPath('modeled-sdk-null-awaits-explicit-choice.png'), fullPage: true });
+    await page.screenshot({ path: testInfo.outputPath('revoked-startup-sdk-null-awaits-explicit-choice.png'), fullPage: true });
     await action(page).click(); const next = await confirmedNew(page, old.uid), shared = await confirmedNew(other, old.uid);
     expect(shared.uid).toBe(next.uid); expect(signups() + otherSignups()).toBe(1);
     expect(authorizedSelector).toBe(false);

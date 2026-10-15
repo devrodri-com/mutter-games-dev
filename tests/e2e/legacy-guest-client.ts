@@ -1,6 +1,6 @@
 // Test-only Vite module. Exercise the real app singleton, official SDK and APIs.
 // Return identity/observable results only; never return an ID or refresh token.
-import { beforeAuthStateChanged, indexedDBLocalPersistence, setPersistence, signInWithCustomToken, signOut } from 'firebase/auth';
+import { beforeAuthStateChanged, indexedDBLocalPersistence, setPersistence, signInWithCustomToken } from 'firebase/auth';
 import { doc, getDocFromServer } from 'firebase/firestore';
 import { auth, db } from '../../src/firebase';
 
@@ -23,14 +23,6 @@ export async function refresh() {
   const user = auth.currentUser;
   if (!user) throw Error('Expected current demo identity');
   await user.getIdToken(true);
-}
-
-/** Model a lost SDK identity explicitly. The demo Auth emulator does not
- * enforce validSince on refresh; this is never evidence that revoke did so. */
-export async function loseSdkIdentity() {
-  if (auth.app.options.projectId !== 'demo-mutter-r1' || auth.emulatorConfig?.host !== '127.0.0.1'
-    || auth.emulatorConfig.port !== 9198) throw Error('Exact demo Auth instance required');
-  await signOut(auth);
 }
 
 async function responseObject(response: Response) {
