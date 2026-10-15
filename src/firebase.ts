@@ -2,10 +2,12 @@
 import { initializeApp, getApps } from "firebase/app";
 import { getFirestore, connectFirestoreEmulator } from "firebase/firestore";
 import {
-  getAuth,
+  initializeAuth,
   onAuthStateChanged,
-  setPersistence,
   browserLocalPersistence,
+  indexedDBLocalPersistence,
+  browserSessionPersistence,
+  browserPopupRedirectResolver,
   connectAuthEmulator,
 } from "firebase/auth";
 import { bootstrapAnonymousVisitor } from './utils/anonymousBootstrap';
@@ -24,7 +26,13 @@ const firebaseConfig = {
 // ——— App singleton (evita reinicializar en HMR) ———
 const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
 const db = getFirestore(app);
-const auth = getAuth(app);
+// Choose persistence while the official SDK creates its user manager, so its
+// cross-tab listener belongs to the final store. The remaining old default
+// stores stay in the hierarchy for official same-UID startup migration.
+const auth = initializeAuth(app, {
+  persistence: [browserLocalPersistence, indexedDBLocalPersistence, browserSessionPersistence],
+  popupRedirectResolver: browserPopupRedirectResolver,
+});
 
 // Explicit isolated development only: connect before auth or reads can run.
 if (import.meta.env.VITE_USE_FIREBASE_EMULATORS === 'true') {
@@ -34,7 +42,7 @@ if (import.meta.env.VITE_USE_FIREBASE_EMULATORS === 'true') {
 }
 
 // Persistencia local + sesión anónima para invitados
-const persistenceReady = setPersistence(auth, browserLocalPersistence);
+const persistenceReady = auth.authStateReady();
 persistenceReady.catch(() => { if (import.meta.env.DEV) console.error('Local authentication persistence unavailable'); });
 
 let _authResolved = false;

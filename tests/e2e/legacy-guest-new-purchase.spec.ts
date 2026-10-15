@@ -129,7 +129,11 @@ test('new guest persists and reenters after capability inactivity without anothe
   await page.goto(`/producto/${item.slug}`); await page.getByRole('button', { name: 'Agregar al carrito', exact: true }).click();
   await expect.poll(async () => (await db.doc(`carts/${first.uid}`).get()).data()?.cartItems?.length).toBe(1);
   const saved = (await db.doc(`carts/${first.uid}`).get()).data();
-  await page.reload(); expect((await identity(page))?.uid).toBe(first.uid);
+  await page.evaluate(async path => (await import(path)).persistInIndexedDb(), clientPath);
+  await page.reload();
+  await expect.poll(async () => (await identity(page))?.uid).toBe(first.uid);
+  await expect(page.getByRole('button', { name: 'Agregar al carrito', exact: true })).toBeEnabled();
+  expect((await db.doc(`carts/${first.uid}`).get()).data()).toEqual(saved); expect(signups()).toBe(1);
   await db.doc(`credentialSessions/${first.sessionId}`).update({ expiresAtMs: Date.now() - 2 * 7 * 24 * 60 * 60 * 1000 - 1 });
   await page.evaluate(async path => (await import(path)).refresh(), clientPath);
   await page.goto('/carrito'); await page.reload();

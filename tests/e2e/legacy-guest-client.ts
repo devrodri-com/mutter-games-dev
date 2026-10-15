@@ -1,6 +1,6 @@
 // Test-only Vite module. Exercise the real app singleton, official SDK and APIs.
 // Return identity/observable results only; never return an ID or refresh token.
-import { beforeAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
+import { beforeAuthStateChanged, indexedDBLocalPersistence, setPersistence, signInWithCustomToken } from 'firebase/auth';
 import { doc, getDocFromServer } from 'firebase/firestore';
 import { auth, db } from '../../src/firebase';
 
@@ -23,6 +23,14 @@ export async function refresh() {
   const user = auth.currentUser;
   if (!user) throw Error('Expected current demo identity');
   await user.getIdToken(true);
+}
+
+/** Create an older persistence format through the official SDK, then let the
+ * next actual app startup perform its supported migration. Demo setup only. */
+export async function persistInIndexedDb() {
+  if (auth.app.options.projectId !== 'demo-mutter-r1' || auth.emulatorConfig?.host !== '127.0.0.1'
+    || auth.emulatorConfig.port !== 9198) throw Error('Exact demo Auth instance required');
+  await setPersistence(auth, indexedDBLocalPersistence);
 }
 
 let anonymousAbort: Promise<{ rejectedUid: string }> | null = null;
