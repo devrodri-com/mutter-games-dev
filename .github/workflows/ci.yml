@@ -171,6 +171,16 @@ jobs:
           CATALOG_WEBKIT: '1'
         run: npm run test:catalog:browser
 
+      - name: Preserve catalog browser execution evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: catalog-browser-evidence-${{ github.run_attempt }}
+          path: ${{ github.workspace }}/../r1b/browser-evidence
+          # A preceding failure may prevent the browser from producing files.
+          if-no-files-found: warn
+          retention-days: 14
+
       - name: Archive available Edge evidence; fail if a successful build lost it
         id: edge-archive
         if: always()

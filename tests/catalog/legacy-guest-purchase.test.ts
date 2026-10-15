@@ -174,3 +174,39 @@ test('unknown cold SDKnull never starts a user until the explicit generic action
   expect(await ensureCredentialSession(current)).toMatchObject({ uid: first.uid, admin: false });
   expect((await h.auth.listUsers()).users).toHaveLength(before + 1);
 }, 60_000);
+
+test.each([
+  { phase: 'CREATING', sdk: 'source' }, { phase: 'CREATING', sdk: 'null' },
+  { phase: 'CREATED', sdk: 'source' }, { phase: 'CREATED', sdk: 'null' },
+  { phase: 'SETTLED', sdk: 'source' }, { phase: 'SETTLED', sdk: 'null' },
+])('monotonic $phase preserves one real signup when the official SDK later exposes $sdk', async ({ phase, sdk }) => {
+  const { harness, source, offer, durable, account } = await legacy();
+  const oldToken = await harness.auth.createCustomToken(source.uid);
+  const before = (await harness.auth.listUsers()).users;
+  if (phase === 'CREATING') harness.loseNextSignupResponse();
+  if (phase === 'CREATED') harness.loseNextAdmissionBody();
+  const outcome = await startLegacyGuestPurchase(offer).catch((error: unknown) => error);
+  if (phase === 'SETTLED') expect(outcome).toMatchObject({ status: 'ACTIVE' });
+  else expect(outcome).toBeInstanceOf(Error);
+  const after = (await harness.auth.listUsers()).users;
+  expect(after).toHaveLength(before.length + 1);
+  const created = after.find(user => !before.some(existing => existing.uid === user.uid));
+  if (!created) throw new Error('Expected exactly one real provider signup');
+  expect(readGuestPurchaseTransition(harness.browserAuth)?.phase).toBe(phase);
+  // Model the stale source/null effect through an official SDK operation after
+  // a real creation. This does not claim to reproduce the unretained CI trace.
+  if (sdk === 'source') await signInWithCustomToken(harness.browserAuth, oldToken);
+  else await signOut(harness.browserAuth);
+  const expectedUid = sdk === 'source' ? source.uid : undefined;
+  expect(harness.browserAuth.currentUser?.uid).toBe(expectedUid);
+  await expect(startLegacyGuestPurchase(offer)).rejects.toMatchObject({ code: 'ACCESS_UNAVAILABLE' });
+  await expect(startLegacyGuestPurchase(offer)).rejects.toMatchObject({ code: 'ACCESS_UNAVAILABLE' });
+  expect(harness.browserAuth.currentUser?.uid).toBe(expectedUid);
+  expect((await harness.auth.listUsers()).users).toHaveLength(after.length);
+  expect(readGuestPurchaseTransition(harness.browserAuth)?.phase).toBe(phase);
+  expect((await harness.db.doc(`credentialAccess/${source.uid}`).get()).data()).toEqual(account);
+  expect((await harness.db.collection('credentialSessions').where('uid', '==', source.uid).get()).empty).toBe(true);
+  expect((await harness.db.doc(`carts/${source.uid}`).get()).data()).toEqual(durable.cart);
+  expect((await harness.db.doc(`orders/${durable.orderId}`).get()).data()).toEqual(durable.order);
+  expect((await harness.db.doc(`carts/${created.uid}`).get()).exists).toBe(false);
+}, 60_000);

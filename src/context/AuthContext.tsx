@@ -121,7 +121,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       let saved;
       try { saved = readGuestPurchaseTransition(auth); }
       catch (error: unknown) { reject(error); return; }
-      if (!saved || saved.uid !== offered.uid || (saved.phase !== 'CREATED' && saved.phase !== 'SIGNED_OUT')
+      if (!saved || saved.uid !== offered.uid || (saved.phase !== 'CREATING' && saved.phase !== 'CREATED' && saved.phase !== 'SIGNED_OUT')
         || current.email || current.phoneNumber || current.providerData.length > 0) return;
     }
     starting.current = true; setPurchaseStarting(true);

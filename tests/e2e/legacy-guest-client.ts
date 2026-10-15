@@ -9,6 +9,9 @@ export async function identity() {
   const user = auth.currentUser;
   if (!user) return null;
   const claims = await user.getIdTokenResult();
+  // The official SDK may have selected another user while token claims were
+  // awaited. Report only an identity that is still the current SDK instance.
+  if (auth.currentUser !== user) return null;
   return { uid: user.uid, provider: claims.signInProvider, email: user.email,
     admin: claims.claims.admin === true, superadmin: claims.claims.superadmin === true,
     sessionId: typeof claims.claims.mutterCredentialSession === 'string' ? claims.claims.mutterCredentialSession : null };

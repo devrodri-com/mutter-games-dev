@@ -272,7 +272,11 @@ test('double action and two tabs create one new identity and preserve unrelated 
     await expect(page.getByRole('button', { name: /Preparando|Comprobando|Empezando/ })).toBeDisabled();
     held.release();
     const left = await confirmedNew(page, currentLegacy.uid), right = await confirmedNew(other, currentLegacy.uid);
-    expect(left.uid).toBe(right.uid); expect(signups() + otherSignups()).toBe(1);
+    expect(signups() + otherSignups()).toBe(1);
+    const currentLeft = await identity(page), currentRight = await identity(other);
+    expect(currentLeft?.uid).toBe(left.uid); expect(currentRight?.uid).toBe(right.uid);
+    expect(currentLeft?.uid).toBe(currentRight?.uid);
+    expect(left.uid).toBe(right.uid);
     expect(await page.evaluate(() => localStorage.getItem('unrelated-owner-storage'))).toBe('preserve-me');
     await expect(other.getByRole('heading', { name: 'Tu carrito está vacío', exact: true })).toBeVisible();
   } finally { held.release(); await other.close(); }

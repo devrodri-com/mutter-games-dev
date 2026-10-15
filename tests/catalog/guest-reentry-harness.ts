@@ -42,6 +42,7 @@ export async function guestHarness(rulesFile = 'firebase.catalog-r1b.rules') {
   const users = new Set<string>(), clients = [client], holds: HeldBody[] = [];
   let nextHold: HeldBody | undefined, observedHold: HeldBody | undefined, nextAuthHold: HeldBody | undefined;
   let nextSignupHold: HeldBody | undefined, nextEligibilityHold: HeldBody | undefined;
+  let loseNextSignupResponse = false, loseNextCustomBody = false;
   const actualFetch = globalThis.fetch;
   const server = createServer(async (req, res) => {
     const authPath = req.url?.startsWith('/identitytoolkit.googleapis.com/') || req.url?.startsWith('/securetoken.googleapis.com/');
@@ -68,6 +69,10 @@ export async function guestHarness(rulesFile = 'firebase.catalog-r1b.rules') {
       const identity: unknown = JSON.parse(serialized);
       if (identity && typeof identity === 'object' && 'localId' in identity && typeof identity.localId === 'string') users.add(identity.localId);
       const signup = upstream.ok && req.url?.includes('/accounts:signUp');
+      // The official provider has already processed this request. Losing this
+      // owned connection models an unknown client result without replacing SDK
+      // state, provider replies or the production admission decision.
+      if (signup && loseNextSignupResponse) { loseNextSignupResponse = false; res.destroy(); return; }
       const hold = signup ? nextSignupHold : upstream.ok && req.url?.includes('/accounts:signInWithCustomToken') ? nextAuthHold : undefined;
       if (!hold) { res.end(serialized); return; }
       if (signup) nextSignupHold = undefined; else nextAuthHold = undefined;
@@ -80,6 +85,7 @@ export async function guestHarness(rulesFile = 'firebase.catalog-r1b.rules') {
       json(body) {
         res.setHeader('Content-Type', 'application/json');
         const serialized = JSON.stringify(body), data = record(body);
+        if (typeof data.customToken === 'string' && loseNextCustomBody) { loseNextCustomBody = false; res.destroy(); return; }
         const eligibility = data.newPurchase !== undefined;
         const hold = eligibility ? nextEligibilityHold : typeof data.customToken === 'string' ? nextHold : undefined;
         if (!hold) { res.end(serialized); return; }
@@ -151,6 +157,7 @@ export async function guestHarness(rulesFile = 'firebase.catalog-r1b.rules') {
   function holdNextSignupResponse() { const hold = heldBody(); nextSignupHold = hold; holds.push(hold); return hold; }
   function holdNextEligibilityBody() { const hold = heldBody(); nextEligibilityHold = hold; holds.push(hold); return hold; }
   return { auth, db, browserAuth, origin, identity, access, publicChoice, newGuest, otherGuest, seedData, privateReads, privateRequest, expire, holdNextCustomBody, holdNextAuthResponse, holdNextSignupResponse, holdNextEligibilityBody,
+    loseNextSignupResponse: () => { loseNextSignupResponse = true; }, loseNextAdmissionBody: () => { loseNextCustomBody = true; },
     switchToOther: async (token: string) => { await signInWithCustomToken(browserAuth, token); },
     dispose: async () => {
       for (const hold of holds) hold.release();
