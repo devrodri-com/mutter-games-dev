@@ -32,6 +32,7 @@
       "Verify checkout and stock reconciliation function packaging",
       "Prepare declared Playwright browsers",
       "Catalog desktop and mobile browser regressions",
+      "Resolve catalog browser evidence path",
       "Preserve catalog browser execution evidence",
       "Archive available Edge evidence; fail if a successful build lost it",
       "Preserve actual Edge control execution and emitted evidence",

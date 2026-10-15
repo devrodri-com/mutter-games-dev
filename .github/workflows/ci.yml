@@ -171,12 +171,20 @@ jobs:
           CATALOG_WEBKIT: '1'
         run: npm run test:catalog:browser
 
+      - name: Resolve catalog browser evidence path
+        id: catalog_browser_evidence_path
+        if: always()
+        run: |
+          set -euo pipefail
+          evidence_path="$(node -p 'require("node:path").resolve(process.env.GITHUB_WORKSPACE, "../r1b/browser-evidence")')"
+          printf 'path=%s\n' "$evidence_path" >> "$GITHUB_OUTPUT"
+
       - name: Preserve catalog browser execution evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: catalog-browser-evidence-${{ github.run_attempt }}
-          path: ${{ github.workspace }}/../r1b/browser-evidence
+          path: ${{ steps.catalog_browser_evidence_path.outputs.path }}
           # A preceding failure may prevent the browser from producing files.
           if-no-files-found: warn
           retention-days: 14
