@@ -3,10 +3,10 @@ import type { Firestore } from 'firebase-admin/firestore';
 import { CredentialAccessError, object } from './credential-access-state.js';
 import { createNativeSession, resumeCredentialSession, type SessionResponse } from './credential-session.js';
 import { completeCredentialRecovery, requestCredentialRecovery } from './credential-recovery.js';
-import { legacyGuestNewPurchase } from './legacy-guest.js';
+import { legacyGuestNewPurchase, publicLegacyGuestChoice } from './legacy-guest.js';
 export type AccessRequest = { method?: string; headers: Record<string, unknown>; body?: unknown };
 export type AccessResponse = { setHeader(name: string, value: string): unknown; status(code: number): AccessResponse; json(body: unknown): unknown };
-export type AccessAction = 'session' | 'request' | 'complete';
+export type AccessAction = 'session' | 'request' | 'complete' | 'new-purchase-choice';
 function input(value: unknown): Record<string, unknown> {
   const parsed: unknown = typeof value === 'string' ? JSON.parse(value) : value ?? {};
   if (!object(parsed)) throw new CredentialAccessError(400, 'INVALID_INPUT', 'Revisá los datos e intentá nuevamente.');
@@ -28,6 +28,14 @@ export async function handleCredentialAccess(action: AccessAction, auth: Auth, d
   let claims: DecodedIdToken | undefined;
   try {
     const body = input(req.body);
+    if (action === 'new-purchase-choice') {
+      keys(body, ['uid']);
+      if (typeof body.uid !== 'string' || !body.uid || body.uid.length > 128 || body.uid.includes('/'))
+        throw new CredentialAccessError(400, 'INVALID_INPUT', 'Revisá los datos e intentá nuevamente.');
+      // A public choice grants nothing about this identifier. Session admission
+      // below still requires the independently verified, unrevoked credential.
+      return res.status(200).json({ newPurchase: await publicLegacyGuestChoice(auth, db, body.uid) });
+    }
     if (action === 'request') {
       keys(body, ['email']);
       await requestCredentialRecovery(auth, db, body.email);

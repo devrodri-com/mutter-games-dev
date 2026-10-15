@@ -1,6 +1,6 @@
 // Test-only Vite module. Exercise the real app singleton, official SDK and APIs.
 // Return identity/observable results only; never return an ID or refresh token.
-import { beforeAuthStateChanged, indexedDBLocalPersistence, setPersistence, signInWithCustomToken } from 'firebase/auth';
+import { beforeAuthStateChanged, indexedDBLocalPersistence, setPersistence, signInWithCustomToken, signOut } from 'firebase/auth';
 import { doc, getDocFromServer } from 'firebase/firestore';
 import { auth, db } from '../../src/firebase';
 
@@ -23,6 +23,34 @@ export async function refresh() {
   const user = auth.currentUser;
   if (!user) throw Error('Expected current demo identity');
   await user.getIdToken(true);
+}
+
+/** Model a lost SDK identity explicitly. The demo Auth emulator does not
+ * enforce validSince on refresh; this is never evidence that revoke did so. */
+export async function loseSdkIdentity() {
+  if (auth.app.options.projectId !== 'demo-mutter-r1' || auth.emulatorConfig?.host !== '127.0.0.1'
+    || auth.emulatorConfig.port !== 9198) throw Error('Exact demo Auth instance required');
+  await signOut(auth);
+}
+
+async function responseObject(response: Response) {
+  const result: unknown = await response.json();
+  if (!result || typeof result !== 'object' || Array.isArray(result)) throw Error('Expected real API result');
+  return { status: response.status, body: Object.fromEntries(Object.entries(result)) };
+}
+
+export async function accessSession() {
+  const current = auth.currentUser;
+  if (!current) throw Error('Expected current demo identity');
+  const token = await current.getIdToken();
+  return responseObject(await fetch('/api/access/session', { method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: '{}' }));
+}
+
+export async function newPurchaseChoice(uid: string) {
+  // This public selector is a decision prompt, never identity or capability.
+  return responseObject(await fetch('/api/access/new-purchase-choice', { method: 'POST',
+    headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ uid }) }));
 }
 
 /** Create an older persistence format through the official SDK, then let the
@@ -68,7 +96,5 @@ export async function api(body: Record<string, unknown>) {
   const token = await current.getIdToken();
   const response = await fetch('/api/create-mp-preference', { method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(body) });
-  const result: unknown = await response.json();
-  if (!result || typeof result !== 'object' || Array.isArray(result)) throw Error('Expected real API result');
-  return { status: response.status, body: Object.fromEntries(Object.entries(result)) };
+  return responseObject(response);
 }

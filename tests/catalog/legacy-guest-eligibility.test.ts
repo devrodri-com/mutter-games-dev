@@ -21,6 +21,7 @@ test('trusted legacy anonymous PENDING may choose a distinct public purchase wit
   const durable = await h.seedData(user.uid);
   const before = await h.db.doc(`credentialAccess/${user.uid}`).get();
   expect(await h.access(token)).toMatchObject({ status: 403, body: { code: 'RECOVERY_REQUIRED', newPurchase: { kind: 'LEGACY_ANONYMOUS', uid: user.uid, epoch: guestEpoch } } });
+  expect(await h.publicChoice(user.uid)).toEqual({ status: 200, body: { newPurchase: { kind: 'LEGACY_ANONYMOUS', uid: user.uid, epoch: guestEpoch } } });
   expect((await h.db.doc(`credentialAccess/${user.uid}`).get()).data()).toEqual(before.data());
   expect((await h.db.doc(`carts/${user.uid}`).get()).data()).toEqual(durable.cart);
   expect((await h.db.doc(`orders/${durable.orderId}`).get()).data()).toEqual(durable.order);
@@ -51,7 +52,39 @@ test.each(['registered', 'phone', 'admin-account', 'superadmin-record', 'channel
   const result = await h.access(token);
   expect(result.status).not.toBe(200);
   expect(result.body).not.toHaveProperty('newPurchase');
+  expect(await h.publicChoice(user.uid)).toEqual({ status: 200, body: { newPurchase: null } });
   expect(h.browserAuth.currentUser?.uid).toBe(user.uid);
+});
+
+test('revocation keeps old admission at401 while the public choice remains available without credentials or capabilities', async () => {
+  const { h, user, token } = await pendingGuest();
+  const durable = await h.seedData(user.uid);
+  const paths = [`credentialAccess/${user.uid}`, `carts/${user.uid}`, `orders/${durable.orderId}`];
+  const before = await Promise.all(paths.map(path => h.db.doc(path).get()));
+  await new Promise<void>(resolve => setTimeout(resolve, 1100));
+  await h.auth.revokeRefreshTokens(user.uid);
+  await expect(h.auth.verifyIdToken(token, true)).rejects.toMatchObject({ code: 'auth/id-token-revoked' });
+  expect(await h.access(token)).toMatchObject({ status: 401, body: { code: 'INVALID_SESSION' } });
+  expect(await h.publicChoice(user.uid)).toEqual({ status: 200, body: { newPurchase: { kind: 'LEGACY_ANONYMOUS', uid: user.uid, epoch: guestEpoch } } });
+  expect((await h.db.collection('credentialSessions').where('uid', '==', user.uid).get()).empty).toBe(true);
+  for (const [index, path] of paths.entries()) {
+    const after = await h.db.doc(path).get();
+    expect(after.data()).toEqual(before[index].data());
+    const earlierTime = before[index].updateTime, laterTime = after.updateTime;
+    if (!earlierTime || !laterTime) throw new Error('Expected unchanged historical document timestamps');
+    expect(laterTime.isEqual(earlierTime)).toBe(true);
+  }
+});
+
+test('public selector rejects malformed input and authority failures, and an unknown UID receives no choice', async () => {
+  const { h, user } = await pendingGuest();
+  for (const uid of ['', null, 'wrong/path', 'x'.repeat(129)])
+    expect(await h.publicChoice(uid)).toMatchObject({ status: 400, body: { code: 'INVALID_INPUT' } });
+  expect(await h.publicChoice(user.uid, { epoch: guestEpoch })).toMatchObject({ status: 400 });
+  expect(await h.publicChoice('synthetic-unknown-uid')).toEqual({ status: 200, body: { newPurchase: null } });
+  await h.db.doc('operations/credentialAccessCutover').delete();
+  expect(await h.publicChoice(user.uid)).toMatchObject({ status: 503, body: { code: 'ACCESS_UNAVAILABLE' } });
+  expect((await h.db.collection('credentialSessions').get()).empty).toBe(true);
 });
 
 test('client-presented source UID and epoch cannot request an alternative identity or mint a capability', async () => {

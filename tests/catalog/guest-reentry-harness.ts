@@ -45,7 +45,8 @@ export async function guestHarness(rulesFile = 'firebase.catalog-r1b.rules') {
   const actualFetch = globalThis.fetch;
   const server = createServer(async (req, res) => {
     const authPath = req.url?.startsWith('/identitytoolkit.googleapis.com/') || req.url?.startsWith('/securetoken.googleapis.com/');
-    if (req.url !== '/api/access/session' && !authPath) { res.statusCode = 404; res.end(); return; }
+    const choicePath = req.url === '/api/access/new-purchase-choice';
+    if (req.url !== '/api/access/session' && !choicePath && !authPath) { res.statusCode = 404; res.end(); return; }
     const chunks: Buffer[] = []; let size = 0;
     for await (const chunk of req) {
       const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
@@ -89,7 +90,7 @@ export async function guestHarness(rulesFile = 'firebase.catalog-r1b.rules') {
         return hold.released.then(() => { res.end(serialized.slice(1)); });
       },
     };
-    try { await handleCredentialAccess('session', auth, db, { method: req.method, headers: { ...req.headers }, body: Buffer.concat(chunks).toString('utf8') }, reply); }
+    try { await handleCredentialAccess(choicePath ? 'new-purchase-choice' : 'session', auth, db, { method: req.method, headers: { ...req.headers }, body: Buffer.concat(chunks).toString('utf8') }, reply); }
     catch { res.statusCode = 500; res.end(); }
   });
   await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
@@ -121,6 +122,10 @@ export async function guestHarness(rulesFile = 'firebase.catalog-r1b.rules') {
     return { status: response.status, body: record(await response.json()) };
   }
   async function newGuest() { const signed = await signInAnonymously(browserAuth); users.add(signed.user.uid); return signed.user; }
+  async function publicChoice(uid: unknown, extra: Record<string, unknown> = {}) {
+    const response = await fetch(`${origin}/api/access/new-purchase-choice`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ uid, ...extra }) });
+    return { status: response.status, body: record(await response.json()) };
+  }
   async function otherGuest() {
     const other = initializeApp({ projectId, apiKey: 'synthetic' }, `${name}-other-${randomUUID()}`); clients.push(other);
     const otherAuth = getClientAuth(other); connectAuthEmulator(otherAuth, origin, { disableWarnings: true });
@@ -145,7 +150,7 @@ export async function guestHarness(rulesFile = 'firebase.catalog-r1b.rules') {
   function holdNextAuthResponse() { const hold = heldBody(); nextAuthHold = hold; holds.push(hold); return hold; }
   function holdNextSignupResponse() { const hold = heldBody(); nextSignupHold = hold; holds.push(hold); return hold; }
   function holdNextEligibilityBody() { const hold = heldBody(); nextEligibilityHold = hold; holds.push(hold); return hold; }
-  return { auth, db, browserAuth, origin, identity, access, newGuest, otherGuest, seedData, privateReads, privateRequest, expire, holdNextCustomBody, holdNextAuthResponse, holdNextSignupResponse, holdNextEligibilityBody,
+  return { auth, db, browserAuth, origin, identity, access, publicChoice, newGuest, otherGuest, seedData, privateReads, privateRequest, expire, holdNextCustomBody, holdNextAuthResponse, holdNextSignupResponse, holdNextEligibilityBody,
     switchToOther: async (token: string) => { await signInWithCustomToken(browserAuth, token); },
     dispose: async () => {
       for (const hold of holds) hold.release();

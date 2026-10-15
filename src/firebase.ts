@@ -12,6 +12,7 @@ import {
 } from "firebase/auth";
 import { bootstrapAnonymousVisitor } from './utils/anonymousBootstrap';
 import { readGuestPurchaseTransition } from './utils/guestPurchaseState';
+import { recordObservedIdentity } from './utils/observedIdentity';
 
 const firebaseConfig = {
   // Siempre usamos la env; eliminamos la API key hardcodeada
@@ -53,16 +54,13 @@ export const authReady: Promise<string> = new Promise((res) => {
 
 onAuthStateChanged(auth, (user) => {
   if (!user) {
-    // Explicit identity transitions suppress this ordinary visitor bootstrap.
-    void persistenceReady.then(() => {
-      const transition = readGuestPurchaseTransition(auth);
-      if (transition && transition.phase !== 'SETTLED') return;
-      return bootstrapAnonymousVisitor(auth);
-    }).catch(() => {
-      if (import.meta.env.DEV) console.error("Anonymous sign-in unavailable");
-    });
+    // Unknown null can also be a historical credential invalidated by the SDK.
+    // Visiting a page never creates an identity; the public action owns that.
     return; // esperamos el próximo callback con el user
   }
+
+  try { recordObservedIdentity(auth, user.uid); }
+  catch { if (import.meta.env.DEV) console.error('Observed authentication state unavailable'); }
 
   if (!_authResolved && _resolveAuthReady) {
     _resolveAuthReady(user.uid);

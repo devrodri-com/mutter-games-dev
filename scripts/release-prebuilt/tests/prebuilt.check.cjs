@@ -94,7 +94,7 @@ test('actual source emits every credential endpoint into the single access funct
   assert.equal(access.directory, 'functions/api/access.func');
   assert.equal(access.handler, 'api/access.js');
   assert.equal(access.config.runtime, 'nodejs22.x');
-  for (const endpoint of ['/api/access/session', '/api/access/recovery/request', '/api/access/recovery/complete']) {
+  for (const endpoint of ['/api/access/session', '/api/access/recovery/request', '/api/access/recovery/complete', '/api/access/new-purchase-choice']) {
     assert.deepEqual(output.config.routes.find(route => route.src === endpoint), { src: endpoint, dest: '/api/access' });
   }
 });
@@ -109,6 +109,8 @@ test('a missing or redirected credential endpoint cannot produce an accepted pre
     }
     for (const mutate of [
       config => { config.routes = config.routes.filter(route => route.src !== '/api/access/recovery/complete'); },
+      config => { config.routes = config.routes.filter(route => route.src !== '/api/access/new-purchase-choice'); },
+      config => { config.routes.find(route => route.src === '/api/access/new-purchase-choice').dest = '/index.html'; },
       config => { config.routes.find(route => route.src === '/api/access/session').dest = '/index.html'; },
       config => { config.builds = config.builds.filter(entry => entry.src !== 'api/access.ts'); },
     ]) {

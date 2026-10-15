@@ -1,7 +1,8 @@
 import { beforeAuthStateChanged, signInAnonymously, signOut, type User } from 'firebase/auth';
 import { auth } from '../firebase';
 import { CredentialAccessError, ensureCredentialSession, type CredentialAdmission, type LegacyGuestNewPurchase } from './credentialAccess';
-import { readGuestPurchaseTransition, withAnonymousIdentityLock, writeGuestPurchaseTransition, type GuestPurchaseTransition } from './guestPurchaseState';
+import { prepareNewPurchaseForm, readGuestPurchaseTransition, withAnonymousIdentityLock, writeGuestPurchaseTransition, type GuestPurchaseTransition } from './guestPurchaseState';
+import { guestPurchaseSourceUid, publicGuestPurchaseChoice } from './guestPurchaseChoice';
 
 function changed(): never { throw new CredentialAccessError('ACCESS_UNAVAILABLE', 'Cambió la cuenta. Tu cuenta actual y sus datos se conservan.'); }
 // Read again after asynchronous SDK transitions; an earlier null snapshot does
@@ -32,24 +33,20 @@ export function startLegacyGuestPurchase(offer: LegacyGuestNewPurchase): Promise
       if (saved) writeGuestPurchaseTransition(auth, { ...saved, phase: 'SETTLED' });
       return admitted;
     }
-    if (initial) {
-      let trusted: LegacyGuestNewPurchase | null = null;
-      try { await ensureCredentialSession(initial); }
-      catch (error: unknown) {
-        if (!(error instanceof CredentialAccessError)) throw error;
-        trusted = error.newPurchase;
-        if (!trusted) throw error;
-      }
-      if (!trusted || trusted.uid !== offer.uid || trusted.epoch !== offer.epoch || auth.currentUser?.uid !== initial.uid) changed();
+    if (!initial && saved?.phase === 'CREATED')
+      throw new CredentialAccessError('ACCESS_UNAVAILABLE', 'La identidad nueva ya se creó, pero su sesión no está disponible. No crearemos otra al reintentar.');
+    if (!initial && guestPurchaseSourceUid() !== offer.uid) changed();
+    {
+      // Public eligibility never accepts the old credential for admission and
+      // remains usable after revocation or an observed SDK session loss.
+      const trusted = await publicGuestPurchaseChoice(offer.uid);
+      if (!trusted) throw new CredentialAccessError('RECOVERY_REQUIRED', 'No pudimos confirmar esta opción de compra nueva. Tu cuenta y tus datos se conservan.');
+      if (trusted.uid !== offer.uid || trusted.epoch !== offer.epoch || guestPurchaseSourceUid() !== offer.uid) changed();
       saved = { ...trusted, schema: 1, phase: 'PREPARING', startedAtMs: Date.now() };
       writeGuestPurchaseTransition(auth, saved);
       // These unscoped values belong to this explained purchase form. The
       // old UID's cart/checkout references remain separate and untouched.
-      localStorage.setItem('mutter-cart-migrated', 'yes');
-      localStorage.removeItem('shippingData');
-      localStorage.removeItem('lastOrderId');
-    } else if (!saved || saved.phase === 'PREPARING') {
-      throw new CredentialAccessError('ACCESS_UNAVAILABLE', 'No pudimos comprobar la sesión anterior. Tu cuenta y tus datos se conservan.');
+      prepareNewPurchaseForm();
     }
     if (!saved) changed();
     const transition: GuestPurchaseTransition = saved;
@@ -72,8 +69,8 @@ export function startLegacyGuestPurchase(offer: LegacyGuestNewPurchase): Promise
       if (initial) {
         await signOut(auth);
         if (auth.currentUser) changed();
-        writeGuestPurchaseTransition(auth, { ...transition, phase: 'SIGNED_OUT' });
       }
+      writeGuestPurchaseTransition(auth, { ...transition, phase: 'SIGNED_OUT' });
       if (auth.currentUser || superseded) changed();
       const credential = await signInAnonymously(auth);
       if (superseded || credential.user.uid === offer.uid || sdkCurrentUser()?.uid !== credential.user.uid || !ordinaryIdentity()) changed();

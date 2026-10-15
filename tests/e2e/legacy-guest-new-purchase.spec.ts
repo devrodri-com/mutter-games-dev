@@ -1,6 +1,7 @@
 import { test, expect, type Page, type Route } from '@playwright/test';
-import { admittedAdministrator, auth, clientPath, cleanup, db, dispose, identity, item,
+import { admittedAdministrator, admittedBuyer, auth, clientPath, cleanup, db, dispose, epoch, identity, item,
   localOnly, seedLegacy, signIn, trackCurrent, trackUid, unchanged, type Legacy } from './legacy-guest-fixtures';
+import { chooseInitialGuestPurchase, initialGuestAction, initialGuestCopy } from './initial-guest-purchase';
 
 const action = (page: Page) => page.getByRole('button', { name: 'Empezar compra nueva', exact: true });
 async function confirmedNew(page: Page, oldUid: string) {
@@ -14,9 +15,38 @@ async function confirmedNew(page: Page, oldUid: string) {
 }
 async function api(page: Page, body: Record<string, unknown>) {
   const result: unknown = await page.evaluate(async ({ path, value }) => (await import(path)).api(value), { path: clientPath, value: body });
+  return apiResult(result);
+}
+function apiResult(result: unknown) {
   if (!result || typeof result !== 'object' || !('status' in result) || typeof result.status !== 'number'
     || !('body' in result) || !result.body || typeof result.body !== 'object' || Array.isArray(result.body)) throw Error('Expected actual API response');
   return { status: result.status, body: Object.fromEntries(Object.entries(result.body)) };
+}
+async function choice(page: Page, uid: string) {
+  const result: unknown = await page.evaluate(async ({ path, uid: value }) => (await import(path)).newPurchaseChoice(value), { path: clientPath, uid });
+  return apiResult(result);
+}
+async function session(page: Page) {
+  const result: unknown = await page.evaluate(async path => (await import(path)).accessSession(), clientPath);
+  return apiResult(result);
+}
+async function reserveNewPurchase(page: Page, uid: string) {
+  await page.goto(`/producto/${item.slug}`);
+  const add = page.getByRole('button', { name: 'Agregar al carrito', exact: true }); await expect(add).toBeEnabled(); await add.click();
+  await expect(page.getByText('Agregado al carrito', { exact: true })).toBeVisible();
+  await expect.poll(async () => (await db.doc(`carts/${uid}`).get()).data()?.cartItems?.length).toBe(1);
+  const purchase = { items: [{ id: item.id, quantity: 1 }], shipping: { pickup: true, department: '', name: 'Nueva compra ficticia',
+    address: '', city: '', postalCode: '', phone: '00000000', email: 'new@example.invalid' } };
+  const quote = await api(page, { action: 'quote', purchase }); expect(quote.status).toBe(200);
+  if (!quote.body.quote || typeof quote.body.quote !== 'object' || !('hash' in quote.body.quote)
+    || typeof quote.body.quote.hash !== 'string') throw Error('Expected actual checkout quote');
+  const start = await api(page, { action: 'start', purchase, quoteHash: quote.body.quote.hash, key: crypto.randomUUID() });
+  expect(start.status).toBe(200); expect(start.body.init_point).toEqual(expect.stringContaining('synthetic-browser-'));
+  if (typeof start.body.id !== 'string') throw Error('Expected new order id');
+  const created = (await db.doc(`orders/${start.body.id}`).get()).data();
+  expect(created?.uid).toBe(uid); expect(created?.inventory?.state).toBe('reserved');
+  expect((await db.doc(`products/${item.id}`).get()).data()?.stockTotal).toBe(5);
+  return start.body.id;
 }
 async function denied(page: Page, collection: string, id: string) {
   expect(await page.evaluate(async ({ path, collection: name, id: value }) => (await import(path)).privateRead(name, value),
@@ -44,6 +74,41 @@ test.afterEach(async ({ page }) => {
   await cleanup();
 });
 test.afterAll(async () => { await dispose(); });
+
+test('first arrival with SDK null waits for an explicit guest decision across reload and another tab', async ({ page, context }, testInfo) => {
+  // Model a first arrival only. No marker is seeded or SDK persistence erased;
+  // this is not evidence that an emulator reproduced provider invalidation.
+  await localOnly(page); const signups = observeSignups(page);
+  await page.goto('/carrito');
+  await expect(page.getByText(initialGuestCopy, { exact: true })).toBeVisible();
+  expect(await identity(page)).toBeNull();
+  expect(await page.evaluate(() => localStorage.getItem('mutter-observed-identity:demo-mutter-r1'))).toBeNull();
+  await expect(action(page)).toHaveCount(0); expect(signups()).toBe(0);
+  const other = await context.newPage(); await localOnly(other); const otherSignups = observeSignups(other);
+  try {
+    await other.goto('/carrito');
+    for (const tab of [page, other]) {
+      await tab.reload(); await expect(tab.getByText(initialGuestCopy, { exact: true })).toBeVisible();
+      await expect(initialGuestAction(tab)).toBeVisible(); await expect(action(tab)).toHaveCount(0);
+      expect(await identity(tab)).toBeNull();
+    }
+    expect(signups() + otherSignups()).toBe(0);
+    await initialGuestAction(page).focus(); await expect(initialGuestAction(page)).toBeFocused();
+    const box = await initialGuestAction(page).boundingBox(), viewport = page.viewportSize();
+    if (!box || !viewport) throw Error('Expected visible initial guest action');
+    expect(box.x).toBeGreaterThanOrEqual(0); expect(box.x + box.width).toBeLessThanOrEqual(viewport.width);
+    await page.screenshot({ path: testInfo.outputPath('first-arrival-null-explicit-decision.png'), fullPage: true });
+    await chooseInitialGuestPurchase(page);
+    const created = await confirmedNew(page, ''), shared = await confirmedNew(other, '');
+    expect(shared.uid).toBe(created.uid); expect(signups() + otherSignups()).toBe(1);
+    expect((await db.doc(`credentialAccess/${created.uid}`).get()).data()).toMatchObject({ uid: created.uid,
+      status: 'NATIVE_POST_CUTOVER', roles: { admin: false, superadmin: false } });
+    for (const tab of [page, other]) {
+      await expect(initialGuestAction(tab)).toHaveCount(0); await expect(action(tab)).toHaveCount(0);
+      await expect(tab.getByRole('heading', { name: 'Tu carrito está vacío', exact: true })).toBeVisible();
+    }
+  } finally { await other.close(); }
+});
 
 test('legacy offer is explicit, readable and keyboard accessible; leaving it preserves account and documents', async ({ page }, testInfo) => {
   currentLegacy = await seedLegacy(page);
@@ -91,35 +156,82 @@ test('explicit new purchase uses another UID, empty state, real reservation and 
   expect((await auth.getUser(next.uid)).customClaims?.admin).not.toBe(true);
   for (const [collection, id] of [['carts', old.uid], ['orders', old.orderId], ['clients', old.uid], ['usuarios', old.uid]]) await denied(page, collection, id);
   expect((await api(page, { action: 'admin_order', orderId: old.orderId })).status).toBe(403);
-  await page.goto(`/producto/${item.slug}`);
-  const add = page.getByRole('button', { name: 'Agregar al carrito', exact: true }); await expect(add).toBeEnabled(); await add.click();
-  await expect(page.getByText('Agregado al carrito', { exact: true })).toBeVisible();
-  await expect.poll(async () => (await db.doc(`carts/${next.uid}`).get()).data()?.cartItems?.length).toBe(1);
-  const purchase = { items: [{ id: item.id, quantity: 1 }], shipping: { pickup: true, department: '', name: 'Nueva compra ficticia',
-    address: '', city: '', postalCode: '', phone: '00000000', email: 'new@example.invalid' } };
-  const quote = await api(page, { action: 'quote', purchase }); expect(quote.status).toBe(200);
-  if (!quote.body.quote || typeof quote.body.quote !== 'object' || !('hash' in quote.body.quote)
-    || typeof quote.body.quote.hash !== 'string') throw Error('Expected actual checkout quote');
-  const start = await api(page, { action: 'start', purchase, quoteHash: quote.body.quote.hash, key: crypto.randomUUID() });
-  expect(start.status).toBe(200); expect(start.body.init_point).toEqual(expect.stringContaining('synthetic-browser-'));
-  if (typeof start.body.id !== 'string') throw Error('Expected new order id');
-  expect(start.body.id).not.toBe(old.orderId);
-  const created = (await db.doc(`orders/${start.body.id}`).get()).data();
-  expect(created?.uid).toBe(next.uid); expect(created?.inventory?.state).toBe('reserved');
-  expect((await db.doc(`products/${item.id}`).get()).data()?.stockTotal).toBe(5);
+  expect(await reserveNewPurchase(page, next.uid)).not.toBe(old.orderId);
   await unchanged(old);
   const administrator = await admittedAdministrator();
   const administrative = await browser.newContext();
   try {
     const adminPage = await administrative.newPage(); await localOnly(adminPage); await adminPage.goto('/carrito');
     await signIn(adminPage, administrator.customToken); await expect.poll(async () => (await identity(adminPage))?.admin).toBe(true);
+    expect(await choice(adminPage, administrator.uid)).toEqual({ status: 200, body: { newPurchase: null } });
     const detail = await api(adminPage, { action: 'admin_order', orderId: old.orderId });
     expect(detail.status).toBe(200); expect(detail.body.order).toMatchObject({ id: old.orderId, historical: true });
     const list = await api(adminPage, { action: 'admin_orders', section: 'recent', limit: 20 });
     expect(list.status).toBe(200); expect(list.body.orders).toEqual(expect.arrayContaining([expect.objectContaining({ id: old.orderId })]));
     await expect(adminPage.getByRole('button', { name: 'Empezar compra nueva', exact: true })).toHaveCount(0);
+    const buyer = await admittedBuyer();
+    await signIn(adminPage, buyer.customToken); await expect.poll(async () => (await identity(adminPage))?.uid).toBe(buyer.uid);
+    expect(await choice(adminPage, buyer.uid)).toEqual({ status: 200, body: { newPurchase: null } });
+    expect(await identity(adminPage)).toMatchObject({ uid: buyer.uid, admin: false, superadmin: false });
+    await expect(action(adminPage)).toHaveCount(0);
   } finally { await administrative.close(); }
   await page.goto('/carrito'); await page.screenshot({ path: testInfo.outputPath('new-guest-cart.png'), fullPage: true });
+});
+
+test('revoked legacy token keeps an independent choice; modeled SDK loss blocks automatic signup across reload and tabs', async ({ page, context }, testInfo) => {
+  currentLegacy = await seedLegacy(page); const old = currentLegacy;
+  const signups = observeSignups(page);
+  const other = await context.newPage(); await localOnly(other); const otherSignups = observeSignups(other);
+  await other.goto('/carrito'); await expect(action(other)).toBeVisible();
+  expect((await identity(other))?.uid).toBe(old.uid);
+  const pendingLocal = await page.evaluate(uid => ({ cart: localStorage.getItem(`mutter-cart:${uid}`),
+    shipping: localStorage.getItem('shippingData'), checkout: localStorage.getItem(`mutter-checkout:${uid}`),
+    lastOrder: localStorage.getItem('lastOrderId') }), old.uid);
+  let authorizedSelector = false;
+  page.on('request', request => {
+    if (request.url().includes('/api/access/new-purchase-choice') && request.headers().authorization) authorizedSelector = true;
+  });
+  try {
+    // Cross the Admin SDK's whole-second revocation boundary. Keep the real
+    // emitted SDK token: no token claims or emulator responses are patched.
+    await new Promise(resolve => setTimeout(resolve, Math.max(0, Math.floor(Date.now() / 1000) * 1000 + 1100 - Date.now())));
+    await auth.revokeRefreshTokens(old.uid);
+    expect(await session(page)).toMatchObject({ status: 401, body: { code: 'INVALID_SESSION' } });
+    const deniedSession = page.waitForResponse(response => response.url().includes('/api/access/session') && response.status() === 401);
+    await page.reload(); await (await deniedSession).finished();
+    await expect(action(page)).toBeVisible(); expect((await identity(page))?.uid).toBe(old.uid);
+    const oldSessions = await db.collection('credentialSessions').where('uid', '==', old.uid).get();
+    expect(oldSessions.empty).toBe(true);
+    expect(await choice(page, old.uid)).toEqual({ status: 200, body: { newPurchase: { kind: 'LEGACY_ANONYMOUS', uid: old.uid, epoch } } });
+    expect((await db.collection('credentialSessions').where('uid', '==', old.uid).get()).empty).toBe(true);
+    expect(await session(page)).toMatchObject({ status: 401, body: { code: 'INVALID_SESSION' } });
+    await denied(page, 'orders', old.orderId); expect(signups() + otherSignups()).toBe(0);
+    await unchanged(old);
+    await page.screenshot({ path: testInfo.outputPath('revoked-token-independent-choice.png'), fullPage: true });
+
+    // Separate model of an SDK-null effect, through its public API. Auth's
+    // emulator does not enforce validSince on refresh; revoke is not credited
+    // with causing this signOut. The app must preserve its observed-UID guard.
+    await page.evaluate(async path => (await import(path)).loseSdkIdentity(), clientPath);
+    for (const tab of [page, other]) await expect.poll(() => identity(tab)).toBeNull();
+    for (const tab of [page, other]) {
+      await tab.reload(); await expect(action(tab)).toBeVisible();
+      expect(await identity(tab)).toBeNull();
+    }
+    expect(signups() + otherSignups()).toBe(0);
+    expect(await page.evaluate(uid => ({ cart: localStorage.getItem(`mutter-cart:${uid}`),
+      shipping: localStorage.getItem('shippingData'), checkout: localStorage.getItem(`mutter-checkout:${uid}`),
+      lastOrder: localStorage.getItem('lastOrderId') }), old.uid)).toEqual(pendingLocal);
+    await denied(page, 'orders', old.orderId); await unchanged(old);
+    await page.screenshot({ path: testInfo.outputPath('modeled-sdk-null-awaits-explicit-choice.png'), fullPage: true });
+    await action(page).click(); const next = await confirmedNew(page, old.uid), shared = await confirmedNew(other, old.uid);
+    expect(shared.uid).toBe(next.uid); expect(signups() + otherSignups()).toBe(1);
+    expect(authorizedSelector).toBe(false);
+    await expect(page.getByRole('heading', { name: 'Tu carrito está vacío', exact: true })).toBeVisible();
+    await expect(other.getByRole('heading', { name: 'Tu carrito está vacío', exact: true })).toBeVisible();
+    await denied(page, 'orders', old.orderId); expect(await reserveNewPurchase(page, next.uid)).not.toBe(old.orderId);
+    await unchanged(old);
+  } finally { await other.close(); }
 });
 
 test('new guest persists and reenters after capability inactivity without another signup or historical return', async ({ page }) => {
@@ -206,16 +318,16 @@ test('a partial admission reuses the SDK-confirmed new UID on retry and never mi
   await denied(page, 'carts', old.uid);
 });
 
-test('a delayed old admission response cannot replace an independently signed-in registered administrator', async ({ page }) => {
+test('a delayed old public choice response cannot replace an independently signed-in registered administrator', async ({ page }) => {
   currentLegacy = await seedLegacy(page); const registered = await admittedAdministrator(), signups = observeSignups(page);
   const held = deferred(), observed = deferred(); let first = true;
-  await page.route('**/api/access/session', async route => {
+  await page.route('**/api/access/new-purchase-choice', async route => {
     const response = await route.fetch();
     if (!first) { await route.fulfill({ response }); return; }
     first = false; observed.release(); await held.wait; await route.fulfill({ response });
   });
   try {
-    const returned = page.waitForResponse(response => response.url().includes('/api/access/session') && response.status() === 403);
+    const returned = page.waitForResponse(response => response.url().includes('/api/access/new-purchase-choice') && response.status() === 200);
     await action(page).click(); await observed.wait;
     await signIn(page, registered.customToken); held.release();
     await (await returned).finished(); await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => resolve())));

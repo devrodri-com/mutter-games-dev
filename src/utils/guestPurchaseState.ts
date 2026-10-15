@@ -3,6 +3,20 @@ import type { LegacyGuestNewPurchase } from './credentialAccess';
 
 export type GuestPurchaseTransition = LegacyGuestNewPurchase & { schema: 1; phase: 'PREPARING' | 'SIGNED_OUT' | 'CREATED' | 'SETTLED'; startedAtMs: number };
 export const GUEST_PURCHASE_STATE_EVENT = 'mutter-guest-purchase-state';
+const formEvent = 'mutter-purchase-form-preparing';
+/** Only an explained, explicit new-purchase action resets this local form. */
+export function prepareNewPurchaseForm(): void {
+  localStorage.setItem('mutter-cart-migrated', 'yes');
+  localStorage.removeItem('shippingData');
+  localStorage.removeItem('lastOrderId');
+  window.dispatchEvent(new Event(formEvent));
+}
+export function observeNewPurchaseForm(callback: () => void): () => void {
+  const onStorage = (event: StorageEvent) => { if (event.key === 'shippingData' && event.newValue === null) callback(); };
+  window.addEventListener(formEvent, callback);
+  window.addEventListener('storage', onStorage);
+  return () => { window.removeEventListener(formEvent, callback); window.removeEventListener('storage', onStorage); };
+}
 export class GuestPurchaseStateError extends Error {}
 function storageKey(auth: Auth): string | null {
   const projectId = auth.app?.options.projectId;

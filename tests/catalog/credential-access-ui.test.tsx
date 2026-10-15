@@ -163,7 +163,7 @@ test('the explicit action hides a cached offer when fresh server state no longer
     const offered = { kind: 'LEGACY_ANONYMOUS', uid: sdk.user.uid, epoch: 'synthetic-legacy-choice-epoch' };
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ code: 'RECOVERY_REQUIRED', newPurchase: offered }), { status: 403 })));
     await mount(); expect(current().newPurchaseOffer).toEqual(offered);
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ code: 'RECOVERY_REQUIRED' }), { status: 403 })));
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ newPurchase: null }))));
     await act(async () => { await current().startNewPurchase(); });
     expect(current().newPurchaseOffer).toBeNull(); expect(current().credentialAccess).toBe('pending');
     expect(sdk.currentUser.uid).toBe(sdk.user.uid); expect(sdk.signOut).not.toHaveBeenCalled();

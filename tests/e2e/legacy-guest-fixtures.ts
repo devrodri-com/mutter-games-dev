@@ -6,6 +6,7 @@ import { getFirestore, Timestamp } from 'firebase-admin/firestore';
 import { initializeDemoAdmin } from '../catalog/demo-admin';
 import { mintCredentialSession } from '../../api/_lib/credential-session';
 import type { CredentialAccount } from '../../api/_lib/credential-access-state';
+import { beginInitialGuestPurchase } from './initial-guest-purchase';
 
 if (process.env.FIRESTORE_EMULATOR_HOST !== '127.0.0.1:8188'
   || process.env.FIREBASE_AUTH_EMULATOR_HOST !== '127.0.0.1:9198') throw Error('Exact owned loopback emulators required');
@@ -50,6 +51,7 @@ async function save(path: string, value: Record<string, unknown>) { documents.ad
 export async function seedLegacy(page: Page) {
   await localOnly(page);
   await page.goto('/carrito');
+  await beginInitialGuestPurchase(page);
   await expect.poll(async () => (await identity(page))?.sessionId).toBeTruthy();
   const initial = await identity(page); if (initial) users.add(initial.uid);
   const signed = await fetch('http://127.0.0.1:9198/identitytoolkit.googleapis.com/v1/accounts:signUp?key=synthetic', {
@@ -101,16 +103,18 @@ export async function unchanged(legacy: Legacy) {
     .toEqual(legacy.before.map(value => ({ data: value.data(), updateTime: value.updateTime })));
   expect((await auth.getUser(legacy.uid)).uid).toBe(legacy.uid);
 }
-export async function admittedAdministrator() {
-  const uid = `guest-transition-admin-${randomUUID()}`, email = `${uid}@example.invalid`;
+async function admittedRegistered(admin: boolean) {
+  const uid = `guest-transition-${admin ? 'admin' : 'buyer'}-${randomUUID()}`, email = `${uid}@example.invalid`;
   await auth.createUser({ uid, email, password: `Synthetic-only-${randomUUID()}` }); users.add(uid);
   const account: CredentialAccount = { schema: 1, uid, epoch, status: 'RECOVERED', recoveryEmail: email,
-    channelStatus: 'INDEPENDENTLY_VERIFIED', channelEvidenceSha256: 'e'.repeat(64), roles: { admin: true, superadmin: false } };
+    channelStatus: 'INDEPENDENTLY_VERIFIED', channelEvidenceSha256: 'e'.repeat(64), roles: { admin, superadmin: false } };
   await save(`credentialAccess/${uid}`, account);
   const session = await mintCredentialSession(auth, db, account, 'RECOVERY_CHANNEL');
   if (!session.customToken) throw Error('Expected real issuer custom token');
   return { uid, email, customToken: session.customToken };
 }
+export const admittedAdministrator = () => admittedRegistered(true);
+export const admittedBuyer = () => admittedRegistered(false);
 export async function trackCurrent(page: Page) { const observed = await identity(page); if (observed) users.add(observed.uid); }
 export function trackUid(uid: string) { if (!uid || uid.includes('/')) throw Error('Expected owned demo UID'); users.add(uid); }
 export async function cleanup() {

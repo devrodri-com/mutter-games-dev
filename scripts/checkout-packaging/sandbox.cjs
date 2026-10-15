@@ -10,7 +10,7 @@ const reconcileCases = Object.freeze([
   ['reconcile-missing-header', 'GET', 'missing-header'], ['reconcile-wrong-secret', 'GET', 'wrong-secret'],
   ['reconcile-method', 'POST', 'wrong-secret'], ['reconcile-restarted-get', 'GET', 'wrong-secret'],
 ]);
-const accessCases = Object.freeze([['access-cold-get', 'GET', '/api/access/session'], ['access-cold-post', 'POST', '/api/access/session'], ['access-options', 'OPTIONS', '/api/access/recovery/request'], ['access-complete-missing-authorization', 'POST', '/api/access/recovery/complete'], ['access-unknown-path', 'POST', '/api/access/unknown'], ['access-restarted-post', 'POST', '/api/access/session']]);
+const accessCases = Object.freeze([['access-cold-get', 'GET', '/api/access/session'], ['access-cold-post', 'POST', '/api/access/session'], ['access-options', 'OPTIONS', '/api/access/recovery/request'], ['access-complete-missing-authorization', 'POST', '/api/access/recovery/complete'], ['access-choice-method', 'GET', '/api/access/new-purchase-choice'], ['access-unknown-path', 'POST', '/api/access/unknown'], ['access-restarted-post', 'POST', '/api/access/session']]);
 const attestationCases = Object.freeze(['missing-secret', 'empty-secret', 'short-secret', 'missing-header', 'wrong-secret', 'wrong-action', 'method', 'authorized', 'retry', 'missing-undici']);
 const smokeCases = Object.freeze(['array-quote', 'array-availability']);
 const EXPECTED_NATIVE_CASE_LABELS = Object.freeze([

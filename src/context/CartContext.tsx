@@ -7,7 +7,7 @@ import type { CartItem } from '../data/types';
 import { toast } from 'react-hot-toast';
 import { useLiveCartInventory } from '../hooks/useLiveCartInventory';
 import { useAuth } from './AuthContext';
-import { observeGuestPurchaseState, readGuestPurchaseTransition } from '../utils/guestPurchaseState';
+import { observeGuestPurchaseState, observeNewPurchaseForm, readGuestPurchaseTransition } from '../utils/guestPurchaseState';
 export type ShippingData = {
     name: string;
     address: string;
@@ -99,6 +99,11 @@ export function CartProvider({ children }: {
             pending.current = { count: 0 }; queue.current = Promise.resolve(); unsynced.current = false;
             show([]); setCartReady(false); setCartError(null); setShippingInfo({ ...emptyShipping });
         } catch (error: unknown) { setCartReady(false); fail(error); }
+    }), []);
+    useEffect(() => observeNewPurchaseForm(() => {
+        revision.current++; accessGeneration.current++; activeUid.current = null;
+        pending.current = { count: 0 }; queue.current = Promise.resolve(); unsynced.current = false;
+        show([]); setCartReady(false); setCartError(null); setShippingInfo({ ...emptyShipping });
     }), []);
     useEffect(() => {
         const generation = ++accessGeneration.current;

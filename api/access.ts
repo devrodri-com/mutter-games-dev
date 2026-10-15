@@ -10,6 +10,7 @@ function actionForUrl(url: string | undefined): AccessAction | null {
   if (!url?.startsWith('/') || url.startsWith('//')) return null;
   const pathname = url.split('?')[0];
   if (pathname === '/api/access/session') return 'session';
+  if (pathname === '/api/access/new-purchase-choice') return 'new-purchase-choice';
   if (pathname === '/api/access/recovery/request') return 'request';
   if (pathname === '/api/access/recovery/complete') return 'complete';
   return null;
@@ -22,7 +23,7 @@ export default async function handler(req: VercelRequest, res: AccessResponse) {
   if (handleReleaseAttestation(req, res, 'access')) return;
   if (req.method !== 'POST') return res.status(405).json({ code: 'METHOD_NOT_ALLOWED', error: 'Method not allowed' });
   const authorization = req.headers.authorization;
-  if (action !== 'request' && (typeof authorization !== 'string' || !authorization.startsWith('Bearer ')
+  if (action !== 'request' && action !== 'new-purchase-choice' && (typeof authorization !== 'string' || !authorization.startsWith('Bearer ')
     || authorization.length <= 7 || authorization.length > 16000)) {
     return res.status(401).json({ code: 'INVALID_SESSION', error: 'Volvé a iniciar sesión para continuar.' });
   }

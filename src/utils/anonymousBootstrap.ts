@@ -1,10 +1,16 @@
 import { beforeAuthStateChanged, signInAnonymously, type Auth, type User } from 'firebase/auth';
-import { readGuestPurchaseTransition, withAnonymousIdentityLock } from './guestPurchaseState';
+import { prepareNewPurchaseForm, readGuestPurchaseTransition, withAnonymousIdentityLock } from './guestPurchaseState';
+import { observedIdentityUid } from './observedIdentity';
 
 const requests = new WeakMap<Auth, Promise<User>>();
-/** Only an empty, ordinary visitor session may bootstrap. A transition owns
- * sign-out/signup and therefore suppresses automatic anonymous creation. */
+/** Startup and incidental consumers never create an identity from unknown null. */
 export function bootstrapAnonymousVisitor(auth: Auth): Promise<User> {
+  const current = auth.currentUser;
+  if (current) return Promise.resolve(current);
+  return Promise.reject(new Error('Elegí empezar una compra como invitado o ingresar a tu cuenta para continuar.'));
+}
+/** Called only by the explained public guest action, never by startup. */
+export function startExplicitAnonymousVisitor(auth: Auth): Promise<User> {
   const current = auth.currentUser;
   if (current) return Promise.resolve(current);
   const existing = requests.get(auth);
@@ -12,13 +18,15 @@ export function bootstrapAnonymousVisitor(auth: Auth): Promise<User> {
   const request = withAnonymousIdentityLock(auth, async () => {
     await auth.authStateReady();
     if (auth.currentUser) return auth.currentUser;
+    if (observedIdentityUid(auth)) throw new Error('La sesión se cerró. Elegí cómo continuar; tu cuenta y tus datos se conservan.');
     const transition = readGuestPurchaseTransition(auth);
     if (transition && transition.phase !== 'SETTLED') throw new Error('La compra nueva espera tu confirmación para continuar.');
+    prepareNewPurchaseForm();
     let superseded = false;
     const stop = beforeAuthStateChanged(auth, next => {
       if (!next) return;
       if (!next.isAnonymous) { superseded = true; return; }
-      if (superseded || (auth.currentUser && auth.currentUser.uid !== next.uid)) throw new Error('Cambió la cuenta durante el ingreso.');
+      if (superseded || observedIdentityUid(auth) || (auth.currentUser && auth.currentUser.uid !== next.uid)) throw new Error('Cambió la cuenta durante el ingreso.');
     });
     try {
       const credential = await signInAnonymously(auth);
@@ -27,7 +35,7 @@ export function bootstrapAnonymousVisitor(auth: Auth): Promise<User> {
       return current.uid === credential.user.uid ? credential.user : current;
     }
     finally { stop(); }
-  }, false).finally(() => requests.delete(auth));
+  }).finally(() => requests.delete(auth));
   requests.set(auth, request);
   return request;
 }
