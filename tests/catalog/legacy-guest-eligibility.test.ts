@@ -83,7 +83,7 @@ test('public selector rejects malformed input and authority failures, and an unk
   expect(await h.publicChoice(user.uid, { epoch: guestEpoch })).toMatchObject({ status: 400 });
   expect(await h.publicChoice('synthetic-unknown-uid')).toEqual({ status: 200, body: { newPurchase: null } });
   await h.db.doc('operations/credentialAccessCutover').delete();
-  expect(await h.publicChoice(user.uid)).toMatchObject({ status: 503, body: { code: 'ACCESS_UNAVAILABLE' } });
+  expect(await h.publicChoice(user.uid)).toMatchObject({ status: 503, body: { code: 'ACCESS_TRANSITION_UNAVAILABLE' } });
   expect((await h.db.collection('credentialSessions').get()).empty).toBe(true);
 });
 

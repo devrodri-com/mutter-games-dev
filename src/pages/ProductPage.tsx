@@ -6,6 +6,7 @@ import { useParams, Link } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { Helmet } from "react-helmet-async";
 import ProductPageNavbar from "../components/ProductPageNavbar";
+import PublicGuestPurchase from "../components/PublicGuestPurchase";
 import { usePublishedProduct } from "../hooks/usePublishedProduct";
 import { useCart } from "../context/CartContext";
 import { ChevronLeft, ArrowUp, CreditCard, Truck, Store, MessageSquare, Lock } from "lucide-react";
@@ -261,6 +262,7 @@ export default function ProductPage() {
 
         {/* Barra de navegación superior específica de ProductPage */}
         <ProductPageNavbar />
+        <PublicGuestPurchase inLayout />
 
     {/* ================================================================== */}
     {/* === LAYOUT PRINCIPAL: GALERÍA + DETALLES DEL PRODUCTO ========== */}
