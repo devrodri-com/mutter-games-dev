@@ -18882,8 +18882,8 @@
     },
     {
       "path": "scripts/published/runtime/runtime-dependencies.json",
-      "bytes": 511,
-      "sha256": "8de49c963c10cabc910872d37b02589e9c649e6a0ef98749f1f57a4841dc97b4"
+      "bytes": 549,
+      "sha256": "5e6eaff7948f31c3c5af258c0f48aecfbcae19b00c5ba96e5c0be17ee22a77fd"
     },
     {
       "path": "scripts/release-prebuilt/environment.cjs",
