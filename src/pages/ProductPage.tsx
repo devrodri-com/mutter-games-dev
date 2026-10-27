@@ -1,12 +1,15 @@
+import { ProductReservationNotice } from '../components/product/ProductReservationNotice';
+import { ProductPurchaseActions } from '../components/product/ProductPurchaseActions';
 //src/pages/ProductPage.tsx
 
 import { useParams, Link } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { Helmet } from "react-helmet-async";
 import ProductPageNavbar from "../components/ProductPageNavbar";
+import PublicGuestPurchase from "../components/PublicGuestPurchase";
 import { usePublishedProduct } from "../hooks/usePublishedProduct";
 import { useCart } from "../context/CartContext";
-import { Check, ChevronLeft, ArrowUp, CreditCard, Truck, Store, MessageSquare, Lock } from "lucide-react";
+import { ChevronLeft, ArrowUp, CreditCard, Truck, Store, MessageSquare, Lock } from "lucide-react";
 import { FiMinus, FiPlus } from "react-icons/fi";
 import "keen-slider/keen-slider.min.css";
 import { useKeenSlider } from "keen-slider/react";
@@ -36,7 +39,7 @@ export default function ProductPage() {
   const { slug } = useParams<{ slug: string }>();
   const decodedSlug = decodeURIComponent(slug || "");
   const {product, loading, error: productError, retry} = usePublishedProduct(decodedSlug);
-  const [selectedOption, setSelectedOption] = useState<{ value: string; priceUSD: number; variantLabel?: string; variantId?: string; stock?: number } | null>(null);
+  const [selectedVariant, setSelectedVariant] = useState<{ productId: string; id: string } | null>(null);
   const [selectedImage, setSelectedImage] = useState(0);
   const [quantity, setQuantity] = useState(1);
   const [showScrollTop, setShowScrollTop] = useState(false);
@@ -64,14 +67,16 @@ export default function ProductPage() {
   // ------------------------------------------------------------------------
   // EFECTO: CARGA DEL PRODUCTO POR SLUG DESDE FIREBASE
   // ------------------------------------------------------------------------
-  useEffect(() => {
-    setSelectedOption(null);
-    setQuantity(1);
-    if (product?.variants?.length === 1 && product.variants[0].options.length === 1) {
-      const variant = product.variants[0]; const option = variant.options[0];
-      setSelectedOption({...option,variantLabel:variant.label[lang],variantId:option.variantId || `${variant.label.es || variant.label.en}-${option.value}`});
-    }
-  }, [product, lang]);
+  const options = product?.variants?.flatMap(variant => variant.options.map(option => ({
+    ...option,
+    variantLabel: variant.label[lang],
+    variantId: option.variantId || `${variant.label.es || variant.label.en}-${option.value}`,
+  }))) ?? [];
+  // Keep only selection identity in state; stock always comes from the latest snapshot.
+  const selectedOption = selectedVariant?.productId === product?.id
+    ? options.find(option => option.variantId === selectedVariant?.id) ?? null
+    : options.length === 1 ? options[0] : null;
+  useEffect(() => { setQuantity(1); setSelectedVariant(null); }, [decodedSlug]);
 
   // ------------------------------------------------------------------------
   // EFECTO: BOTÓN SCROLL TO TOP SEGÚN POSICIÓN DE SCROLL
@@ -193,6 +198,7 @@ export default function ProductPage() {
   return (
     <div className="bg-gradient-to-b from-[#fafafa] to-white min-h-[100dvh] flex flex-col">
       <div className="w-full overflow-x-hidden text-black relative z-10 flex-grow">
+        <ProductReservationNotice hasReservations={product.hasWebReservations === true} />
      {/* ================================================================== */}
      {/* === SEO / METADATOS DEL PRODUCTO (HELMET + JSON-LD) ============ */}
      {/* ================================================================== */}
@@ -256,6 +262,7 @@ export default function ProductPage() {
 
         {/* Barra de navegación superior específica de ProductPage */}
         <ProductPageNavbar />
+        <PublicGuestPurchase inLayout />
 
     {/* ================================================================== */}
     {/* === LAYOUT PRINCIPAL: GALERÍA + DETALLES DEL PRODUCTO ========== */}
@@ -404,24 +411,20 @@ export default function ProductPage() {
               {/* Opciones de variante multilenguaje y precio */}
               {Array.isArray(product.variants) && product.variants.length > 0 && (
                 <div className="mb-6">
-                  {product.variants.map((variant: any, vIndex: number) => (
+                  {product.variants.map((variant, vIndex) => (
                     <div key={vIndex} className="mb-4">
                       <h3 className="uppercase text-sm font-semibold text-gray-800 mb-1">
                         {variant.label?.[lang] || "Opción"}
                       </h3>
                       <div className="flex flex-wrap gap-2 mt-2">
-                        {variant.options.map((option: any, oIndex: number) => (
+                        {variant.options.map((option, oIndex) => (
                           <button
                             key={oIndex}
                             onClick={() => {
-                              setSelectedOption({
-                                ...option,
-                                variantLabel: variant.label?.[lang] || "Opción",
-                                variantId: option.variantId || `${variant.label?.[lang] || "Opción"}-${option.value}`,
-                              });
+                              setSelectedVariant({ productId: product.id, id: option.variantId || `${variant.label.es || variant.label.en}-${option.value}` });
                             }}
                             className={`px-4 py-2 rounded-md border ${
-                              selectedOption?.value === option.value
+                              selectedOption?.variantId === (option.variantId || `${variant.label.es || variant.label.en}-${option.value}`)
                                 ? "bg-black text-white border-black"
                                 : "bg-white text-black border-gray-300"
                             } hover:shadow-md transition`}
@@ -493,30 +496,8 @@ export default function ProductPage() {
             </div>
 
             {/* Bloque de compra (CTA principal) */}
-            <div id="buy-block" className="grid md:grid-cols-2 gap-6 mt-6 mb-8">
-              <button
-                disabled={isOutOfStock || isAdding}
-                onClick={handleQuickBuy}
-                className={`h-12 rounded-lg shadow hover:shadow-md tracking-wide transition flex items-center justify-center gap-2 border font-semibold ${
-                  isOutOfStock
-                    ? 'bg-gray-300 text-white cursor-not-allowed'
-                    : 'bg-black text-white border-black hover:bg-white hover:text-black'
-                }${isAdding ? ' opacity-50 cursor-not-allowed' : ''}`}
-              >
-                {isOutOfStock ? (lang === 'en' ? 'OUT OF STOCK' : 'SIN STOCK') : (
-                  isAdding ? (
-                    <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
-                    </svg>
-                  ) : (
-                    <>
-                      <Check size={18} /> {lang === 'en' ? 'Add to cart' : 'Agregar al carrito'}
-                    </>
-                  )
-                )}
-              </button>
-            </div>
+            <ProductPurchaseActions placement="main" lang={lang} priceUSD={selectedOption?.priceUSD ?? product.priceUSD}
+              isOutOfStock={isOutOfStock} isAdding={isAdding} onBuy={handleQuickBuy} />
 
 
           </div>
@@ -570,31 +551,9 @@ export default function ProductPage() {
   {/* ================================================================== */}
         {/* Sticky CTA (mobile) */}
         {showStickyCTA && !isOutOfStock && (
-          <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-gray-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 shadow-[0_-6px_20px_rgba(0,0,0,0.08)]">
-            <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-3" style={{ paddingBottom: "calc(12px + env(safe-area-inset-bottom, 0px))" }}>
-              {(() => {
-                const precio = selectedOption?.priceUSD ?? product.variants?.[0]?.options?.[0]?.priceUSD ?? product.priceUSD;
-                const entero = Math.floor(precio).toLocaleString("es-AR");
-                const decimal = precio.toFixed(2).split(".")[1];
-                const formattedPrice = `${entero},${decimal}`;
-                return (
-                  <div className="flex flex-col leading-tight">
-                    <div className="flex items-end gap-1">
-                      <span className="text-xl font-extrabold leading-none">${formattedPrice.split(',')[0]}</span>
-                      <sup className="text-xs font-semibold align-[0.1em]">{formattedPrice.split(',')[1]}</sup>
-                    </div>
-                    <span className="text-[11px] text-gray-600 mt-0.5">Cuotas con MP</span>
-                  </div>
-                );
-              })()}
-              <button
-                onClick={handleQuickBuy}
-                className="flex-1 h-11 rounded-lg bg-black text-white font-semibold tracking-wide shadow hover:bg-white hover:text-black border border-black transition"
-              >
-                {lang === 'en' ? 'Buy now' : 'Comprar ahora'}
-              </button>
-            </div>
-          </div>
+          <ProductPurchaseActions placement="sticky" lang={lang}
+            priceUSD={selectedOption?.priceUSD ?? product.variants?.[0]?.options?.[0]?.priceUSD ?? product.priceUSD}
+            isOutOfStock={isOutOfStock} isAdding={isAdding} onBuy={handleQuickBuy} />
         )}
         {/* Spacer para no tapar contenido con la Sticky CTA en mobile */}
         <div className="h-16 md:hidden" />

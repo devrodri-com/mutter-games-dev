@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "repository": "https://github.com/devrodri-com/mutter-games-admin-api",
+  "retainedLocalCommit": "2a7521cdfd096f7a9b0531814f3ccaa5fe430d1b",
+  "retainedLocalTree": "de4f05f3ffd99188e19b4a42c6090c56500523c8",
+  "scope": "Retained source coupling only; no claim of live Admin API deployment/exposure",
+  "purpose": "Preserve the actual four-module historical comparison dependency used by the existing current native gate. Not a mock, not a production source, never imported by storefront runtime.",
+  "files": [
+    {
+      "path": "api/_lib/product-patch.ts",
+      "sha256": "25301ef451593939e013ac24c417a456fe0547e7a58fd5e9aa3d3d3485a24c3d",
+      "bytes": 9097
+    },
+    {
+      "path": "api/_lib/web-reservations.ts",
+      "sha256": "f78e8d067a185355084d7942287298d8dee5e78af99fc2d8f5e47c0419a4bb99",
+      "bytes": 5130
+    },
+    {
+      "path": "api/_lib/release-cutover.ts",
+      "sha256": "ddd9789d3a1eb8da90a7253449228cfe3e05f8693181ba333b79715448b28987",
+      "bytes": 1797
+    },
+    {
+      "path": "api/_lib/session-authority.ts",
+      "sha256": "d9e65951a76ddf184841b27440b4b5dd5ca1fe9944cbf415858fb70cd4ce21af",
+      "bytes": 819
+    },
+    {
+      "path": "package.json",
+      "sha256": "05a26aeea86594b267c472c09210de06f266bb9fbc59cbbe121e79425b530836",
+      "bytes": 3124
+    },
+    {
+      "path": "package-lock.json",
+      "sha256": "c3fa0963f50601f3ea6ca77baf9593ac5ab3a05b55e0778342e4db9ef08bc580",
+      "bytes": 154429
+    }
+  ]
+}

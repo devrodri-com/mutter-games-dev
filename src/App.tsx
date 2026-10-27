@@ -1,8 +1,7 @@
 // src/App.tsx
 
 import { Routes, Route, Navigate, useParams, useNavigate } from "react-router-dom";
-import { AuthProvider } from "./context/AuthContext";
-import { CartProvider } from "./context/CartContext";
+import CredentialAccessNotice from "./components/CredentialAccessNotice";
 import LayoutRoutes from "./components/LayoutRoutes";
 import Hero from "./components/Hero";
 import { Helmet } from "react-helmet-async";
@@ -61,8 +60,6 @@ function Home() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <CartProvider>
         <div className="bg-[#0F0F0F] min-h-screen flex flex-col">
           <Helmet>
             <title>Mutter Games — Consolas, videojuegos y coleccionables</title>
@@ -79,6 +76,7 @@ export default function App() {
             <meta name="twitter:image" content="/seo-image.jpg" />
             <link rel="canonical" href="https://muttergames.com/" />
           </Helmet>
+          <CredentialAccessNotice />
           <Routes>
             {/* ✅ Login público */}
             <Route path="/login" element={<LoginForm />} />
@@ -125,7 +123,5 @@ export default function App() {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </div>
-      </CartProvider>
-    </AuthProvider>
   );
 }

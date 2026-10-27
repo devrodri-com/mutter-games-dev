@@ -27,7 +27,6 @@ export default function ImageUploader({ images, onChange }: ImageUploaderProps) 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files ? Array.from(e.target.files) : [];
 
-    console.log("Archivos seleccionados:", files);
     if (!files || files.length === 0) return;
     setError("");
 
@@ -42,20 +41,17 @@ export default function ImageUploader({ images, onChange }: ImageUploaderProps) 
         return null;
       }
 
-      console.log("🔍 Archivo a subir:", file); // nuevo log
 
       let url: string | null = null;
       try {
         const result = await handleImageUpload(file);
         url = typeof result === "string" ? result : null;
-      } catch (err) {
-        console.error("❌ Error inesperado al subir imagen:", err);
-        setError("Error inesperado al subir la imagen.");
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : 'La carga quedó sin confirmar. No vuelvas a enviarla.');
         return null;
       }
 
       if (!url) {
-        console.warn("⛔ No se recibió una URL válida desde ImageKit:", url);
         return null;
       }
       return url;
@@ -68,7 +64,6 @@ export default function ImageUploader({ images, onChange }: ImageUploaderProps) 
     const combined = [...imageRef.current, ...successfulUploads.map(url => url.trim())];
     const updatedImages = Array.from(new Set(combined));
     imageRef.current = updatedImages;
-    console.log("Imágenes subidas:", updatedImages);
     onChange(updatedImages);
   };
 

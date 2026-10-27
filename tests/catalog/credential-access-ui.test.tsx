@@ -1,0 +1,200 @@
+import React, { act } from 'react';
+import { createRoot } from 'react-dom/client';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+const sdk = vi.hoisted(() => {
+  const user = { uid: 'same-demo-uid', email: 'holder@example.invalid', displayName: null, providerData: [], getIdToken: async () => sdk.token };
+  return { user, token: 'old-demo-id-token', currentUser: user, listeners: [] as ((value: typeof user) => void)[], before: [] as ((value: typeof user) => void)[], exchange: vi.fn(), signOut: vi.fn() };
+});
+vi.mock('../../src/firebase', () => ({ auth: { get currentUser() { return sdk.currentUser; } } }));
+vi.mock('firebase/auth', () => ({
+  onIdTokenChanged: (_auth: unknown, listener: (value: typeof sdk.user) => void) => { sdk.listeners.push(listener); listener(sdk.currentUser); return () => { sdk.listeners = sdk.listeners.filter(value => value !== listener); }; },
+  beforeAuthStateChanged: (_auth: unknown, listener: (value: typeof sdk.user) => void) => { sdk.before.push(listener); return () => { sdk.before = sdk.before.filter(value => value !== listener); }; },
+  signInWithCustomToken: async (_auth: unknown, customToken: string) => { for (const before of sdk.before) before(sdk.currentUser); sdk.exchange(customToken); sdk.token = 'new-demo-id-token'; sdk.listeners.forEach(listener => listener(sdk.currentUser)); return { user: sdk.currentUser }; },
+  signOut: async () => { sdk.signOut(); },
+}));
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+import { auth } from '../../src/firebase';
+import { AuthProvider, useAuth } from '../../src/context/AuthContext';
+import { captureRecoveryNonce, completeCredentialRecovery, discardRecoveryNonce, ensureCredentialSession, requestCredentialRecovery } from '../../src/utils/credentialAccess';
+let context: ReturnType<typeof useAuth> | null = null;
+let root: ReturnType<typeof createRoot> | null = null;
+function current() { if (!context) throw new Error('Context unavailable'); return context; }
+function firebaseUser() { const user = auth.currentUser; if (!user) throw new Error('Demo user unavailable'); return user; }
+function Probe() { context = useAuth(); return <p>{context.credentialAccess}</p>; }
+async function mount() { const element = document.createElement('div'); document.body.append(element); root = createRoot(element); await act(async () => { root?.render(<AuthProvider><Probe /></AuthProvider>); }); }
+const active = (admin = false, uid = sdk.user.uid) => ({ status: 'ACTIVE', uid, admin, superadmin: false, expiresAtMs: Date.now() + 86400000 });
+const nextBuyer = () => ({ ...sdk.user, uid: 'next-demo-buyer', email: 'next-buyer@example.invalid', getIdToken: async () => 'next-demo-id-token' });
+beforeEach(() => { sdk.currentUser = sdk.user; sdk.token = 'old-demo-id-token'; sdk.listeners = []; sdk.before = []; sdk.exchange.mockReset(); sdk.signOut.mockReset(); localStorage.clear(); discardRecoveryNonce(); });
+afterEach(async () => { await act(async () => root?.unmount()); root = null; context = null; document.body.innerHTML = ''; vi.unstubAllGlobals(); });
+
+test('old credential leaves the same account pending; local login data cannot grant admin or erase saved data', async () => {
+  localStorage.setItem('mutter-cart:same-demo-uid', 'saved-cart');
+  vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 403 })));
+  await mount(); expect(current().credentialAccess).toBe('pending'); expect(current().user).toBeNull();
+  await act(async () => { await expect(current().login({ id: 'forged-admin', name: 'Demo', email: 'fake@example.invalid', password: '' })).rejects.toThrow(); });
+  expect(current().user).toBeNull(); expect(sdk.signOut).not.toHaveBeenCalled(); expect(sdk.currentUser.uid).toBe('same-demo-uid');
+  expect(localStorage.getItem('mutter-cart:same-demo-uid')).toBe('saved-cart');
+});
+test('new admitted buyer exchanges only once, confirms same UID and has no administrative UI authority', async () => {
+  let count = 0;
+  const requests: string[] = [];
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => { requests.push(url); return new Response(JSON.stringify(++count === 1 ? { ...active(), customToken: 'demo-custom-token' } : active())); }));
+  await mount(); expect(current().credentialAccess).toBe('active'); expect(current().user).toBeNull(); expect(sdk.exchange).toHaveBeenCalledTimes(1);
+  expect(requests).toEqual(['/api/access/session', '/api/access/session']); expect(sdk.currentUser.uid).toBe('same-demo-uid');
+});
+test('server-confirmed role admits the same administrative UID; failed later admission removes UI authority', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(active(true)))));
+  await mount(); expect(current().user?.uid).toBe(sdk.user.uid);
+  vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 403 })));
+  await act(async () => { sdk.listeners.forEach(listener => listener(sdk.currentUser)); });
+  expect(current().credentialAccess).toBe('pending'); expect(current().user).toBeNull(); expect(sdk.signOut).not.toHaveBeenCalled();
+});
+test('scoped buyer admission survives exchange and confirmation without administrative UI authority', async () => {
+  const buyer = { ...active(), scope: 'BUYER_POST_CUTOVER_V1' };
+  let requests = 0;
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(++requests === 1
+    ? { ...buyer, customToken: 'synthetic-scoped-buyer-token' } : buyer))));
+  await mount();
+  expect(current().credentialAccess).toBe('active');
+  expect(current().credentialScope).toBe('BUYER_POST_CUTOVER_V1');
+  expect(current().user).toBeNull();
+  expect(sdk.exchange).toHaveBeenCalledTimes(1);
+  expect(requests).toBe(2);
+  expect(sdk.currentUser.uid).toBe(buyer.uid);
+});
+test.each([{ admin: true, superadmin: false }, { admin: false, superadmin: true }])(
+  'buyer scope with administrative flags %j is rejected before token exchange', async roles => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ ...active(), ...roles,
+      scope: 'BUYER_POST_CUTOVER_V1', customToken: 'must-not-exchange' }))));
+    await expect(ensureCredentialSession(firebaseUser())).rejects.toMatchObject({ code: 'ACCESS_UNAVAILABLE' });
+    expect(sdk.exchange).not.toHaveBeenCalled();
+    expect(sdk.currentUser.uid).toBe(sdk.user.uid);
+  });
+test('unknown scope cannot acquire buyer or administrator UI access', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ ...active(), scope: 'UNKNOWN_SCOPE' }))));
+  await expect(ensureCredentialSession(firebaseUser())).rejects.toMatchObject({ code: 'ACCESS_UNAVAILABLE' });
+  expect(sdk.exchange).not.toHaveBeenCalled();
+});
+test('wrong UID response and an unavailable server never exchange or admit', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ ...active(true), uid: 'different-demo-uid', customToken: 'must-not-exchange' }))));
+  await expect(ensureCredentialSession(firebaseUser())).rejects.toThrow(); expect(sdk.exchange).not.toHaveBeenCalled();
+  vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('Transport failure'); }));
+  await mount(); expect(current().credentialAccess).toBe('unavailable'); expect(current().user).toBeNull();
+});
+test('mail fragment is removed immediately and held only in memory; acknowledgment reveals no account details', async () => {
+  const nonce = 'a'.repeat(64); window.history.replaceState(null, '', '/login#recovery=' + nonce);
+  expect(captureRecoveryNonce()).toBe(nonce); expect(window.location.hash).toBe(''); expect(captureRecoveryNonce()).toBe(nonce);
+  discardRecoveryNonce(); expect(captureRecoveryNonce()).toBeNull();
+  vi.stubGlobal('fetch', vi.fn(async () => new Response('{"status":"REQUEST_RECEIVED"}', { status: 202 })));
+  await requestCredentialRecovery('holder@example.invalid'); expect(localStorage.length).toBe(0);
+});
+test('completion uses bearer and mail proof, then confirms capability with the same UID; failures retain the account', async () => {
+  const calls: { url: string; body: unknown; header: unknown }[] = [];
+  vi.stubGlobal('fetch', vi.fn(async (url: string, options: RequestInit) => { calls.push({ url, body: JSON.parse(String(options.body)), header: new Headers(options.headers).get('authorization') }); return new Response(JSON.stringify(url.endsWith('/complete') ? { ...active(true), customToken: 'demo-custom-token' } : active(true))); }));
+  expect((await completeCredentialRecovery(firebaseUser(), 'b'.repeat(64))).uid).toBe(sdk.user.uid);
+  expect(calls.map(call => call.url)).toEqual(['/api/access/recovery/complete', '/api/access/session']); expect(calls[0].body).toEqual({ nonce: 'b'.repeat(64) });
+  expect(calls[0].header).toBe('Bearer old-demo-id-token'); expect(calls[1].header).toBe('Bearer new-demo-id-token'); expect(sdk.signOut).not.toHaveBeenCalled();
+  vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 403 })));
+  await expect(completeCredentialRecovery(firebaseUser(), 'c'.repeat(64))).rejects.toThrow(); expect(sdk.currentUser.uid).toBe(sdk.user.uid);
+});
+
+test.each([403, 503])('a late refresh failure %s from the previous UID cannot replace the current buyer admission', async status => {
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(active(true)))));
+  await mount();
+  let resolveResponse: ((value: Response) => void) | undefined;
+  const buyer = nextBuyer();
+  vi.stubGlobal('fetch', vi.fn(async (_url: string, options: RequestInit) => new Headers(options.headers).get('authorization') === 'Bearer next-demo-id-token'
+    ? new Response(JSON.stringify(active(false, buyer.uid)))
+    : new Promise<Response>(resolve => { resolveResponse = resolve; })));
+  let refreshing: Promise<unknown> | undefined;
+  await act(async () => { refreshing = current().refreshAccess().catch((error: unknown) => error); });
+  await act(async () => { sdk.currentUser = buyer; sdk.listeners.forEach(listener => listener(buyer)); });
+  expect(current().credentialAccess).toBe('active'); expect(current().user).toBeNull();
+  await act(async () => { resolveResponse?.(new Response('{}', { status })); expect(await refreshing).toBeInstanceOf(Error); });
+  expect(current().credentialAccess).toBe('active'); expect(current().credentialError).toBeNull(); expect(current().user).toBeNull();
+  expect(sdk.currentUser.uid).toBe(buyer.uid); expect(sdk.exchange).not.toHaveBeenCalled(); expect(sdk.signOut).not.toHaveBeenCalled();
+});
+
+test('a late successful response from the previous UID cannot grant its administrative UI to the current buyer', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(active(true)))));
+  await mount();
+  let resolveBody: ((value: unknown) => void) | undefined;
+  const oldResponse = new Response('{}');
+  vi.spyOn(oldResponse, 'json').mockImplementation(() => new Promise<unknown>(resolve => { resolveBody = resolve; }));
+  const buyer = nextBuyer();
+  vi.stubGlobal('fetch', vi.fn(async (_url: string, options: RequestInit) => new Headers(options.headers).get('authorization') === 'Bearer next-demo-id-token'
+    ? new Response(JSON.stringify(active(false, buyer.uid))) : oldResponse));
+  let refreshing: Promise<unknown> | undefined;
+  await act(async () => { refreshing = current().refreshAccess().catch((error: unknown) => error); });
+  await act(async () => { sdk.currentUser = buyer; sdk.listeners.forEach(listener => listener(buyer)); });
+  // The admission helper now rejects the obsolete result itself, in addition
+  // to preserving the current buyer's UI authority through the provider.
+  await act(async () => { resolveBody?.(active(true)); expect(await refreshing).toMatchObject({ code: 'ACCESS_UNAVAILABLE' }); });
+  expect(current().credentialAccess).toBe('active'); expect(current().credentialError).toBeNull(); expect(current().user).toBeNull();
+  expect(sdk.currentUser.uid).toBe(buyer.uid); expect(sdk.exchange).not.toHaveBeenCalled();
+});
+
+test('refresh exchange for the same UID allows the new token observer to admit it once', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(active()))));
+  await mount();
+  let count = 0;
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(++count === 1 ? { ...active(), customToken: 'demo-custom-token' } : active()))));
+  await act(async () => { expect(await current().refreshAccess()).toMatchObject({ uid: sdk.user.uid, admin: false }); });
+  expect(current().credentialAccess).toBe('active'); expect(current().credentialError).toBeNull(); expect(current().user).toBeNull();
+  expect(sdk.exchange).toHaveBeenCalledTimes(1); expect(count).toBe(2); expect(sdk.currentUser.uid).toBe(sdk.user.uid);
+});
+
+test('only the server-bound legacy choice appears; a generic 403 or a foreign UID never offers an identity replacement', async () => {
+  const offer = { kind: 'LEGACY_ANONYMOUS', uid: sdk.user.uid, epoch: 'synthetic-legacy-choice-epoch' };
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ code: 'RECOVERY_REQUIRED', newPurchase: offer }), { status: 403 })));
+  await mount(); expect(current().newPurchaseOffer).toEqual(offer); expect(sdk.signOut).not.toHaveBeenCalled();
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ code: 'RECOVERY_REQUIRED', newPurchase: { ...offer, uid: 'foreign-demo-uid' } }), { status: 403 })));
+  await act(async () => { await expect(current().refreshAccess()).rejects.toThrow(); });
+  expect(current().newPurchaseOffer).toBeNull(); expect(sdk.signOut).not.toHaveBeenCalled();
+  vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 403 })));
+  await act(async () => { await expect(current().refreshAccess()).rejects.toThrow(); });
+  expect(current().newPurchaseOffer).toBeNull(); expect(sdk.currentUser.uid).toBe(sdk.user.uid);
+});
+
+test('unsupported browser coordination fails before sign-out and preserves the legacy choice for a safe retry', async () => {
+  Object.assign(auth, { app: { options: { projectId: 'demo-mutter-r1' } } });
+  const offer = { kind: 'LEGACY_ANONYMOUS', uid: sdk.user.uid, epoch: 'synthetic-legacy-choice-epoch' };
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ code: 'RECOVERY_REQUIRED', newPurchase: offer }), { status: 403 })));
+  localStorage.setItem('mutter-cart:same-demo-uid', 'historical-local-cart-kept');
+  await mount();
+  await act(async () => { await current().startNewPurchase(); });
+  expect(current().credentialError).toContain('navegador'); expect(current().newPurchaseOffer).toEqual(offer);
+  expect(sdk.signOut).not.toHaveBeenCalled(); expect(sdk.currentUser.uid).toBe(sdk.user.uid);
+  expect(localStorage.getItem('mutter-cart:same-demo-uid')).toBe('historical-local-cart-kept');
+});
+
+test('an old rendered purchase action cannot downgrade the administrator already admitted at a different SDK UID', async () => {
+  const offered = { kind: 'LEGACY_ANONYMOUS', uid: sdk.user.uid, epoch: 'synthetic-legacy-choice-epoch' };
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ code: 'RECOVERY_REQUIRED', newPurchase: offered }), { status: 403 })));
+  await mount(); const staleAction = current().startNewPurchase;
+  const administrator = { ...nextBuyer(), email: 'synthetic-admin@example.invalid' };
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(active(true, administrator.uid)))));
+  await act(async () => { sdk.currentUser = administrator; sdk.listeners.forEach(listener => listener(administrator)); });
+  expect(current().credentialAccess).toBe('active'); expect(current().user?.uid).toBe(administrator.uid);
+  await act(async () => { await staleAction(); });
+  expect(current().credentialAccess).toBe('active'); expect(current().credentialError).toBeNull(); expect(current().user?.uid).toBe(administrator.uid);
+  expect(sdk.currentUser.uid).toBe(administrator.uid); expect(sdk.signOut).not.toHaveBeenCalled(); expect(sdk.exchange).not.toHaveBeenCalled();
+});
+
+test('the explicit action hides a cached offer when fresh server state no longer confirms eligibility', async () => {
+  Object.assign(auth, { app: { options: { projectId: 'demo-mutter-r1' } }, authStateReady: async () => undefined });
+  const originalLocks = Object.getOwnPropertyDescriptor(navigator, 'locks');
+  Object.defineProperty(navigator, 'locks', { configurable: true, value: { request: (_key: string, _options: unknown, task: () => Promise<unknown>) => task() } });
+  try {
+    const offered = { kind: 'LEGACY_ANONYMOUS', uid: sdk.user.uid, epoch: 'synthetic-legacy-choice-epoch' };
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ code: 'RECOVERY_REQUIRED', newPurchase: offered }), { status: 403 })));
+    await mount(); expect(current().newPurchaseOffer).toEqual(offered);
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ newPurchase: null }))));
+    await act(async () => { await current().startNewPurchase(); });
+    expect(current().newPurchaseOffer).toBeNull(); expect(current().credentialAccess).toBe('pending');
+    expect(sdk.currentUser.uid).toBe(sdk.user.uid); expect(sdk.signOut).not.toHaveBeenCalled();
+  } finally {
+    if (originalLocks) Object.defineProperty(navigator, 'locks', originalLocks);
+    else Reflect.deleteProperty(navigator, 'locks');
+  }
+});

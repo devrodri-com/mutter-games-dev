@@ -2,6 +2,8 @@
 
 import { CartFormData } from "@/data/types";
 import EmptyCart from "@/components/cart/EmptyCart";
+import CheckoutAccountOption from "../components/cart/CheckoutAccountOption";
+import LegacyGuestNewPurchase from '../components/LegacyGuestNewPurchase';
 import { useCart } from "../context/CartContext";
 import { Link, useNavigate } from "react-router-dom";
 import { useState, Fragment, useRef } from "react";
@@ -143,6 +145,7 @@ const isValidEmail = (email: string): boolean => {
           <main className="flex-grow">
             <div className="max-w-5xl mx-auto px-6 pt-2 pb-10">
               <h1 className="text-3xl font-bold text-gray-900 mb-4">Tu carrito</h1>
+              <LegacyGuestNewPurchase />
 
               {items.length === 0 ? (
                 <div>
@@ -336,46 +339,7 @@ const isValidEmail = (email: string): boolean => {
   </label>
 </div>
 
-                    {/* Checkbox Registrarme */}
-                    <div className="flex items-center gap-2 mt-2">
-                      <input
-                        type="checkbox"
-                        id="wantsToRegister"
-                        checked={shippingInfo.wantsToRegister}
-                        onChange={(e) =>
-                          setShippingInfo({ ...shippingInfo, wantsToRegister: e.target.checked })
-                        }
-                      />
-                      <label htmlFor="wantsToRegister" className="text-sm text-gray-700">
-                        Registrarme
-                      </label>
-                    </div>
-
-                    {/* Campos condicionales de contraseña */}
-                    {shippingInfo.wantsToRegister && (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <input
-                          type="password"
-                          placeholder="Contraseña"
-                          value={shippingInfo.password}
-                          onChange={(e) =>
-                            setShippingInfo({ ...shippingInfo, password: e.target.value })
-                          }
-                          className="w-full border border-gray-300 px-4 py-2 rounded-md"
-                          required
-                        />
-                        <input
-                          type="password"
-                          placeholder="Confirmar contraseña"
-                          value={shippingInfo.confirmPassword}
-                          onChange={(e) =>
-                            setShippingInfo({ ...shippingInfo, confirmPassword: e.target.value })
-                          }
-                          className="w-full border border-gray-300 px-4 py-2 rounded-md"
-                          required
-                        />
-                      </div>
-                    )}
+                    <CheckoutAccountOption />
                   </div>
 
                   <div className="flex justify-between items-center mb-4">

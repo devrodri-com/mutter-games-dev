@@ -1,27 +1,35 @@
 // src/admin/TiptapEditor.tsx
-import React from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
-import TextStyle from '@tiptap/extension-text-style';
+import { TextStyle } from '@tiptap/extension-text-style';
 import Color from '@tiptap/extension-color';
 
 type Props = {
   content: string;
   onChange: (value: string) => void;
   withDefaultStyles?: boolean;
+  basicFormatting?: boolean;
+  label?: string;
 };
 
 export default function TiptapEditor({
   content,
   onChange,
   withDefaultStyles = false,
+  basicFormatting = false,
+  label,
 }: Props) {
   const editor = useEditor({
-    extensions: [StarterKit, Underline, TextStyle, Color],
+    // Preserve the existing HTML schema and keyboard behavior across StarterKit 3.
+    extensions: [StarterKit.configure({ link: false, underline: false, trailingNode: false, listKeymap: false,
+      ...(basicFormatting ? { heading: { levels: [2, 3, 4] }, orderedList: false } : {}) }), Underline,
+      ...(basicFormatting ? [] : [TextStyle, Color])],
+    shouldRerenderOnTransaction: true,
     content,
     editorProps: {
       attributes: {
+        ...(label ? { 'aria-label': label, role: 'textbox' } : {}),
         class: withDefaultStyles
           ? 'prose max-w-full min-h-[150px] border border-gray-300 rounded-md p-3 focus:outline-none focus:ring-2 focus:ring-blue-500'
           : '',
@@ -44,7 +52,7 @@ export default function TiptapEditor({
             editor.isActive('bold') ? 'bg-black text-white' : 'bg-gray-200'
           }`}
         >
-          Bold
+          Negrita
         </button>
         <button
           type="button"
@@ -53,7 +61,7 @@ export default function TiptapEditor({
             editor.isActive('italic') ? 'bg-black text-white' : 'bg-gray-200'
           }`}
         >
-          Italic
+          Cursiva
         </button>
         <button
           type="button"
@@ -62,7 +70,7 @@ export default function TiptapEditor({
             editor.isActive('underline') ? 'bg-black text-white' : 'bg-gray-200'
           }`}
         >
-          Underline
+          Subrayado
         </button>
         <button
           type="button"
@@ -73,13 +81,13 @@ export default function TiptapEditor({
         >
           H2
         </button>
-        <input
+        {!basicFormatting && <input
           type="color"
           onInput={(e) =>
-            editor.chain().focus().setColor((e.target as HTMLInputElement).value).run()
+            editor.chain().focus().setColor(e.currentTarget.value).run()
           }
           className="w-8 h-8 p-0 border rounded cursor-pointer"
-        />
+        />}
       </div>
       <EditorContent editor={editor} />
     </div>

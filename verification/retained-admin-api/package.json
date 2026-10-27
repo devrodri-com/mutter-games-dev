@@ -1,0 +1,72 @@
+{
+    "name": "mutter-games-admin-api",
+    "version": "1.0.0",
+    "private": true,
+    "scripts": {
+        "dev": "vercel dev",
+        "start": "node",
+        "check:vercel-functions": "node scripts/check-vercel-functions-limit.js",
+        "typecheck": "find api -name '*.ts' -print0 | xargs -0 tsc --noEmit --skipLibCheck --moduleResolution node --target ES2022 --module commonjs --esModuleInterop",
+        "audit:prod": "npm audit --omit=dev --audit-level=moderate",
+        "audit:all": "npm audit --audit-level=high",
+        "test": "tsx --test tests/*.test.ts",
+        "check:packaging": "node scripts/verify-api-packaging.cjs",
+        "test:busboy": "node scripts/test-busboy.cjs",
+        "install:controlled": "node scripts/braces-remediation/install.cjs",
+        "check:braces": "node scripts/braces-remediation/control.cjs verify",
+        "predev": "node scripts/braces-remediation/control.cjs verify",
+        "precheck:vercel-functions": "node scripts/braces-remediation/control.cjs verify",
+        "pretypecheck": "node scripts/braces-remediation/control.cjs verify",
+        "pretest": "node scripts/braces-remediation/control.cjs verify",
+        "precheck:packaging": "node scripts/braces-remediation/control.cjs verify",
+        "pretest:busboy": "node scripts/braces-remediation/control.cjs verify",
+        "test:braces": "node --test scripts/braces-remediation/*.check.cjs",
+        "pretest:braces": "node scripts/braces-remediation/control.cjs verify",
+        "test:release-gate": "node --test scripts/release-gate/*.check.cjs",
+        "release:verify": "node scripts/release-gate/cli.cjs verify-pair",
+        "release:publication-check": "node scripts/release-gate/cli.cjs publication-check",
+        "test:dependency-six": "node --test scripts/dependency-six/*.check.cjs scripts/dependency-six-tests/*.check.cjs",
+        "check:dependency-six": "node scripts/dependency-six/inventory.cjs",
+        "pretest:dependency-six": "node scripts/dependency-six/preflight.cjs",
+        "precheck:dependency-six": "node scripts/braces-remediation/control.cjs verify"
+    },
+    "dependencies": {
+        "firebase-admin": "13.10.0"
+    },
+    "devDependencies": {
+        "@vercel/node": "5.8.0",
+        "tsx": "4.21.0",
+        "typescript": "5.9.3"
+    },
+    "packageManager": "npm@9.9.4",
+    "overrides": {
+        "protobufjs": "7.6.5",
+        "@protobufjs/utf8": "1.1.1",
+        "jsonwebtoken": {
+            "jws": "3.2.3"
+        },
+        "google-auth-library": {
+            "jws": "4.0.1"
+        },
+        "gtoken": {
+            "jws": "4.0.1"
+        },
+        "path-to-regexp": "6.3.0",
+        "undici": "6.28.1",
+        "minimatch": "10.2.5",
+        "smol-toml": "1.9.0",
+        "ajv": "8.20.0",
+        "@grpc/grpc-js": "1.14.5",
+        "@tootallnate/once": "2.0.1",
+        "form-data": "2.5.6",
+        "websocket-driver": "0.7.5",
+        "brace-expansion": "5.0.12",
+        "fast-uri": "3.1.8",
+        "js-yaml": "4.3.2",
+        "tar": "7.5.21",
+        "uuid": "11.1.1",
+        "firebase-admin": {
+            "@fastify/busboy": "3.2.2"
+        }
+    }
+}

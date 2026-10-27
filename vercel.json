@@ -1,13 +1,6 @@
 {
-  "version": 2,
-  "builds": [
-    { "src": "package.json", "use": "@vercel/static-build" },
-    { "src": "api/create-mp-preference.ts", "use": "@vercel/node" }
-  ],
-  "routes": [
-    { "src": "/api/orders", "dest": "https://mutter-games-admin-api-prod.vercel.app/api/orders" },
-    { "src": "/api/create-mp-preference", "dest": "/api/create-mp-preference.ts" },
-    { "handle": "filesystem" },
-    { "src": ".*", "dest": "/index.html" }
-  ]
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "git": {
+    "deploymentEnabled": false
+  }
 }

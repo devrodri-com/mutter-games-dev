@@ -2,13 +2,17 @@
 import { initializeApp, getApps } from "firebase/app";
 import { getFirestore, connectFirestoreEmulator } from "firebase/firestore";
 import {
-  getAuth,
-  signInAnonymously,
+  initializeAuth,
   onAuthStateChanged,
-  setPersistence,
   browserLocalPersistence,
+  indexedDBLocalPersistence,
+  browserSessionPersistence,
+  browserPopupRedirectResolver,
   connectAuthEmulator,
 } from "firebase/auth";
+import { bootstrapAnonymousVisitor } from './utils/anonymousBootstrap';
+import { readGuestPurchaseTransition } from './utils/guestPurchaseState';
+import { recordObservedIdentity } from './utils/observedIdentity';
 
 const firebaseConfig = {
   // Siempre usamos la env; eliminamos la API key hardcodeada
@@ -23,7 +27,13 @@ const firebaseConfig = {
 // ——— App singleton (evita reinicializar en HMR) ———
 const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
 const db = getFirestore(app);
-const auth = getAuth(app);
+// Choose persistence while the official SDK creates its user manager, so its
+// cross-tab listener belongs to the final store. The remaining old default
+// stores stay in the hierarchy for official same-UID startup migration.
+const auth = initializeAuth(app, {
+  persistence: [browserLocalPersistence, indexedDBLocalPersistence, browserSessionPersistence],
+  popupRedirectResolver: browserPopupRedirectResolver,
+});
 
 // Explicit isolated development only: connect before auth or reads can run.
 if (import.meta.env.VITE_USE_FIREBASE_EMULATORS === 'true') {
@@ -33,7 +43,8 @@ if (import.meta.env.VITE_USE_FIREBASE_EMULATORS === 'true') {
 }
 
 // Persistencia local + sesión anónima para invitados
-setPersistence(auth, browserLocalPersistence).catch(() => {});
+const persistenceReady = auth.authStateReady();
+persistenceReady.catch(() => { if (import.meta.env.DEV) console.error('Local authentication persistence unavailable'); });
 
 let _authResolved = false;
 let _resolveAuthReady: ((uid: string) => void) | null = null;
@@ -43,12 +54,13 @@ export const authReady: Promise<string> = new Promise((res) => {
 
 onAuthStateChanged(auth, (user) => {
   if (!user) {
-    // Si no hay usuario, creamos uno anónimo
-    signInAnonymously(auth).catch((err) => {
-      if (import.meta.env.DEV) console.error("Anonymous sign-in failed", err);
-    });
+    // Unknown null can also be a historical credential invalidated by the SDK.
+    // Visiting a page never creates an identity; the public action owns that.
     return; // esperamos el próximo callback con el user
   }
+
+  try { recordObservedIdentity(auth, user.uid); }
+  catch { if (import.meta.env.DEV) console.error('Observed authentication state unavailable'); }
 
   if (!_authResolved && _resolveAuthReady) {
     _resolveAuthReady(user.uid);
@@ -59,8 +71,12 @@ onAuthStateChanged(auth, (user) => {
 
 // Utilidad para cuando quieras el UID ya listo
 export const ensureAuthReady = async (): Promise<string> => {
+  await persistenceReady;
+  await auth.authStateReady();
   if (auth.currentUser?.uid) return auth.currentUser.uid;
-  return authReady; // espera a que se resuelva
+  const transition = readGuestPurchaseTransition(auth);
+  if (transition && transition.phase !== 'SETTLED') throw new Error('Terminá de iniciar la compra nueva antes de continuar.');
+  return (await bootstrapAnonymousVisitor(auth)).uid;
 };
 
 export const getCurrentUid = (): string | null => auth.currentUser?.uid ?? null;

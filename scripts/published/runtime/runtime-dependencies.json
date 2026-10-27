@@ -1,0 +1,15 @@
+{
+  "note": "Runtime dependency bytes are pinned, not vendored. This record cannot authorize deployment.",
+  "files": [
+    {
+      "path": ".vercel/output/functions/api/access.func/runtime/LICENSE",
+      "bytes": 157609,
+      "sha256": "5888dbb9a1d2b18f2c3e6c5f6af1b39de658372b402a0577b002777f14c62ace"
+    },
+    {
+      "path": ".vercel/output/functions/api/access.func/runtime/node",
+      "bytes": 126879696,
+      "sha256": "e32e2d16081cf644f88392934288086e7662529d0d43277c34f7aad2207cfafb"
+    }
+  ]
+}

@@ -1,0 +1,54 @@
+{
+  "version": 3,
+  "routes": [
+    {
+      "src": "^/api/access/session$",
+      "dest": "/api/access"
+    },
+    {
+      "src": "^/api/access/recovery/request$",
+      "dest": "/api/access"
+    },
+    {
+      "src": "^/api/access/recovery/complete$",
+      "dest": "/api/access"
+    },
+    {
+      "src": "^/api/access/new-purchase-choice$",
+      "dest": "/api/access"
+    },
+    {
+      "src": "^/api/catalog-edit$",
+      "dest": "/api/access"
+    },
+    {
+      "src": "^/api/catalog-media$",
+      "dest": "/api/access"
+    },
+    {
+      "src": "^/api/create-mp-preference$",
+      "dest": "/api/access"
+    },
+    {
+      "src": "^/api/internal/web-stock-reconcile$",
+      "dest": "/api/access"
+    },
+    {
+      "src": "^/api(?:/.*)?$",
+      "status": 503
+    },
+    {
+      "handle": "filesystem"
+    },
+    {
+      "src": "^/.*$",
+      "dest": "/index.html"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/internal/web-stock-reconcile",
+      "schedule": "*/5 * * * *"
+    }
+  ]
+}

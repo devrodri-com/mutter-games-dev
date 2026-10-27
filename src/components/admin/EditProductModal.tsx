@@ -9,6 +9,7 @@ import { uploadImageToImageKit } from "../../utils/imagekitUtils";
 
 import TiptapEditor from "./TiptapEditor";
 import { TIPOS } from "../../constants/tipos";
+import ScopedCatalogEditor, { type ScopedCatalogEditorProps } from './ScopedCatalogEditor';
 
 interface Props {
   product: Product;
@@ -22,7 +23,13 @@ interface Props {
   open: boolean;
 }
 
-export default function EditProductModal({
+// The limited recovery editor owns its raw draft and confirmation lifecycle in
+// a separate module. The existing general editor remains outside that scope.
+export default function EditProductModal(props: Props | ScopedCatalogEditorProps) {
+  return 'mode' in props ? <ScopedCatalogEditor {...props} /> : <LegacyEditProductModal {...props} />;
+}
+
+function LegacyEditProductModal({
   product,
   onSave,
   onClose,
@@ -193,8 +200,8 @@ export default function EditProductModal({
       if (url) {
         setImages((prev) => [...prev, url]);
       }
-    } catch (e) {
-      alert("Error subiendo imagen");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'La carga quedó sin confirmar. No vuelvas a enviarla.');
     }
   };
   const removeImage = (idx: number) => {

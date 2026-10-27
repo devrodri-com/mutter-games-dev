@@ -9,7 +9,13 @@ import ModalConfirm from "./ModalConfirm";
 import { normalizeProduct } from "@/utils/normalizeProduct";
 import { fetchCategories, fetchAllSubcategories } from "@/firebase/categories";
 import { adminApiFetch } from "../../utils/adminApi";
+import { useAuth } from "../../context/AuthContext";
+import { JOHN_CATALOG_SCOPE, readAdminCatalog, requireWritableCatalog, catalogProductForDisplay, type AdminCatalogProduct } from "../../firebase/adminCatalogRead";
 import { editProductChanges } from "../../domain/productEdit";
+import { writeAdminProduct } from '../../utils/adminProductWrites';
+import { openCatalogEdit, reopenSupersededCatalogEdit, saveCatalogEdit, type CatalogEditOpen } from '../../utils/catalogEditClient';
+import type { CatalogEditChanges, CatalogEditDocument } from '../../domain/catalogEdit';
+import PublicationList from './publication-list';
 
 const PAGE_SIZE = 50; // cantidad de productos por página en el panel admin
 
@@ -21,8 +27,14 @@ async function deleteProductAdminAPI(id: string) {
 }
 
 export default function ProductList() {
+  const { credentialScope } = useAuth();
+  return credentialScope === JOHN_CATALOG_SCOPE ? <PublicationList /> : <LegacyProductList />;
+}
+
+function LegacyProductList() {
   const navigate = useNavigate();
-  const [products, setProducts] = useState<Product[]>([]);
+  const { user, credentialScope } = useAuth();
+  const [products, setProducts] = useState<AdminCatalogProduct[]>([]);
   const [categoryFilter, setCategoryFilter] = useState("Todas");
   const [searchTerm, setSearchTerm] = useState("");
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -31,6 +43,10 @@ export default function ProductList() {
   const [error, setError] = useState<string | null>(null);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [limitedRecovery, setLimitedRecovery] = useState(true);
+  const readOnly = limitedRecovery || credentialScope === JOHN_CATALOG_SCOPE;
+  const canEditExisting = !loading && credentialScope === JOHN_CATALOG_SCOPE;
+  const [scopedEditor, setScopedEditor] = useState<CatalogEditOpen | null>(null);
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
@@ -38,43 +54,42 @@ export default function ProductList() {
   const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
+    let cancelled = false;
+    setProducts([]);
+    setLimitedRecovery(true);
+    setEditingProduct(null);
+    setIsModalOpen(false);
+    setScopedEditor(null);
+    setConfirmDeleteId(null);
     const loadData = async () => {
       setLoading(true);
       setError(null);
       try {
-        const fetchedCategories = await fetchCategories();
-        const fetchedSubcategories = (await fetchAllSubcategories()) as Subcategory[];
-
-        // ✅ Guardamos en el estado para usos futuros
-        setCategories(fetchedCategories);
-        setSubcategories(fetchedSubcategories);
-
-        const response = await adminApiFetch("/api/admin/products");
-        const productsData = response.products || [];
-
-        const normalizedProducts: (Product | null)[] = productsData.map((p: any) => {
-          try {
-            return normalizeProduct(p, fetchedCategories, fetchedSubcategories);
-          } catch (e) {
-            console.warn("Error normalizando producto:", p, e);
-            return null;
-          }
-        });
-
-        setProducts(normalizedProducts.filter((p): p is Product => p !== null));
-      } catch (error) {
-        console.error("Error al cargar productos:", error);
-        setError("No se pudieron cargar los productos. Intenta nuevamente.");
+        const result = await readAdminCatalog();
+        if (cancelled) return;
+        setCategories(result.categories);
+        setSubcategories(result.subcategories);
+        setProducts(result.products);
+        setLimitedRecovery(result.readOnly);
+      } catch {
+        if (!cancelled) setError("No se pudieron cargar los productos. Intenta nuevamente.");
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
-
-    loadData();
-  }, []);
+    void loadData();
+    return () => { cancelled = true; };
+  }, [user?.uid, credentialScope]);
 
   const handleEdit = async (id: string) => {
+    if (canEditExisting) {
+      try { setError(null); setScopedEditor(await openCatalogEdit(id)); }
+      catch (failure: unknown) { setError(failure instanceof Error ? failure.message : 'No se pudo abrir la publicación.'); }
+      return;
+    }
+    if (readOnly) return;
     try {
+      await requireWritableCatalog();
       const response = await adminApiFetch(`/api/admin/products/${id}`);
       const raw = response.product || response;
       
@@ -95,12 +110,23 @@ export default function ProductList() {
     }
   };
 
+  const handleScopedSave = async (document: CatalogEditDocument, changes: CatalogEditChanges) => {
+    const verified = await saveCatalogEdit(document, changes);
+    // The client returns only after an exact server re-read. Update this row
+    // from that verified document; a second list request cannot trigger a resend.
+    const row = catalogProductForDisplay(verified.id, verified.product, categories, subcategories);
+    setProducts(previous => previous.map(product => product.id === verified.id ? row : product));
+    setScopedEditor(null);
+  };
+
   const handleSaveProduct = async (updatedProduct: Product) => {
+    if (readOnly) throw new Error("Este acceso permite solamente ver las publicaciones.");
     try {
+      await requireWritableCatalog();
       if (updatedProduct.id) {
         if (!editingProduct?.version) throw new Error('Cerrá y volvé a abrir el producto para editar.');
         const changes = editProductChanges(editingProduct, updatedProduct);
-        if (Object.keys(changes).length) await adminApiFetch(`/api/admin/products/${updatedProduct.id}`, {method:'PATCH',body:JSON.stringify({version:editingProduct.version,intent:'edit',changes})});
+        if (Object.keys(changes).length) await writeAdminProduct(`/api/admin/products/${updatedProduct.id}`, 'PATCH', {version:editingProduct.version,intent:'edit',changes});
         
         // 🔁 Refrescamos subcategorías manualmente para asegurar consistencia
         const freshSubcategories = await fetchAllSubcategories();
@@ -117,7 +143,7 @@ export default function ProductList() {
         // Refrescar la lista completa de productos
         const response = await adminApiFetch("/api/admin/products");
         const refreshedProducts = response.products || [];
-        const normalizedRefreshed: (Product | null)[] = refreshedProducts.map((p: any) => {
+        const normalizedRefreshed: (Product | null)[] = refreshedProducts.map((p: unknown) => {
           try {
             return normalizeProduct(p, categories, freshSubcategories);
           } catch (e) {
@@ -136,17 +162,19 @@ export default function ProductList() {
   };
 
   const toggleActive = async (id: string) => {
+    if (readOnly) return;
     try {
+      await requireWritableCatalog();
       const product = products.find((p) => p.id === id);
       if (!product) return;
       const fresh = await adminApiFetch(`/api/admin/products/${id}`);
-      await adminApiFetch(`/api/admin/products/${id}`, {method:'PATCH',body:JSON.stringify({version:fresh.product.version,intent:'publication',changes:{active:product.active !== true}})});
+      await writeAdminProduct(`/api/admin/products/${id}`, 'PATCH', {version:fresh.product.version,intent:'publication',changes:{active:product.active !== true}});
       
       // Refrescar la lista completa de productos
       const response = await adminApiFetch("/api/admin/products");
       const refreshedProducts = response.products || [];
       const freshSubcategories = await fetchAllSubcategories();
-      const normalizedRefreshed: (Product | null)[] = refreshedProducts.map((p: any) => {
+      const normalizedRefreshed: (Product | null)[] = refreshedProducts.map((p: unknown) => {
         try {
           return normalizeProduct(p, categories, freshSubcategories);
         } catch (e) {
@@ -162,20 +190,23 @@ export default function ProductList() {
   };
 
   const handleDeleteClick = (id: string, name: string) => {
+    if (readOnly) { setError('Los borrados no están incluidos en esta recuperación. Las compras siguen cerradas.'); return; }
     setConfirmDeleteId(id);
     setConfirmDeleteName(name);
   };
 
   const confirmDelete = async () => {
+    if (readOnly) return;
     if (confirmDeleteId) {
       try {
+        await requireWritableCatalog();
         await deleteProductAdminAPI(confirmDeleteId);
         
         // Refrescar la lista completa de productos
         const response = await adminApiFetch("/api/admin/products");
         const refreshedProducts = response.products || [];
         const freshSubcategories = await fetchAllSubcategories();
-        const normalizedRefreshed: (Product | null)[] = refreshedProducts.map((p: any) => {
+        const normalizedRefreshed: (Product | null)[] = refreshedProducts.map((p: unknown) => {
           try {
             return normalizeProduct(p, categories, freshSubcategories);
           } catch (e) {
@@ -224,12 +255,12 @@ export default function ProductList() {
     <div className="bg-white p-4 rounded shadow">
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-lg font-semibold">Publicaciones</h1>
-        <button
+        {!readOnly && !loading && <button
           onClick={() => navigate("/admin/productForm")}
           className="px-4 py-2 bg-[#FF2D55] text-white rounded-md hover:bg-[#CC1E44] transition-colors font-medium"
         >
           Crear producto
-        </button>
+        </button>}
       </div>
 
       {error && (
@@ -286,13 +317,19 @@ export default function ProductList() {
                 <th className="py-2 px-3 text-right whitespace-nowrap min-w-[6rem]">Precio</th>
                 <th className="py-2 px-3 text-center whitespace-nowrap min-w-[3.5rem]">Stock</th>
                 <th className="py-2 px-3 text-left whitespace-nowrap min-w-[6rem]">Estado</th>
-                <th className="py-2 px-3 text-left whitespace-nowrap min-w-[13rem]">Acciones</th>
+                {(!readOnly || canEditExisting) && <th className="py-2 px-3 text-left whitespace-nowrap min-w-[13rem]">Acciones</th>}
               </tr>
             </thead>
             <tbody>
               {paginatedProducts.map((product) => (
                 <tr key={product.id} className="border-b hover:bg-gray-50 transition-colors">
-                  <td className="py-2 px-3">{product.title.es}</td>
+                  <td className="py-2 px-3">
+                    {product.title.es}
+                    {readOnly && Boolean(product.images?.length) && <div className="mt-2 flex flex-wrap gap-2">
+                      {product.images?.map((image, index) => <img key={`${image}-${index}`} src={image}
+                        alt={`${product.title.es}, imagen ${index + 1}`} loading="lazy" className="h-16 w-16 rounded object-contain" />)}
+                    </div>}
+                  </td>
                   <td className="py-2 px-3 whitespace-nowrap">
                     {typeof product.category === "object"
                       ? product.category?.name
@@ -304,39 +341,41 @@ export default function ProductList() {
                       : "Sin subcategoría"}
                   </td>
                   <td className="py-2 px-3 text-right whitespace-nowrap">
-                    $ {product.variants?.[0]?.options?.[0]?.priceUSD ?? product.priceUSD}
+                    {readOnly && product.priceUSD === undefined ? 'Sin precio' : <>$ {product.variants?.[0]?.options?.[0]?.priceUSD ?? product.priceUSD}</>}
                   </td>
-                  <td className="py-2 px-3 text-center whitespace-nowrap">{product.stockTotal ?? 0}</td>
+                  <td className="py-2 px-3 text-center whitespace-nowrap">{product.stockTotal ?? (readOnly ? '—' : 0)}</td>
                   <td className="py-2 px-3 whitespace-nowrap">
                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${product.active ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
                       {product.active ? "Activo" : "Inactivo"}
                     </span>
                   </td>
-                  <td className="py-2 px-3 whitespace-nowrap">
+                  {(!readOnly || canEditExisting) && <td className="py-2 px-3 whitespace-nowrap">
                     <div className="flex gap-1.5 justify-start">
                       <button
-                        onClick={() => handleEdit(product.id!)}
+                        onClick={() => handleEdit(product.id)}
                         className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-sm bg-white border border-gray-300 text-gray-800 rounded hover:bg-gray-100 transition"
                       >
                         <Pencil className="w-4 h-4" />
                         <span>Editar</span>
                       </button>
-                      <button
-                        onClick={() => toggleActive(product.id!)}
+                      {!readOnly && <button
+                        onClick={() => toggleActive(product.id)}
                         className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-sm bg-yellow-50 border border-yellow-200 text-yellow-800 rounded hover:bg-yellow-100 transition"
                       >
                         <Power className="w-4 h-4" />
                         <span>{product.active ? "Desactivar" : "Activar"}</span>
-                      </button>
-                      <button
-                        onClick={() => handleDeleteClick(product.id!, product.title.es)}
+                      </button>}
+                      {!readOnly && <button
+                        onClick={() => handleDeleteClick(product.id, product.title.es)}
+                        disabled={readOnly}
+                        title={readOnly ? 'Los borrados siguen cerrados durante esta recuperación.' : 'Eliminar producto'}
                         className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-sm bg-red-50 border border-red-300 text-red-800 rounded hover:bg-red-100 transition"
                       >
                         <Trash2 className="w-4 h-4" />
                         <span>Eliminar</span>
-                      </button>
+                      </button>}
                     </div>
-                  </td>
+                  </td>}
                 </tr>
               ))}
             </tbody>
@@ -383,7 +422,7 @@ export default function ProductList() {
         </div>
       )}
 
-      {confirmDeleteId && (
+      {!readOnly && confirmDeleteId && (
         <ModalConfirm
           title="¿Eliminar producto?"
           message={`¿Seguro que quieres eliminar "${confirmDeleteName}"?`}
@@ -393,7 +432,7 @@ export default function ProductList() {
         />
       )}
 
-      {isModalOpen && editingProduct && (
+      {!readOnly && isModalOpen && editingProduct && (
         <EditProductModal
           key={editingProduct.id}
           product={editingProduct}
@@ -406,6 +445,10 @@ export default function ProductList() {
           open={isModalOpen}
         />
       )}
+      {canEditExisting && scopedEditor && <EditProductModal key={scopedEditor.document.id + scopedEditor.document.version} mode="scoped"
+        initial={scopedEditor} categories={categories} onSave={handleScopedSave}
+        onReopen={async () => { setScopedEditor(await reopenSupersededCatalogEdit(scopedEditor.document.id)); }}
+        onClose={() => setScopedEditor(null)} />}
     </div>
   );
 }

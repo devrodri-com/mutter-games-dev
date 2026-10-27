@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { handleImageUpload } from "../../utils/handleImageUpload";
 import { TIPOS } from "../../constants/tipos";
 import ImageUploader from "./ImageUploader";
+import { writeAdminProduct } from '../../utils/adminProductWrites';
 import TiptapEditor from "./TiptapEditor";
 import { useForm, Controller, SubmitHandler } from "react-hook-form";
 import { useNavigate, useParams } from "react-router-dom";
@@ -27,7 +28,6 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { importProductFromCJ } from "../../firebaseUtils";
 import { fetchSubcategories, fetchCategories } from "@/firebase/categories";
-import { adminApiFetch } from "../../utils/adminApi";
 
 // --- UI helpers (solo estilos, sin lógica) ---
 const UI = {
@@ -156,10 +156,7 @@ const generateCleanSlug = (title: string): string => {
 };
 
 async function createProductAdminAPI(newProduct: Partial<Product>) {
-  const { id } = await adminApiFetch("/api/admin/products", {
-    method: "POST",
-    body: JSON.stringify(newProduct),
-  });
+  const { id } = await writeAdminProduct('/api/admin/products', 'POST', {...newProduct});
   return id;
 }
 
@@ -558,11 +555,11 @@ useEffect(() => {
       setSuccessMessage("¡Producto creado correctamente!");
       setTimeout(() => {
         setSuccessMessage("");
-        navigate("/admin/productos");
+        navigate("/admin/productList");
       }, 2000);
     } catch (error) {
       console.error("[CreateProductForm] Error al crear producto:", error);
-      setError("Error al crear el producto. Intente nuevamente.");
+      setError(error instanceof Error ? error.message : 'No pudimos confirmar el producto. No vuelvas a enviarlo sin comprobar su estado.');
     } finally {
       setLoading(false);
     }

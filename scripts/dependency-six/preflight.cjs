@@ -1,0 +1,12 @@
+'use strict';
+const path = require('node:path');
+const fs = require('node:fs');
+const { inspect: verifyBraces } = require('../braces-remediation/control.cjs');
+const { inspect } = require('./inventory.cjs');
+const root = path.resolve(__dirname, '../..');
+verifyBraces(root);
+const scope = fs.existsSync(path.join(root, 'functions/package.json')) ? 'root' : 'admin';
+const records = [inspect(root, scope)];
+if (scope === 'root') records.push(inspect(path.join(root, 'functions'), 'functions'));
+if (scope === 'root' && process.env.MUTTER_ADMIN_API_SOURCE) records.push(inspect(process.env.MUTTER_ADMIN_API_SOURCE, 'admin'));
+console.log(JSON.stringify({ dependencySixPreflight: records }));

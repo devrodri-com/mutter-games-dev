@@ -1,0 +1,225 @@
+// Firestore rules
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---- helpers ----
+    // A Firebase identity alone cannot admit an old credential. Admission belongs
+    // to one protected session, never to every token for the same UID.
+    function hasCredentialSession() {
+      return request.auth != null
+        && 'firebase' in request.auth.token && request.auth.token.firebase is map
+        && 'sign_in_provider' in request.auth.token.firebase
+        && request.auth.token.firebase.sign_in_provider == 'custom'
+        && 'mutterCredentialSession' in request.auth.token
+        && request.auth.token.mutterCredentialSession is string
+        && request.auth.token.mutterCredentialSession.matches('[a-f0-9]{64}')
+        && 'mutterCredentialEpoch' in request.auth.token
+        && request.auth.token.mutterCredentialEpoch is string
+        && request.auth.token.mutterCredentialEpoch.matches('[a-zA-Z0-9_-]{16,100}');
+    }
+    function credentialSessionMatches() {
+      let control = get(/databases/$(database)/documents/operations/credentialAccessCutover).data;
+      let session = get(/databases/$(database)/documents/credentialSessions/$(request.auth.token.mutterCredentialSession)).data;
+      let account = get(/databases/$(database)/documents/credentialAccess/$(request.auth.uid)).data;
+      return control.schema == 1 && control.phase == 'ENFORCED'
+        && control.epoch is string && control.epoch.matches('[a-zA-Z0-9_-]{16,100}')
+        && control.legacyCutoffMs is int && control.legacyCutoffMs > 0 && control.legacyCutoffMs <= 9007199254740991
+        && request.auth.token.mutterCredentialEpoch == control.epoch
+        && session.schema == 1 && session.status == 'ACTIVE'
+        && session.uid == request.auth.uid && session.epoch == control.epoch
+        && session.expiresAtMs is int && session.expiresAtMs > request.time.toMillis() && session.expiresAtMs <= 9007199254740991
+        // Same seven-day upper bound as credential-access-state.ts (Rules has no module imports).
+        && session.expiresAtMs <= request.time.toMillis() + 604800000
+        && session.proofKind in ['NEW_POST_CUTOVER', 'RECOVERY_CHANNEL']
+        && session.roles is map && session.roles.admin is bool && session.roles.superadmin is bool
+        && account.schema == 1 && account.uid == request.auth.uid && account.epoch == control.epoch
+        && account.roles is map && account.roles.admin is bool && account.roles.superadmin is bool
+        && account.channelStatus in ['UNVERIFIED', 'INDEPENDENTLY_VERIFIED']
+        && (account.recoveryEmail == null || (account.recoveryEmail is string && account.recoveryEmail.size() <= 254
+          && account.recoveryEmail.matches('[^\\s@]+@[^\\s@]+\\.[^\\s@]+')))
+        && (account.channelEvidenceSha256 == null || (account.channelEvidenceSha256 is string
+          && account.channelEvidenceSha256.matches('[a-f0-9]{64}')))
+        && (account.channelStatus != 'INDEPENDENTLY_VERIFIED'
+          || (account.recoveryEmail is string && account.channelEvidenceSha256 is string))
+        && ((session.proofKind == 'NEW_POST_CUTOVER' && account.status == 'NATIVE_POST_CUTOVER')
+          || (session.proofKind == 'RECOVERY_CHANNEL' && account.status == 'RECOVERED'
+            && account.channelStatus == 'INDEPENDENTLY_VERIFIED'));
+    }
+    function isAuthed() {
+      return hasCredentialSession() && credentialSessionMatches();
+    }
+    function isAdmin() {
+      let session = get(/databases/$(database)/documents/credentialSessions/$(request.auth.token.mutterCredentialSession)).data;
+      let account = get(/databases/$(database)/documents/credentialAccess/$(request.auth.uid)).data;
+      return isAuthed() && (
+        ('admin' in request.auth.token && request.auth.token.admin == true && session.roles.admin == true && account.roles.admin == true)
+        || ('superadmin' in request.auth.token && request.auth.token.superadmin == true && session.roles.superadmin == true && account.roles.superadmin == true)
+      );
+    }
+
+    // Buyer schema 2 is separate from the unchanged legacy admission above.
+    // A locator copied from Firestore is not proof: the custom token must carry
+    // the secret whose SHA-256 identifies the protected session document.
+    function buyerControlMatches(control, uid) {
+      let epoch = control.epoch;
+      let cutoff = control.legacyCutoffMs;
+      let subject = control.subjectUid;
+      let additional = control.get('additionalSubject', {});
+      return control.schema == 2 && control.phase == 'ENFORCED'
+        && control.scope == 'JOHN_ADMIN_CLOSED_V1'
+        && control.capabilityFormat == 'SHA256_LOCATOR_V1'
+        && epoch is string && epoch.matches('[a-zA-Z0-9_-]{16,100}')
+        && cutoff is int && cutoff > 0 && cutoff <= 9007199254740991
+        && subject is string && subject.matches('[^/]{1,128}') && uid != subject
+        && (!('additionalSubject' in control) || (
+          additional is map && additional.keys().hasOnly(['uid', 'email'])
+          && additional.uid is string && additional.uid.matches('[^/]{1,128}')
+          && additional.uid != subject && additional.uid != uid
+          && additional.email is string && additional.email.size() <= 254
+          && additional.email == additional.email.lower()
+          && additional.email.matches('[^\\s@]+@[^\\s@]+\\.[^\\s@]+')
+        ));
+    }
+    function buyerAccountMatches(account, control, uid, now) {
+      let roles = account.roles;
+      let created = account.nativeCreatedAtMs;
+      return account.schema == 2 && account.scope == 'BUYER_POST_CUTOVER_V1'
+        && account.uid == uid && account.epoch == control.epoch && account.status == 'NATIVE_POST_CUTOVER'
+        && roles is map && roles.admin == false && roles.superadmin == false
+        && account.recoveryEmail == null && account.channelStatus == 'UNVERIFIED' && account.channelEvidenceSha256 == null
+        && !('passwordProof' in account) && !('renewedToLocator' in account)
+        && account.get('restrictionAction', null) == null && account.get('restrictedAtMs', null) == null
+        && created is int && created > control.legacyCutoffMs && created <= now && created <= 9007199254740991;
+    }
+    function buyerSessionRecordMatches(session, account, control, uid, now) {
+      let roles = session.roles;
+      let expires = session.expiresAtMs;
+      let renewed = session.get('renewedToLocator', null);
+      let created = session.nativeCreatedAtMs;
+      return session.schema == 2 && session.scope == 'BUYER_POST_CUTOVER_V1'
+        && session.capabilityFormat == 'SHA256_LOCATOR_V1' && session.status == 'ACTIVE'
+        && session.uid == uid && session.epoch == control.epoch
+        && session.proofKind == 'NEW_POST_CUTOVER' && !('passwordProof' in session)
+        && roles is map && roles.admin == false && roles.superadmin == false
+        && expires is int && expires > now && expires <= 9007199254740991 && expires <= now + 604800000
+        && (!('renewedToLocator' in session) || (renewed is string && renewed.matches('[a-f0-9]{64}')))
+        && created is int && created == account.nativeCreatedAtMs;
+    }
+    function buyerTokenMatches(token) {
+      let firebase = token.get('firebase', {});
+      let secret = token.get('mutterCredentialSession', null);
+      let epoch = token.get('mutterCredentialEpoch', null);
+      return firebase is map && firebase.get('sign_in_provider', null) == 'custom'
+        && secret is string && secret.matches('[a-f0-9]{64}')
+        && epoch is string && epoch.matches('[a-zA-Z0-9_-]{16,100}')
+        && token.get('admin', null) == false && token.get('superadmin', null) == false;
+    }
+    function buyerSessionMatches(token, uid) {
+      let control = get(/databases/$(database)/documents/operations/credentialAccessCutover).data;
+      let locator = hashing.sha256(token.mutterCredentialSession).toHexString().lower();
+      let session = get(/databases/$(database)/documents/credentialSessions/$(locator)).data;
+      let account = get(/databases/$(database)/documents/credentialAccess/$(uid)).data;
+      let now = request.time.toMillis();
+      return buyerControlMatches(control, uid) && token.mutterCredentialEpoch == control.epoch
+        && buyerAccountMatches(account, control, uid, now) && buyerSessionRecordMatches(session, account, control, uid, now);
+    }
+    function buyerScope() {
+      return request.auth != null && request.auth.token.get('mutterCredentialScope', null) == 'BUYER_POST_CUTOVER_V1';
+    }
+    function isBuyer() {
+      return buyerScope() && buyerTokenMatches(request.auth.token) && buyerSessionMatches(request.auth.token, request.auth.uid);
+    }
+    function ownsPrivateData(id) {
+      return request.auth != null && request.auth.uid == id && (buyerScope() ? isBuyer() : isAuthed());
+    }
+
+    // Prepared cutover variant only. Apply under a separately authorized release.
+    // Admin SDK bypasses Rules and must also use the server admission guard.
+    function cutoverOpen() {
+      let control = get(/databases/$(database)/documents/operations/webStockCutover).data;
+      return control.schema == 1 && control.state == 'open'
+        && control.revision is string && control.revision.matches('[a-zA-Z0-9_-]{16,100}')
+        && control.updatedAt is timestamp;
+    }
+    match /operations/{document=**} { allow read, write: if false; }
+    match /credentialSessions/{document=**} { allow read, write: if false; }
+    match /credentialAccess/{document=**} { allow read, write: if false; }
+    match /credentialRecoveryChallenges/{document=**} { allow read, write: if false; }
+
+    // ---- catálogo público ----
+    match /products/{id} {
+      allow read: if true;
+      // Catalogue mutations are server-owned: preserve reservation-aware Admin guards.
+      allow create, update, delete: if false;
+    }
+    match /categories/{id} {
+      allow read: if true;
+      allow create, update, delete: if false;
+    }
+    match /categories/{id}/subcategories/{sid} {
+      allow read: if true;
+      allow create, update, delete: if false;
+    }
+
+    // ---- carrito (doc id = UID) ----
+    match /carts/{cartId} {
+      allow read: if ownsPrivateData(cartId);
+      allow write: if cutoverOpen() && ownsPrivateData(cartId);
+    }
+
+    // ---- órdenes ----
+match /orders/{orderId} {
+  // R1B candidate, NOT DEPLOYED: commercial records are server-owned.
+  allow create: if false;
+
+  // leer: dueño o admin
+  allow read: if buyerScope() ? (isBuyer() && resource.data.uid == request.auth.uid) : (isAuthed() && (
+    resource.data.uid == request.auth.uid || isAdmin()
+  ));
+
+  // actualizar: (si no lo usás, lo dejamos cerrado)
+  allow update: if false;
+
+  // R1B: no browser may remove the durable commercial record.
+  allow delete: if false;
+}
+
+    // Real R1 private intent path; Admin SDK handlers bypass client Rules.
+    match /checkoutIntents/{intentId} { allow read, write: if false; }
+
+    // ---- adminUsers (para validar admin) ----
+    match /adminUsers/{id} {
+  allow read: if isAdmin();
+  allow write: if false;       // nadie escribe desde front — solo backend o consola
+}
+
+    // ---- clients (para el panel “Clientes”) ----
+    match /clients/{id} {
+      // Buyer ownership stays at the UID; changing Auth email cannot claim
+      // a historical email-keyed record. Administrators retain bounded reads.
+      allow create: if cutoverOpen() && (
+        ownsPrivateData(id) && (!buyerScope() || request.resource.data.uid == request.auth.uid)
+      );
+
+      // leer/actualizar: el dueño o cualquier admin
+      allow read: if ownsPrivateData(id) || (!buyerScope() && isAdmin());
+      allow update: if cutoverOpen() && (
+        buyerScope() ? (ownsPrivateData(id) && resource.data.uid == request.auth.uid && request.resource.data.uid == request.auth.uid)
+        : (ownsPrivateData(id) || isAdmin())
+      );
+
+      // borrar: solo admin
+      allow delete: if cutoverOpen() && isAdmin();
+    }
+
+    // ---- usuarios (legacy) ----
+    match /usuarios/{uid} {
+      allow read: if isAuthed() && request.auth.uid == uid;
+      allow write: if cutoverOpen() && isAuthed() && request.auth.uid == uid;
+    }
+
+    // ---- bloqueo por defecto ----
+    match /{document=**} { allow read, write: if false; }
+  }
+}

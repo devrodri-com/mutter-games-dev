@@ -1,0 +1,10 @@
+#!/bin/sh
+set -eu
+cd "${LAMBDA_TASK_ROOT:-/var/task}"
+# Preserve Vercel's environment wrapper without starting its managed Node runtime.
+if [ -n "${AWS_LAMBDA_EXEC_WRAPPER:-}" ]; then
+  wrapper="$AWS_LAMBDA_EXEC_WRAPPER"
+  export AWS_LAMBDA_EXEC_WRAPPER=""
+  exec "$wrapper" "$PWD/runtime/node" "$PWD/runtime-entry.mjs"
+fi
+exec "$PWD/runtime/node" "$PWD/runtime-entry.mjs"

@@ -1,0 +1,9 @@
+{
+  "handler": "bootstrap",
+  "runtime": "provided.al2023",
+  "architecture": "x86_64",
+  "maxDuration": 60,
+  "environment": {},
+  "supportsWrapper": true,
+  "supportsResponseStreaming": false
+}

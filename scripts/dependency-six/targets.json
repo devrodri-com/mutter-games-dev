@@ -1,0 +1,228 @@
+{
+  "schema": 1,
+  "task": "MUTTER_GUEST_REENTRY_AND_SIX_DEPENDENCY_REMEDIATION_20261012",
+  "targets": {
+    "@fastify/busboy": {
+      "name": "@fastify/busboy",
+      "version": "3.2.2",
+      "registry": "https://registry.npmjs.org/@fastify/busboy/3.2.2",
+      "tarball": "https://registry.npmjs.org/@fastify/busboy/-/busboy-3.2.2.tgz",
+      "integrity": "sha512-yXSS27qPExaXeuLvMRMXOLtpipzfQYNjG3FkunDWKGfMYjKuhFXko9CVzqxm8jcF+lmtS9Fd89QNdh9XDjnbNg==",
+      "tarballSha256": "666ef3249028fba7a31acaf922fc8d7d2fdf96da62451b83d84c420c325e7f92",
+      "bytes": 22428,
+      "engines": null,
+      "main": "index.js",
+      "exports": null,
+      "dependencies": null,
+      "files": {
+        "LICENSE": "07544f419a6479527aeb8b012e95ff51f2f9a374e901d1af9668ebd0583003ec",
+        "README.md": "160870498e32c4ad9973dacc2616e8eecdc54adce98802c79aa7606d27107ea5",
+        "deps/dicer/LICENSE": "d06b5d27bbbbe22c36b1fd88406b1208876e2d37d795f5b8eaed951a459a3111",
+        "deps/dicer/lib/Dicer.js": "97bee6ef3a446346bb810944215969536552e95db76c40761d6ce4a8d97148a9",
+        "deps/dicer/lib/HeaderParser.js": "66921c864481b3173cac9bdbc3a60185b9f857414e61e0f3ffbe3570a9588d0b",
+        "deps/dicer/lib/PartStream.js": "563a10384e4fade3382926b64a5b79080b316e054807aa85a0bc02c616216fb0",
+        "deps/dicer/lib/dicer.d.ts": "71d04c87354bf272982efc06099489f7c1c28ddc15b8fdb639b82bf501ca7960",
+        "deps/streamsearch/sbmh.js": "4814ee90c2a24475095994fb72b7dfb385c0d0eff44ae3027695a2ed6cc844e6",
+        "index.js": "ce61544d7cdca32cbc24fe7b42e93b1b280406891b77730ea1e3e84d764f6692",
+        "lib/types/multipart.js": "3b5f374be02a13d538f11c3ba415f47480fb9774899e9d88698ae0617756941a",
+        "lib/types/urlencoded.js": "22117bfd9a39bce66580955dc40961c10cb8fe3c2bb7336a692d8a7f1eb538a1",
+        "lib/utils/Decoder.js": "8c6118bef79b8c068f884406527092f5ba0a7bc11bbb966eec1579f126f88f1d",
+        "lib/utils/basename.js": "69ec80a6bc86f9608d4068eb1d011b5882ea5623e90f00032bb579580052a9f3",
+        "lib/utils/decodeText.js": "ee823f9899b75ab7843cbecf0041e6d29115556123a3255da54b9143267931e5",
+        "lib/utils/getLimit.js": "ff4184686d5f8592fb3cd4b73d5bfb8ca18a28e117368f05485f8b217c38b5f1",
+        "lib/utils/parseParams.js": "83be42147558a8bc8c54bcd0009960b6128eac97d07799daa239c1e9dac472bc",
+        "package.json": "f5aa1a3625829d481ab22fc8e64d60a6c798d7949bd31fc72e2531b1f4934336",
+        "types/dicer.tst.ts": "8c42f77abb93d219c38330f196f8a3e5cb6aa723a07168b88dec3ca2ff294e54",
+        "types/index.d.ts": "c27a260ef941940daa6da234ced90e617590f7a01e43345211d6762dc53c46fb",
+        "types/index.tst.ts": "e4dad7f9cffd20192dd4d32b16f48b70b38da918af1337044d5326b483482fca"
+      }
+    },
+    "proxy-addr": {
+      "name": "proxy-addr",
+      "version": "2.0.8",
+      "registry": "https://registry.npmjs.org/proxy-addr/2.0.8",
+      "tarball": "https://registry.npmjs.org/proxy-addr/-/proxy-addr-2.0.8.tgz",
+      "integrity": "sha512-5nnx0yGyVUcY6t9RnWcARWtwT9F1D8O9rt08htPvnd49W1IgZtmLkhu9WfMzQj1cFxjHIO6connUNVW5k7AVyQ==",
+      "tarballSha256": "ffcc8055b78b0852b2889a426ad3a3003b60bc79df704faca194157efa2b2587",
+      "bytes": 5670,
+      "engines": {
+        "node": ">= 0.10"
+      },
+      "main": null,
+      "exports": null,
+      "dependencies": {
+        "forwarded": "0.2.0",
+        "ipaddr.js": "1.9.1"
+      },
+      "files": {
+        "HISTORY.md": "334e0c327b7eb9ead1e05ab99770e1466ab3b21945537af36be7b2aa90fd8c4e",
+        "LICENSE": "a7996721249a136fbcfc1c201bcb5f414f38a701d4a24f28abe65e16cfcce813",
+        "README.md": "1ecfed574adf9661f916ede92c5304beebdd3effed4d076f543a5e77669595b8",
+        "index.js": "aa7efd29bbd61cbcc1bdafde9e674db28ead077864f33bfad3cdd19bb5a3778c",
+        "package.json": "b2e305ca817ae4e8b088e07f38c5df1d7ad77aa3473809e4c37a9a1c83600225"
+      }
+    },
+    "source-map-js": {
+      "name": "source-map-js",
+      "version": "1.2.2",
+      "registry": "https://registry.npmjs.org/source-map-js/1.2.2",
+      "tarball": "https://registry.npmjs.org/source-map-js/-/source-map-js-1.2.2.tgz",
+      "integrity": "sha512-KGj/8Y43x35aZVDtt+J4mK1hoLGHULMYfSkODJNQjNDC3oW1PqPoxMwo0pLUsWM/UEGzON/NxeHywEfNXNP3Vw==",
+      "tarballSha256": "05c8cf8e7c3a6b56cada7668fe9342b10f4b625efc92aba9ba05b9e8fe4d71a3",
+      "bytes": 36349,
+      "engines": {
+        "node": ">=0.10.0"
+      },
+      "main": "./source-map.js",
+      "exports": null,
+      "dependencies": null,
+      "files": {
+        "LICENSE": "6cb0631f71c7749763fd3dd1d5bee52dd1070ec17f2edc1710079ad070bd2fbd",
+        "README.md": "8e1a57daf01cd2fc8969ecd0afeae51d1c05c7c79e9413ea82016a0f65e97646",
+        "lib/array-set.js": "163bb3055aaea7140167740036a83161fd912c344b14f992754b80f21477d754",
+        "lib/base64-vlq.js": "f3407e528f54ec0787bd0a71eeac0c99fffd98445916fcbe116dc69ca3be928b",
+        "lib/base64.js": "651bf433cf05e9ec8cee0b94639483236a605d48279e83d3d5c5de81c21d6599",
+        "lib/binary-search.js": "c7f4a47a125af0bd860443dfd71d2f412d1a97dcb53ab7038189d63b91dc32bd",
+        "lib/mapping-list.js": "35ddb82861f11a70ab84cb47d620fcb28d7f884bb444644e06bde815b836ef9e",
+        "lib/quick-sort.js": "1e2857cc4f6c9c36b764ce529f39b9243bed27aed809e895d7cec04c8a869266",
+        "lib/source-map-consumer.d.ts": "2ca1c32e3bd72c64662adf034d97df8606ba1e1399cafc75567809ecff4bca95",
+        "lib/source-map-consumer.js": "9ad10db386da13c1f95e6a680d6298dbb306c77f57a9a3539e4595b723a7654b",
+        "lib/source-map-generator.d.ts": "11f9b1e28747ca9cf5f4f7d41a7f261ac98ecde6be7dc146824fa275ac1f169d",
+        "lib/source-map-generator.js": "07894c9ea1e674263e2e7694d43d4fb935e98549b93946205b9536c1420696c0",
+        "lib/source-node.d.ts": "e4a2e40e293158fb2ab29aadb9eaa6400c8d9be5851d45a95a76f9e2a4bb7c8b",
+        "lib/source-node.js": "d1a0ef136bf0e974ba956506c88e91fef5d8681bbf10c486ff9566a7d6d76f3c",
+        "lib/util.js": "0629f3ae2f3049cda3a2e87ea651dcf0cc71108f4681795ab989a8ac1573fc03",
+        "package.json": "9f1ea63b1661d0f6e5fcd50b625d86cddd77de870a0019b23262360987b487f5",
+        "source-map.d.ts": "402e5c534fb2b85fa771170595db3ac0dd532112c8fa44fc23f233bc6967488b",
+        "source-map.js": "dc098456c2d9ab90a4c0a17cca9be16665b9813df20906553a98b0088a157be7"
+      }
+    },
+    "compression": {
+      "name": "compression",
+      "version": "1.8.2",
+      "registry": "https://registry.npmjs.org/compression/1.8.2",
+      "tarball": "https://registry.npmjs.org/compression/-/compression-1.8.2.tgz",
+      "integrity": "sha512-o8vI5RE5A6EVVOd9o41jKp41aJom+QTEO/Bx8MYNjexMo/Bv2WOjUfZr+aL0WnYSgymUy6zeguqLTsIhV0gMvQ==",
+      "tarballSha256": "15e46c301ad6468d3838cfc0dbfca3024220ef12f8a43b8156846691011537a6",
+      "bytes": 7297,
+      "engines": {
+        "node": ">= 0.8.0"
+      },
+      "main": null,
+      "exports": null,
+      "dependencies": {
+        "bytes": "3.1.2",
+        "compressible": "~2.0.18",
+        "debug": "2.6.9",
+        "destroy": "1.2.0",
+        "negotiator": "~0.6.4",
+        "on-headers": "~1.1.0",
+        "safe-buffer": "5.2.1",
+        "vary": "~1.1.2"
+      },
+      "files": {
+        "LICENSE": "23d466b1b134b415b66fa50c6526b4cf3e7b9258554da88d3abb371721e7ce68",
+        "README.md": "ec889ea33f5a176fa03536fcef8aed4a22906b557ad558b1d83837baef7a49ee",
+        "index.js": "332fbd6dca91e7a8937398dabf967df2d66e53908a1174a648860346fff40c61",
+        "package.json": "0b7fae36342883daa0f2ffeb91de83d702e8e02e7186feb2d6f62e0b25d37f0a"
+      }
+    },
+    "postcss-selector-parser": {
+      "name": "postcss-selector-parser",
+      "version": "7.1.6",
+      "registry": "https://registry.npmjs.org/postcss-selector-parser/7.1.6",
+      "tarball": "https://registry.npmjs.org/postcss-selector-parser/-/postcss-selector-parser-7.1.6.tgz",
+      "integrity": "sha512-7qASPzhKF2l2KLboRZux8CCTRMdGiV08vWmyKzPz22qZ7ZjQBOeY7rNzNoCLSUiftJ7HUq0GERHmxw/t0dCdMw==",
+      "tarballSha256": "48c903f98c5591d8d26f16f389d5cb3435459474c645209a79f6241bf4b657b6",
+      "bytes": 46652,
+      "engines": {
+        "node": ">=4"
+      },
+      "main": "dist/index.js",
+      "exports": null,
+      "dependencies": {
+        "cssesc": "^3.0.0",
+        "util-deprecate": "^1.0.2"
+      },
+      "files": {
+        "API.md": "b41d268904a808f2f5c9b3dcfbbffd20457ea3a1aec6390e82b4717886871249",
+        "CHANGELOG.md": "59040a76711857c2e6960a5c2d6656d41c57d10480a5f4c8ba1dd16b93ba0e16",
+        "LICENSE-MIT": "2998094b38f7ace25f141fb36f334d8338f65a1812978d618b1161f4d77ae10e",
+        "README.md": "b57086c64caddac8a9dacd939fb9db96c343e4cee812d16024ecb6eb637ab058",
+        "dist/index.js": "50a4e7136f580de2d730a972b15aae2e94c4a47f4cfc7d2cd04026e1d80fa78e",
+        "dist/parser.js": "eec0eef91952dc136531593d851db7fe13dfd97d4e3389b5d7ca758adf63b24f",
+        "dist/processor.js": "734ea33742a16319f88aa13a6a96bfd917fc2359cb117c0d3efa6900ba9920b4",
+        "dist/selectors/attribute.js": "e6c48e2b791548271d70539e539c04146be457cad4c09c477689f984f11c7ce8",
+        "dist/selectors/className.js": "7bfc41d4d06f9b26d1ae960030d0bf42353f0f8c047edd43907d9342b815e493",
+        "dist/selectors/combinator.js": "75673a6f0915dd0de88a850c081f1cf81c5e3826de992713ad2802f649e75661",
+        "dist/selectors/comment.js": "3c710f57611326f878dfb3075ed44010bc80167e4fe433af922eec26d98e6ca1",
+        "dist/selectors/constructors.js": "11b07846179bc240ba0bbb32ed2fed956d9a3edec7787ee43fb3b33151638660",
+        "dist/selectors/container.js": "b21e2df576076fe3b5281ddd7b3c6a7c175ceba5857a5ea615a42be2e30aa6b8",
+        "dist/selectors/guards.js": "1c8930cdc1d043547a2a3254299494665e73c867ce6d3bcee5774d8d1a8a9a10",
+        "dist/selectors/id.js": "f8a4fb0f33513977ff42baa5f123f0497d14a7d63779ea8788fc69b81c51e367",
+        "dist/selectors/index.js": "48243bcd50c4c869e5636bfb483842b116f038342f8f547a0e67cc593f560e09",
+        "dist/selectors/namespace.js": "5f8227f5d032ea170e422888a5edc44de25c13b313d47e0a10d587ae513c212c",
+        "dist/selectors/nesting.js": "dcc31ad9847f80552a17741de9a4c551b370ad46aa414eccc9115e52b819cdff",
+        "dist/selectors/node.js": "5c9d0b4f4fd8819da793e62769be5cd2ebede3d65bdd3154324bf0b72ba38f75",
+        "dist/selectors/pseudo.js": "d2727feb19c96be6ab9cbf7478763e4966a3487e93f46627f62695aad3503ca8",
+        "dist/selectors/root.js": "af9bd2ef230033e3f2659e96b6346a157934a0513496c021cd38d213e80b868a",
+        "dist/selectors/selector.js": "ff05737ccf04d7462dc3fb68bb7a406910af0a320bae78e8bf57e88cd8dee349",
+        "dist/selectors/string.js": "9170b1486c608446b99cb8310996df16ecf7e6902462a289e3995d9c05a51a4d",
+        "dist/selectors/tag.js": "1accda57519f1131d2dc53fa295ec88a311138c21e608ac25a6ebdc368fd3dd6",
+        "dist/selectors/types.js": "ab887683f4ac9e1a3caad8df4c02ebe279e84351c7610ed567a4f8961e52f653",
+        "dist/selectors/universal.js": "505f3245a8a8930b65d126a4acdce84371f0dd6a12b0251b4c71eeffd1ececd3",
+        "dist/sortAscending.js": "10e134e78f3bcd7274e437d6118e4fabbc94c8685f9267416d6d40327f788dcb",
+        "dist/tokenTypes.js": "6a651aa7e4b33daab765f1823730080520a9b8b28d21f380859770599b682577",
+        "dist/tokenize.js": "b28f9af46f85ea2e2f192e2ea217c15bd9753c38cc9b2319ad603ea3bda48d27",
+        "dist/util/ensureObject.js": "c75a2bd7cc045b2951847386212d4b94c4f05fdbbae47b705a0dd8397bbedcae",
+        "dist/util/getProp.js": "beb6161e481348c6b4713e4ca62134b57868d3525f9c53d78698fdfaccfd5872",
+        "dist/util/index.js": "f9d38d819696b1e2b1e1abc8735829ffade9b8b5ea0e4075c1034d3ee23602b5",
+        "dist/util/maxNestingDepth.js": "6f0bcd52ce0f15821d061eeb0c08c951417e3680b096354306aa037863b7f66a",
+        "dist/util/stripComments.js": "364c8eb3c12317a787faf1b2a62aa6b39b5d94cdbb618be895648bc0add25d7e",
+        "dist/util/unesc.js": "6b29748a6b8f05ff72ecdcde3a566f7f5888b98d86511535af4997126b947b76",
+        "package.json": "79862171d30cf8588a494297919e0e5c3220c99c5fc5cc90df2189a681732758",
+        "postcss-selector-parser.d.ts": "0d45f0e4df37d63438c34ac65902e959b60f80d72ab240722fda8bc7553d830d"
+      }
+    },
+    "smol-toml": {
+      "name": "smol-toml",
+      "version": "1.9.0",
+      "registry": "https://registry.npmjs.org/smol-toml/1.9.0",
+      "tarball": "https://registry.npmjs.org/smol-toml/-/smol-toml-1.9.0.tgz",
+      "integrity": "sha512-hpd+HLON7HdZXqYchMM/+LaTTbdK0AU3NngIJ4KVyWbY9bfQqdL9cD+4yf6dUoU2Ap4VsU0JkQi6FxAI1B2mXQ==",
+      "tarballSha256": "4909da857f775ea729461e552fdc85966e7825c1020605066b3a9ad29642dbdc",
+      "bytes": 31492,
+      "engines": {
+        "node": ">= 18"
+      },
+      "main": "./dist/index.cjs",
+      "exports": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js",
+        "require": "./dist/index.cjs"
+      },
+      "dependencies": null,
+      "files": {
+        "LICENSE": "fa5659948374d4f555594f47f6da073b40dc503e921aeeece30df4362b3051a5",
+        "README.md": "bcaaa3befbd5bc5373cc6d80f4502afbe83179f96dcf9a336c43deb7ffa24c65",
+        "dist/date.d.ts": "c7ad3531c131f2b5b246b2d208b75c5403475ad155b7661fa2d673104b806791",
+        "dist/date.js": "ef924a2a42c7f16761e7098c3ed8e04195ecbcb02d5c369db0aee76f251a409c",
+        "dist/error.d.ts": "02e33cdc5ca75f517f44b31070640be0fe6d0169dd91c266d02a1e2a71e064ac",
+        "dist/error.js": "76f8e47f5fc57273748242d59570656d7c921a80bceb2291ca5a4d7a723e9f29",
+        "dist/extract.js": "b964c8f39c737172295b31b9ee61b49e513ff12788e119ddfdbb68c448054c12",
+        "dist/index.cjs": "09ce310a8bcc1bb5c7dc2813c88b4bfbbeb685e4c186a9631ff54da7e85c880f",
+        "dist/index.d.ts": "b4556819c2ed0cd4016d05a6bfd7d4773c0b5ffb39c8ed547796ce4a1093d9b8",
+        "dist/index.js": "dc8e0afc74477e514f5cb8492b587560c1d7d68cec03a994cc8bc4af99c8da2a",
+        "dist/parse.d.ts": "2b230dc984b6e51b545bfe222f9965cc2ff434164ed9428bec415c5e508a9854",
+        "dist/parse.js": "195e33ea068bf6f3acb5b3342792ac4aa954bba7e751519ba869c00da395ecdb",
+        "dist/primitive.js": "be47fe90bf9a410af0b9204b6b34617f4b38e57f08198b10cb024a0272eb5936",
+        "dist/stringify.d.ts": "628a6a55714fcf4a4eb0e59866ab1e5cc67c1b9e0cfc8524ccc8d6b5ee24ad7c",
+        "dist/stringify.js": "c717d95456426dc8a0b07c9d03a4e434d5dea8254fca24e5fd93a22de3bcd44c",
+        "dist/struct.js": "736742cfa645bbd08bc5396c5f7ddbea5c3b7ac5d61fe86031846f5769131deb",
+        "dist/util.d.ts": "e6b1d3eecb240dc71d0dc28d1beee69cefd6ee014507c822909be0a7117517e0",
+        "dist/util.js": "6327e40efd957128da15867c3a32293950a925570b457b1b78c735452cebc08e",
+        "package.json": "0e35bde6992fef675058596ea0e94c2d3ca65e5f9b73a326d94208be6210f192"
+      }
+    }
+  }
+}

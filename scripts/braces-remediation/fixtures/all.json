@@ -1,0 +1,344 @@
+{
+  "auditReportVersion": 2,
+  "vulnerabilities": {
+    "@ts-morph/common": {
+      "name": "@ts-morph/common",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "fast-glob"
+      ],
+      "effects": [
+        "ts-morph"
+      ],
+      "range": "0.2.0 - 0.24.0 || 0.26.0 - 0.27.0",
+      "nodes": [
+        "node_modules/@ts-morph/common"
+      ],
+      "fixAvailable": {
+        "name": "@vercel/node",
+        "version": "2.10.3",
+        "isSemVerMajor": true
+      }
+    },
+    "@typescript-eslint/eslint-plugin": {
+      "name": "@typescript-eslint/eslint-plugin",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@typescript-eslint/type-utils",
+        "@typescript-eslint/utils"
+      ],
+      "effects": [],
+      "range": "8.2.1-alpha.0 - 8.47.1-alpha.9",
+      "nodes": [
+        "node_modules/@typescript-eslint/eslint-plugin"
+      ],
+      "fixAvailable": true
+    },
+    "@typescript-eslint/parser": {
+      "name": "@typescript-eslint/parser",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@typescript-eslint/typescript-estree"
+      ],
+      "effects": [
+        "typescript-eslint"
+      ],
+      "range": "8.2.1-alpha.0 - 8.47.1-alpha.9",
+      "nodes": [
+        "node_modules/@typescript-eslint/parser"
+      ],
+      "fixAvailable": true
+    },
+    "@typescript-eslint/type-utils": {
+      "name": "@typescript-eslint/type-utils",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@typescript-eslint/typescript-estree",
+        "@typescript-eslint/utils"
+      ],
+      "effects": [
+        "@typescript-eslint/eslint-plugin"
+      ],
+      "range": "8.2.1-alpha.0 - 8.47.1-alpha.9",
+      "nodes": [
+        "node_modules/@typescript-eslint/type-utils"
+      ],
+      "fixAvailable": true
+    },
+    "@typescript-eslint/typescript-estree": {
+      "name": "@typescript-eslint/typescript-estree",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "fast-glob"
+      ],
+      "effects": [
+        "@typescript-eslint/parser",
+        "@typescript-eslint/type-utils",
+        "@typescript-eslint/utils"
+      ],
+      "range": "8.2.1-alpha.0 - 8.47.1-alpha.9",
+      "nodes": [
+        "node_modules/@typescript-eslint/typescript-estree"
+      ],
+      "fixAvailable": true
+    },
+    "@typescript-eslint/utils": {
+      "name": "@typescript-eslint/utils",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@typescript-eslint/typescript-estree"
+      ],
+      "effects": [],
+      "range": "8.2.1-alpha.0 - 8.47.1-alpha.9",
+      "nodes": [
+        "node_modules/@typescript-eslint/utils"
+      ],
+      "fixAvailable": true
+    },
+    "@vercel/node": {
+      "name": "@vercel/node",
+      "severity": "high",
+      "isDirect": true,
+      "via": [
+        "@vercel/static-config",
+        "ts-morph"
+      ],
+      "effects": [],
+      "range": ">=2.1.1-canary.0",
+      "nodes": [
+        "node_modules/@vercel/node"
+      ],
+      "fixAvailable": {
+        "name": "@vercel/node",
+        "version": "2.10.3",
+        "isSemVerMajor": true
+      }
+    },
+    "@vercel/static-config": {
+      "name": "@vercel/static-config",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "ts-morph"
+      ],
+      "effects": [
+        "@vercel/node"
+      ],
+      "range": "*",
+      "nodes": [
+        "node_modules/@vercel/static-config"
+      ],
+      "fixAvailable": {
+        "name": "@vercel/node",
+        "version": "2.10.3",
+        "isSemVerMajor": true
+      }
+    },
+    "braces": {
+      "name": "braces",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        {
+          "source": 1240992,
+          "name": "braces",
+          "dependency": "braces",
+          "title": "braces vulnerable to stack-exhaustion denial of service through deeply nested patterns",
+          "url": "https://github.com/advisories/GHSA-vfj7-8cjw-p6xm",
+          "severity": "high",
+          "cwe": [
+            "CWE-674"
+          ],
+          "cvss": {
+            "score": 7.5,
+            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H"
+          },
+          "range": "<=3.0.3"
+        }
+      ],
+      "effects": [
+        "chokidar",
+        "micromatch"
+      ],
+      "range": "*",
+      "nodes": [
+        "node_modules/braces"
+      ],
+      "fixAvailable": {
+        "name": "@vercel/node",
+        "version": "2.10.3",
+        "isSemVerMajor": true
+      }
+    },
+    "chokidar": {
+      "name": "chokidar",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "braces"
+      ],
+      "effects": [
+        "firebase-tools",
+        "tailwindcss"
+      ],
+      "range": "2.0.0 - 3.6.0",
+      "nodes": [
+        "node_modules/chokidar"
+      ],
+      "fixAvailable": false
+    },
+    "fast-glob": {
+      "name": "fast-glob",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "micromatch"
+      ],
+      "effects": [
+        "@ts-morph/common",
+        "@typescript-eslint/typescript-estree"
+      ],
+      "range": "*",
+      "nodes": [
+        "node_modules/fast-glob"
+      ],
+      "fixAvailable": {
+        "name": "@vercel/node",
+        "version": "2.10.3",
+        "isSemVerMajor": true
+      }
+    },
+    "firebase-tools": {
+      "name": "firebase-tools",
+      "severity": "high",
+      "isDirect": true,
+      "via": [
+        "chokidar"
+      ],
+      "effects": [],
+      "range": ">=6.9.0",
+      "nodes": [
+        "node_modules/firebase-tools"
+      ],
+      "fixAvailable": {
+        "name": "firebase-tools",
+        "version": "6.8.0",
+        "isSemVerMajor": true
+      }
+    },
+    "micromatch": {
+      "name": "micromatch",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "braces"
+      ],
+      "effects": [
+        "fast-glob",
+        "tailwindcss"
+      ],
+      "range": ">=0.2.0",
+      "nodes": [
+        "node_modules/micromatch"
+      ],
+      "fixAvailable": {
+        "name": "@vercel/node",
+        "version": "2.10.3",
+        "isSemVerMajor": true
+      }
+    },
+    "tailwindcss": {
+      "name": "tailwindcss",
+      "severity": "high",
+      "isDirect": true,
+      "via": [
+        "chokidar",
+        "fast-glob",
+        "micromatch"
+      ],
+      "effects": [
+        "tailwindcss-animate"
+      ],
+      "range": "<=0.0.0-oxide-insiders.ff2c25f || 2.1.0-canary.1 - 3.4.19",
+      "nodes": [
+        "node_modules/tailwindcss"
+      ],
+      "fixAvailable": false
+    },
+    "tailwindcss-animate": {
+      "name": "tailwindcss-animate",
+      "severity": "high",
+      "isDirect": true,
+      "via": [
+        "tailwindcss"
+      ],
+      "effects": [],
+      "range": "*",
+      "nodes": [
+        "node_modules/tailwindcss-animate"
+      ],
+      "fixAvailable": false
+    },
+    "ts-morph": {
+      "name": "ts-morph",
+      "severity": "high",
+      "isDirect": false,
+      "via": [
+        "@ts-morph/common"
+      ],
+      "effects": [
+        "@vercel/node",
+        "@vercel/static-config"
+      ],
+      "range": "6.0.1 - 23.0.0 || 25.0.0 - 26.0.0",
+      "nodes": [
+        "node_modules/ts-morph"
+      ],
+      "fixAvailable": {
+        "name": "@vercel/node",
+        "version": "2.10.3",
+        "isSemVerMajor": true
+      }
+    },
+    "typescript-eslint": {
+      "name": "typescript-eslint",
+      "severity": "high",
+      "isDirect": true,
+      "via": [
+        "@typescript-eslint/eslint-plugin",
+        "@typescript-eslint/parser",
+        "@typescript-eslint/utils"
+      ],
+      "effects": [],
+      "range": "8.2.1-alpha.0 - 8.47.1-alpha.9",
+      "nodes": [
+        "node_modules/typescript-eslint"
+      ],
+      "fixAvailable": true
+    }
+  },
+  "metadata": {
+    "vulnerabilities": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 17,
+      "critical": 0,
+      "total": 17
+    },
+    "dependencies": {
+      "prod": 529,
+      "dev": 844,
+      "optional": 219,
+      "peer": 3,
+      "peerOptional": 0,
+      "total": 1441
+    }
+  }
+}

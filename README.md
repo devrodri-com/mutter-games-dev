@@ -1,3 +1,5 @@
+> Estado de las fuentes publicadas y comprobaciones vigentes: [docs/produccion.md](docs/produccion.md). Esta actualización de GitHub no despliega la web.
+
 # MUTTER GAMES – Frontend (Vite + React + Firebase)
 
 This repository contains **the official frontend of Mutter Games**, completely refactored and hardened to achieve a **professional, secure, auditable, and scalable** system.

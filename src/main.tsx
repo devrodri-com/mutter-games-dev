@@ -41,7 +41,7 @@ if (typeof window !== "undefined" && "serviceWorker" in navigator) {
   const sameURL = (next: string) => {
     try {
       const u = new URL(next, location.origin);
-      return u.pathname + u.search === location.pathname + location.search;
+      return u.pathname + u.search + u.hash === location.pathname + location.search + location.hash;
     } catch { return false; }
   };
 

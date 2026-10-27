@@ -1,0 +1,306 @@
+@font-face {
+  font-family: MutterLoginInter;
+  src: url('/brand/login/Inter-Regular.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: MutterLoginInter;
+  src: url('/brand/login/Inter-SemiBold.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: MutterLoginSpartan;
+  src: url('/brand/login/LeagueSpartan-Bold.ttf') format('truetype');
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+
+.mutter-login {
+  min-height: 100svh;
+  padding: 30px 24px 20px;
+  background: #f5f5f6;
+  color: #0f0f0f;
+  font-family: MutterLoginInter, Arial, sans-serif;
+  font-synthesis: none;
+}
+
+.mutter-login *,
+.mutter-login *::before,
+.mutter-login *::after {
+  box-sizing: border-box;
+}
+
+.mutter-login :is(button, input, a):focus-visible {
+  outline: 3px solid #ff2d55;
+  outline-offset: 4px;
+}
+
+.mutter-login__top {
+  max-width: 1240px;
+  min-height: 28px;
+  margin: auto;
+}
+
+.mutter-login__back {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: #4d4d55;
+  font-size: .8125rem;
+  line-height: 1.5;
+  text-decoration: none;
+}
+
+.mutter-login__back svg {
+  width: 17px;
+  height: 17px;
+  flex: none;
+}
+
+.mutter-login__main {
+  width: 100%;
+  max-width: 456px;
+  margin: 25px auto 28px;
+}
+
+.mutter-login__brand {
+  display: block;
+  width: 240px;
+  height: auto;
+  max-width: 100%;
+  margin: 0 auto 35px;
+}
+
+.mutter-login__panel {
+  padding: 35px 38px 32px;
+  background: #fff;
+  border: 1px solid #e2e2e7;
+  border-radius: 16px;
+  box-shadow: 0 9px 30px #0f0f0f06;
+}
+
+.mutter-login__heading {
+  padding-left: 17px;
+  border-left: 3px solid #ff2d55;
+}
+
+.mutter-login__heading h1 {
+  margin: 0;
+  font-family: MutterLoginSpartan, Arial, sans-serif;
+  font-size: clamp(2rem, 5vw, 2.25rem);
+  font-weight: 700;
+  line-height: 1.06;
+  letter-spacing: -.035em;
+}
+
+.mutter-login__heading p {
+  margin: 10px 0 0;
+  color: #62626b;
+  font-size: .875rem;
+  line-height: 1.65;
+}
+
+.mutter-login__fields {
+  display: grid;
+  gap: 20px;
+  margin-top: 30px;
+}
+
+.mutter-login__fields label {
+  display: block;
+  margin-bottom: 9px;
+  font-size: .8125rem;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.mutter-login__fields input {
+  display: block;
+  width: 100%;
+  min-height: 50px;
+  padding: 12px 15px;
+  border: 1px solid #c9c9d0;
+  border-radius: 8px;
+  background: #fff;
+  color: #0f0f0f;
+  font: inherit;
+  line-height: 1.5;
+}
+
+.mutter-login__fields input:disabled {
+  background: #f5f5f6;
+  opacity: .65;
+}
+
+.mutter-login__submit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  width: 100%;
+  min-height: 50px;
+  margin-top: 25px;
+  padding: 12px 16px;
+  border: 1px solid #0f0f0f;
+  border-radius: 8px;
+  background: #0f0f0f;
+  color: #fff;
+  font: inherit;
+  font-size: .875rem;
+  font-weight: 600;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.mutter-login__submit svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+
+.mutter-login__submit:hover:not(:disabled) {
+  background: #292929;
+}
+
+.mutter-login__recover {
+  display: block;
+  min-height: 44px;
+  width: 100%;
+  margin-top: 9px;
+  padding: 12px 0 6px;
+  border: 0;
+  background: transparent;
+  color: #0f0f0f;
+  font: inherit;
+  font-size: .8125rem;
+  font-weight: 600;
+  line-height: 1.5;
+  text-align: center;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+  cursor: pointer;
+}
+
+.mutter-login__form button:disabled {
+  cursor: wait;
+  opacity: .5;
+}
+
+.mutter-login__message {
+  margin: 18px 0 0;
+  padding: 12px 14px;
+  border: 1px solid #e2e2e7;
+  border-radius: 8px;
+  background: #f5f5f6;
+  color: #33333b;
+  font-size: .8125rem;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.mutter-login__guest > section {
+  max-width: none;
+  margin: 28px 0 0;
+  padding: 26px 0 0;
+  border: 0;
+  border-top: 1px solid #e5e5ea;
+  border-radius: 0;
+  background: transparent;
+  color: #62626b;
+}
+
+.mutter-login__guest p {
+  font-size: .75rem;
+  line-height: 1.65;
+}
+
+.mutter-login__guest button {
+  min-height: 46px;
+  margin-top: 16px;
+  padding: 12px 16px;
+  border: 1px solid #bdbdc5;
+  border-radius: 8px;
+  background: #fff;
+  color: #0f0f0f;
+  font-family: inherit;
+  font-size: .875rem;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.mutter-login__guest button:hover:not(:disabled) {
+  background: #f5f5f6;
+}
+
+.mutter-login__guest a {
+  color: #4d4d55;
+  font-size: .75rem;
+  line-height: 1.5;
+  text-underline-offset: 4px;
+}
+
+.mutter-login__guest [role='status'] {
+  margin-bottom: 0;
+  overflow-wrap: anywhere;
+}
+
+.mutter-login__footer {
+  color: #62626b;
+  font-size: .6875rem;
+  line-height: 1.6;
+  text-align: center;
+}
+
+@media (max-width: 680px) {
+  .mutter-login {
+    padding: 20px 20px 22px;
+    background: #fff;
+  }
+
+  .mutter-login__top {
+    min-height: 25px;
+  }
+
+  .mutter-login__main {
+    margin: 24px auto;
+  }
+
+  .mutter-login__brand {
+    width: 224px;
+  }
+
+  .mutter-login__panel {
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .mutter-login__heading {
+    padding-left: 16px;
+  }
+
+  .mutter-login__heading p {
+    font-size: .8125rem;
+  }
+
+  .mutter-login__fields {
+    margin-top: 26px;
+  }
+
+  .mutter-login__guest > section {
+    margin-top: 28px;
+    padding-top: 24px;
+  }
+
+  .mutter-login__footer {
+    margin-top: 29px;
+  }
+}

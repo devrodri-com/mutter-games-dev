@@ -1,0 +1,28 @@
+{
+  "emulators": {
+    "auth": {
+      "host": "127.0.0.1",
+      "port": 9397
+    },
+    "firestore": {
+      "host": "127.0.0.1",
+      "port": 8487,
+      "websocketPort": 9257
+    },
+    "hub": {
+      "host": "127.0.0.1",
+      "port": 4426
+    },
+    "logging": {
+      "host": "127.0.0.1",
+      "port": 4526
+    },
+    "ui": {
+      "enabled": false
+    },
+    "singleProjectMode": true
+  },
+  "firestore": {
+    "rules": "../../firebase.catalog-cutover.rules"
+  }
+}

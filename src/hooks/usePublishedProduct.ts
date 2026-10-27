@@ -32,6 +32,6 @@ export function usePublishedProduct(slug: string) {
             setLoading(false); });
         return () => { cancelled = true; unsubscribe?.(); };
     }, [slug, revision]);
-    useEffect(() => { const refresh = () => setRevision(v => v + 1); window.addEventListener('focus', refresh); return () => window.removeEventListener('focus', refresh); }, []);
+    // Trusted Firestore reads already exclude all held units. Provider progress belongs to the server queue.
     return { product, loading, error, retry: () => setRevision(v => v + 1) };
 }

@@ -18,7 +18,9 @@ export default function AdminPanel() {
   const [activeView, setActiveView] = useState("clients");
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
 
-  const { user, isLoading } = useAuth(); // ✅ usar contexto de autenticación
+  const { user, isLoading, credentialScope } = useAuth();
+  const catalogOnly = credentialScope === 'JOHN_ADMIN_CLOSED_V1';
+  const defaultView = catalogOnly ? '/admin/productList' : '/admin/clients';
 
   useEffect(() => {
     const path = location.pathname.split('/').pop() || "clients";
@@ -31,11 +33,11 @@ export default function AdminPanel() {
   };
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-screen flex-col bg-gray-50 md:flex-row">
       {/* Sidebar dinámico */}
       <Sidebar activeView={activeView} onChangeView={handleViewChange} />
 
-      <main className="flex-1 p-6 bg-gray-100 overflow-y-auto">
+      <main className="min-w-0 flex-1 p-4 sm:p-6 lg:p-8">
         <div className="mb-4 text-sm text-gray-600">
           {isLoading ? (
             <><strong>Usuario logueado:</strong> <span className="text-gray-400">Cargando usuario...</span></>
@@ -45,25 +47,28 @@ export default function AdminPanel() {
             <><strong>Usuario logueado:</strong> <span className="text-red-500">No logueado</span></>
           )}
         </div>
+        {catalogOnly && <p role="status" className="mb-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">Las compras siguen cerradas. Podés abrir, editar y crear publicaciones; guardar cambios conserva el estado de las publicaciones existentes.</p>}
         <Routes>
-          <Route index element={<Navigate to="/admin/clients" replace />} />
-          <Route
+          <Route index element={<Navigate to={defaultView} replace />} />
+          {!catalogOnly && <Route
             path="clients"
             element={
               <ClientList onSelectClient={(id) => setSelectedClientId(id)} />
             }
-          />
+          />}
           <Route path="productList" element={<ProductList />} />
-          <Route path="productForm" element={<ProductForm />} />
-          <Route path="orders" element={<OrderAdmin />} />
-          <Route path="users" element={<UserList />} />
-          <Route path="categories" element={<AdminCategoryManager />} />
-          <Route path="editar/:id" element={<ProductForm />} />
+          {!catalogOnly && <Route path="productForm" element={<ProductForm />} />}
+          {!catalogOnly && <>
+            <Route path="orders" element={<OrderAdmin />} />
+            <Route path="users" element={<UserList />} />
+            <Route path="categories" element={<AdminCategoryManager />} />
+            <Route path="editar/:id" element={<ProductForm />} />
+          </>}
 
           {/* Ruta de fallback */}
-          <Route path="*" element={<Navigate to="/admin/clients" replace />} />
+          <Route path="*" element={<Navigate to={defaultView} replace />} />
         </Routes>
-        {selectedClientId && (
+        {!catalogOnly && selectedClientId && (
           <ClientDetailWrapper
             clientId={selectedClientId || ""}
             onBack={() => setSelectedClientId(null)}

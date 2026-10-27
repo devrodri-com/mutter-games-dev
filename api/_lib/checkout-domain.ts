@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { availableStock, identityForOption } from '../../src/domain/webInventory.js';
 export class CheckoutError extends Error {
     constructor(public status: number, public code: string, message: string) { super(message); }
 }
@@ -41,6 +42,8 @@ export type CanonicalLine = Selection & {
     title: string;
     unitPrice: number;
     stock: number;
+    inventorySlot: string;
+    inventoryIdentity: string;
 };
 export type Quote = {
     items: CanonicalLine[];
@@ -86,7 +89,7 @@ export function parsePurchase(value: unknown): Purchase {
 function unavailable(): never { throw new CheckoutError(409, 'CATALOG_UNAVAILABLE', 'Un producto u opción ya no está disponible. Revisá tu carrito.'); }
 function nonnegative(value: unknown): number { if (typeof value !== 'number' || !Number.isFinite(value) || value < 0)
     unavailable(); return value; }
-export function quotePurchase(purchase: Purchase, catalog: Map<string, unknown>): Quote {
+export function quotePurchase(purchase: Purchase, catalog: Map<string, unknown>, excludeReservationId?: string): Quote {
     const quantities = new Map<string, number>();
     const lines = purchase.items.map(item => {
         const raw = catalog.get(item.id);
@@ -100,7 +103,8 @@ export function quotePurchase(purchase: Purchase, catalog: Map<string, unknown>)
             unavailable();
         let price = product.priceUSD;
         let stock = product.stockTotal;
-        let canonicalVariant = '';
+        let canonicalVariant = 'base';
+        let inventoryIdentity = 'base';
         if (product.variants !== undefined && !Array.isArray(product.variants))
             unavailable();
         if (Array.isArray(product.variants) && product.variants.length) {
@@ -108,6 +112,7 @@ export function quotePurchase(purchase: Purchase, catalog: Map<string, unknown>)
                 price: unknown;
                 stock: unknown;
                 key: string;
+                identity: string;
             }[] = [];
             product.variants.forEach((v, index) => {
                 const variant = record(v);
@@ -118,7 +123,7 @@ export function quotePurchase(purchase: Purchase, catalog: Map<string, unknown>)
                     const option = record(o);
                     const aliases = [option.variantId, `${label.es}-${option.value}`, `${label.en}-${option.value}`];
                     if (item.variantId && aliases.includes(item.variantId))
-                        matches.push({ price: option.priceUSD, stock: option.stock, key: `${index}:${optionIndex}` });
+                        matches.push({ price: option.priceUSD, stock: option.stock, key: `${index}:${optionIndex}`, identity: identityForOption(label, option) });
                 });
             });
             if (matches.length !== 1)
@@ -126,11 +131,14 @@ export function quotePurchase(purchase: Purchase, catalog: Map<string, unknown>)
             price = matches[0].price;
             stock = matches[0].stock;
             canonicalVariant = matches[0].key;
+            inventoryIdentity = matches[0].identity;
         }
         else if (item.variantId)
             unavailable();
         const unitPrice = nonnegative(price);
-        const available = nonnegative(stock);
+        let available: number;
+        try { available = availableStock(product, canonicalVariant, stock, excludeReservationId); }
+        catch { unavailable(); }
         if (!Number.isSafeInteger(available) || unitPrice <= 0 || !Number.isSafeInteger(Math.round(unitPrice * 100)))
             unavailable();
         if ((item.customName || item.customNumber) && product.allowCustomization !== true)
@@ -140,7 +148,7 @@ export function quotePurchase(purchase: Purchase, catalog: Map<string, unknown>)
         quantities.set(key, total);
         if (total > 99 || total > available)
             unavailable();
-        return { ...item, title: title.trim(), unitPrice: Math.round(unitPrice * 100) / 100, stock: available };
+        return { ...item, title: title.trim(), unitPrice: Math.round(unitPrice * 100) / 100, stock: available, inventorySlot: canonicalVariant, inventoryIdentity };
     });
     // Existing storefront policy: UYU structured data and $169 Montevideo; DAC paid on arrival.
     const shippingCost = purchase.shipping.pickup ? 0 : purchase.shipping.department === 'Montevideo' ? 169 : 0;
@@ -148,5 +156,7 @@ export function quotePurchase(purchase: Purchase, catalog: Map<string, unknown>)
     if (!Number.isSafeInteger(Math.round(total * 100)))
         unavailable();
     const quote = { items: lines, shippingCost, total, currency: 'UYU' as const };
-    return { ...quote, hash: hash(quote) };
+    // Reservation churn is not a price change; availability is checked in the admitting transaction.
+    const pricedItems = lines.map(line => ({ ...line, stock: undefined }));
+    return { ...quote, hash: hash({ ...quote, items: pricedItems }) };
 }

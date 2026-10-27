@@ -26,7 +26,7 @@ export default function LoginModal({ onClose }: LoginModalProps) {
       }
 
       // AuthContext se sincroniza por onAuthStateChanged, pero mantenemos login como refuerzo de estado local
-      login({
+      await login({
         id: firebaseUser.uid,
         uid: firebaseUser.uid,
         name: firebaseUser.displayName || firebaseUser.email,
@@ -35,9 +35,8 @@ export default function LoginModal({ onClose }: LoginModalProps) {
       });
 
       onClose();
-    } catch (error) {
-      console.error("Error en login de admin:", error);
-      alert("Usuario o contraseña incorrectos");
+    } catch {
+      alert("No pudimos comprobar el acceso. Entrá a la pantalla de ingreso para recuperar tu cuenta.");
     }
   };
 

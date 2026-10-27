@@ -29,8 +29,13 @@ firestore-debug.log
 
 # Ignore legacy backend code and nested node_modules
 backend/
-api/*
-!api/create-mp-preference.ts
-!api/_lib/
 functions/node_modules/
 node_modules/
+# Trabajo local y resultados privados de ejecucion
+/trabajo-codex/
+/admin-api/
+/build-evidence/
+secrets/
+*.pem
+*.p12
+*.pfx

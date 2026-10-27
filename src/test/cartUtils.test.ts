@@ -1,4 +1,11 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+
+// These pure calculation tests must not start browser Auth or access Firestore.
+// The real browser SDK lifecycle is exercised by the native browser suites.
+vi.mock("../firebase", () => ({ db: {} }));
+vi.mock("@/firebase/products", () => ({
+  fetchProductById: vi.fn().mockRejectedValue(new Error("Unexpected product I/O in cart calculation tests")),
+}));
 
 import {
 
