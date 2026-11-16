@@ -47,12 +47,14 @@ type CartContextType = {
     refreshCart: () => Promise<CartItem[]>;
 };
 export const CartContext = createContext<CartContextType | undefined>(undefined);
+type FreshCartIntent = { item: CartItem; owner: string | null; phase: 'admitting' | 'waiting' | 'writing'; promise: Promise<boolean>; resolve: (added: boolean) => void };
+type CartInitialization = { owner: string | null; access: ReturnType<typeof useAuth>['credentialAccess']; generation: number; phase: 'blocked' | 'loading' | 'ready' | 'error'; error: string | null };
 const cacheKey = (owner: string) => `mutter-cart:${owner}`;
 const store = (owner: string, next: CartItem[], dirty: boolean) => localStorage.setItem(cacheKey(owner), JSON.stringify({ items: next, dirty }));
 export function CartProvider({ children }: {
     children: ReactNode;
 }) {
-    const { credentialAccess, credentialScope } = useAuth();
+    const { credentialAccess, credentialScope, canStartGuestPurchase, prepareGuestCart } = useAuth();
     const adminOnly = credentialScope === 'JOHN_ADMIN_CLOSED_V1';
     const cartAccess = adminOnly ? 'pending' : credentialAccess;
     const accessState = useRef(cartAccess);
@@ -84,9 +86,13 @@ export function CartProvider({ children }: {
     const queue = useRef<Promise<void>>(Promise.resolve());
     const activeUid = useRef<string | null>(null);
     const unsynced = useRef(false);
+    const initialization = useRef<CartInitialization | null>(null);
+    const freshIntent = useRef<FreshCartIntent | null>(null);
+    const mounted = useRef(true);
+    const [, signalIntent] = useState(0);
     const fail = (error: unknown) => { const message = error instanceof Error ? error.message : 'No pudimos sincronizar el carrito.'; setCartError(message); toast.error(message); };
     const show = (next: CartItem[]) => { itemsRef.current = next; setItems(next); };
-    const ownsAccess = (owner: string, generation: number) => activeUid.current === owner && accessState.current === 'active' && accessGeneration.current === generation;
+    const ownsAccess = (owner: string, generation: number) => mounted.current && activeUid.current === owner && auth.currentUser?.uid === owner && accessState.current === 'active' && accessGeneration.current === generation;
     useEffect(() => onAuthStateChanged(auth, user => {
         if (activeUid.current !== (user?.uid ?? null)) {
             pending.current = { count: 0 }; queue.current = Promise.resolve(); unsynced.current = false;
@@ -109,6 +115,13 @@ export function CartProvider({ children }: {
     }), []);
     useEffect(() => {
         const generation = ++accessGeneration.current;
+        const initializing: CartInitialization = { owner: uid, access: cartAccess, generation, phase: 'blocked', error: null };
+        initialization.current = initializing;
+        const initializationFailed = (error: unknown) => {
+            initializing.phase = 'error';
+            initializing.error = error instanceof Error ? error.message : 'No pudimos sincronizar el carrito.';
+            fail(error);
+        };
         revision.current++;
         let stopped = false;
         setCartReady(false);
@@ -141,7 +154,7 @@ export function CartProvider({ children }: {
             show(cached);
         }
         catch (error) {
-            fail(error);
+            initializationFailed(error);
             return;
         }
         unsynced.current = dirty;
@@ -149,6 +162,7 @@ export function CartProvider({ children }: {
             setCartError(cartAccess === 'pending' ? 'Tu carrito se conserva. Recuperá el acceso para continuar.' : 'Estamos comprobando el acceso a tu carrito.');
             return;
         }
+        initializing.phase = 'loading';
         const restore = async (next: CartItem[]) => {
             if (stopped || !ownsAccess(uid, generation))
                 return;
@@ -159,13 +173,14 @@ export function CartProvider({ children }: {
                     return;
                 show(current);
                 store(uid, current, false);
+                initializing.phase = 'ready';
                 setCartReady(true);
                 setCartError(null);
             }
             catch (error) {
                 if (!stopped && version === revision.current && ownsAccess(uid, generation)) {
                     setCartReady(false);
-                    fail(error);
+                    initializationFailed(error);
                 }
             }
         };
@@ -190,17 +205,18 @@ export function CartProvider({ children }: {
                 if (stopped || !ownsAccess(uid, generation))
                     return;
                 stop = listenToCartChanges(uid, (next, exists) => { if (!stopped && ownsAccess(uid, generation) && !pending.current.count && !unsynced.current)
-                    void restore(exists ? next : []); }, error => { if (!stopped && ownsAccess(uid, generation)) fail(error); });
+                    void restore(exists ? next : []); }, error => { if (!stopped && ownsAccess(uid, generation)) initializationFailed(error); });
             }
             catch (error) {
                 if (!stopped && ownsAccess(uid, generation))
-                    fail(error);
+                    initializationFailed(error);
             }
         };
         void initialize();
         return () => { stopped = true; stop?.(); };
     }, [uid, cartAccess, adminOnly]);
     const persist = async (next: CartItem[]) => {
+        if (!mounted.current) return false;
         if (!uid || activeUid.current !== uid || accessState.current !== 'active') {
             if (activeUid.current === uid) fail(new Error(adminOnly ? 'Se necesita el acceso de compras para usar el carrito. Este acceso es sólo para gestionar publicaciones.' : 'Tu carrito se conserva. Comprobá o recuperá el acceso para continuar.'));
             return false;
@@ -291,7 +307,7 @@ export function CartProvider({ children }: {
         }
     };
     const refreshCart = (): Promise<CartItem[]> => refreshCurrentCart(0);
-    const addToCart = async (item: CartItem) => {
+    const addToReadyCart = async (item: CartItem) => {
         if (adminOnly) { fail(new Error('Se necesita el acceso de compras para usar el carrito. Este acceso es sólo para gestionar publicaciones.')); return false; }
         const version = revision.current;
         try {
@@ -312,6 +328,68 @@ export function CartProvider({ children }: {
             return false;
         }
     };
+    const finishFreshIntent = (intent: FreshCartIntent, added: boolean, error?: unknown) => {
+        if (freshIntent.current !== intent) return;
+        freshIntent.current = null;
+        intent.resolve(added);
+        if (mounted.current) {
+            if (error) fail(error);
+            signalIntent(value => value + 1);
+        }
+    };
+    const addToCart = (item: CartItem): Promise<boolean> => {
+        if (freshIntent.current) return freshIntent.current.promise;
+        // Retain the existing queue and conflict handling for admitted carts.
+        if (cartAccess === 'active' || !canStartGuestPurchase) return addToReadyCart(item);
+        let resolveIntent: (added: boolean) => void = () => undefined;
+        const promise = new Promise<boolean>(resolve => { resolveIntent = resolve; });
+        const intent: FreshCartIntent = { item, owner: null, phase: 'admitting', promise, resolve: resolveIntent };
+        freshIntent.current = intent;
+        void prepareGuestCart().then(admission => {
+            if (freshIntent.current !== intent) return;
+            if (admission.scope === 'JOHN_ADMIN_CLOSED_V1' || admission.admin || admission.superadmin || auth.currentUser?.uid !== admission.uid) {
+                finishFreshIntent(intent, false, new Error('Cambió el acceso antes de preparar el carrito.'));
+                return;
+            }
+            intent.owner = admission.uid; intent.phase = 'waiting';
+            signalIntent(value => value + 1);
+        }).catch((error: unknown) => finishFreshIntent(intent, false, error));
+        return promise;
+    };
+    // Admission and cart initialization commit in separate React renders. Consume
+    // the intent only from the matching initialized cart, using this render's
+    // action rather than the pre-signup closure retained by the original click.
+    useEffect(() => {
+        const intent = freshIntent.current;
+        if (!intent || intent.phase !== 'waiting' || !intent.owner) return;
+        if (auth.currentUser?.uid !== intent.owner || adminOnly || cartAccess === 'pending' || cartAccess === 'unavailable') {
+            finishFreshIntent(intent, false, new Error('Cambió el acceso antes de agregar el producto.'));
+            return;
+        }
+        const initialized = initialization.current;
+        if (uid !== intent.owner || cartAccess !== 'active' || !initialized || initialized.owner !== intent.owner
+            || initialized.access !== 'active' || initialized.generation !== accessGeneration.current) return;
+        if (initialized.phase === 'error') {
+            finishFreshIntent(intent, false, new Error(initialized.error || 'No pudimos preparar tu carrito.'));
+            return;
+        }
+        // An old pending-state message may still be present in this render while
+        // the current initializer is loading. It cannot reject this new intent.
+        if (initialized.phase !== 'ready') return;
+        if (cartError) { finishFreshIntent(intent, false, new Error(cartError)); return; }
+        if (!cartReady) return;
+        intent.phase = 'writing';
+        void addToReadyCart(intent.item).then(added => finishFreshIntent(intent, added))
+            .catch((error: unknown) => finishFreshIntent(intent, false, error));
+    });
+    useEffect(() => {
+        mounted.current = true;
+        return () => {
+            mounted.current = false;
+            const intent = freshIntent.current;
+            if (intent) { freshIntent.current = null; intent.resolve(false); }
+        };
+    }, []);
     const removeItem = async (target: CartItem) => { await persist(itemsRef.current.filter(item => !isSameItem(item,target))); };
     const updateItem = async (target: CartItem, updates: Pick<CartItem, 'quantity'>) => { await persist(itemsRef.current.map(item => isSameItem(item,target) ? { ...item, ...updates } : item).filter(item => item.quantity > 0)); };
     const clearCart = async () => { await persist([]); };

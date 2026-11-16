@@ -11,9 +11,10 @@ const sdk = vi.hoisted(() => ({
   user: { uid: 'stock-ui', getIdToken: async () => 'synthetic' },
   credentialAccess: 'active' as 'loading' | 'active' | 'pending' | 'unavailable',
   credentialError: null as string | null,
+  canStartGuestPurchase: false, purchaseStarting: false,
   cartReady: true,
   cartError: null as string | null,
-  addToCart: vi.fn(async (_item: unknown) => true),
+  addToCart: vi.fn(async (...items: unknown[]) => { void items; return true; }),
 }));
 vi.mock('../../src/firebase', () => ({ auth: { currentUser: sdk.user }, db: {} }));
 vi.mock('../../src/firebase/products', () => ({ fetchProductBySlug: async () => mapCatalogProduct('p', sdk.product) }));
@@ -21,7 +22,7 @@ vi.mock('firebase/firestore', () => ({ doc: vi.fn(), onSnapshot: (_ref: unknown,
 vi.mock('firebase/auth', () => ({ onAuthStateChanged: (_auth: unknown, callback: (user: typeof sdk.user) => void) => { callback(sdk.user); return () => undefined; } }));
 // This UI boundary supplies dispositions only; real SDK/Rules/browser suites
 // independently exercise admission and authority without replacing Auth.
-vi.mock('../../src/context/AuthContext', () => ({ useAuth: () => ({ credentialAccess: sdk.credentialAccess, credentialError: sdk.credentialError }) }));
+vi.mock('../../src/context/AuthContext', () => ({ useAuth: () => ({ credentialAccess: sdk.credentialAccess, credentialError: sdk.credentialError, canStartGuestPurchase: sdk.canStartGuestPurchase, purchaseStarting: sdk.purchaseStarting }) }));
 vi.mock('../../src/context/CartContext', () => ({ useCart: () => ({ addToCart: sdk.addToCart, items: [], cartReady: sdk.cartReady, cartError: sdk.cartError }) }));
 vi.mock('../../src/components/ProductPageNavbar', () => ({ default: () => null }));
 vi.mock('../../src/components/RelatedProducts', () => ({ default: () => null }));
@@ -38,6 +39,7 @@ const baseHold = { [holdId]: { expiresAt: 1, lines: [{ slot: 'base', identity: '
 beforeEach(() => {
   sdk.listeners = [];
   sdk.credentialAccess = 'active'; sdk.credentialError = null;
+  sdk.canStartGuestPurchase = false; sdk.purchaseStarting = false;
   sdk.cartReady = true; sdk.cartError = null; sdk.addToCart.mockReset().mockResolvedValue(true);
   vi.stubGlobal('IntersectionObserver', class { observe() {} disconnect() {} });
   vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ checked: true }))));
@@ -80,6 +82,24 @@ test('both purchase controls wait for admission and cart readiness, and remain b
   expect(add.disabled).toBe(false); expect(quick.disabled).toBe(false);
   await act(async () => quick.click()); expect(sdk.addToCart).toHaveBeenCalledTimes(2);
   await act(async () => vi.advanceTimersByTimeAsync(800));
+});
+
+test('fresh visitors can use either Add control directly without a guest-choice banner', async () => {
+  sdk.product = base; sdk.credentialAccess = 'pending'; sdk.cartReady = false;
+  sdk.canStartGuestPurchase = true;
+  await renderProduct(); const { add, quick } = purchaseButtons();
+  expect(add.disabled).toBe(false); expect(quick.disabled).toBe(false);
+  expect(document.body.textContent).not.toContain('Empezar compra como invitado');
+  expect(document.body.textContent).not.toContain('recuperar el acceso');
+  let release: ((added: boolean) => void) | undefined;
+  sdk.addToCart.mockImplementationOnce(() => new Promise<boolean>(resolve => { release = resolve; }));
+  await act(async () => { add.click(); quick.click(); });
+  expect(sdk.addToCart).toHaveBeenCalledTimes(1);
+  expect(add.disabled).toBe(true); expect(quick.disabled).toBe(true);
+  await act(async () => release?.(true));
+  expect(add.disabled).toBe(false); expect(quick.disabled).toBe(false);
+  sdk.purchaseStarting = true; await renderProduct();
+  expect(add.disabled).toBe(true); expect(quick.disabled).toBe(true);
 });
 
 test.each(['pending', 'unavailable'] as const)('purchase controls retain recovery for %s without adding', async status => {
@@ -129,7 +149,7 @@ test('a selected variant stays selected while live holds update its stock and di
   await act(async () => redButton.click()); expect(document.body.textContent).toContain('En stock: 1 unidad');
   const reserved = { ...base, variants: [{ label, options: [red, blue] }], webReservations: { [holdId]: { expiresAt: 1, lines: [{ slot: '0:0', identity: identityForOption(label, red), quantity: 1 }] } } };
   await act(async () => sdk.listeners[0]({ metadata: { fromCache: false, hasPendingWrites: false }, exists: () => true, id: 'p', data: () => reserved }));
-  expect(redButton.className).toContain('bg-black'); expect(document.body.textContent).toContain('Sin stock');
+  expect(redButton.getAttribute('aria-pressed')).toBe('true'); expect(document.body.textContent).toContain('Sin stock');
   const buy = Array.from(document.querySelectorAll('button')).find(button => button.textContent === 'SIN STOCK');
   expect(buy?.disabled).toBe(true); expect(document.body.textContent).not.toContain('Comprar ahora');
   expect(mapCatalogProduct('p', reserved).stockTotal).toBe(4);
@@ -149,5 +169,6 @@ test('focus and client clock never release a hold or amplify provider reads; tru
   expect(Array.from(document.querySelectorAll('button')).find(button => button.textContent === 'SIN STOCK')?.disabled).toBe(true);
   await act(async () => sdk.listeners[0]({ metadata: { fromCache: false, hasPendingWrites: false }, exists: () => true, id: 'p', data: () => ({ ...base, stockTotal: 1 }) }));
   expect(Array.from(document.querySelectorAll('button')).find(button => button.textContent?.includes('Comprar ahora'))?.disabled).toBe(false);
-  expect(document.querySelector('[role="status"]')).toBeNull();
+  expect(document.body.textContent).not.toContain('La disponibilidad mostrada ya las excluye');
+  expect(document.querySelector('.product-detail-availability')?.textContent).toContain('En stock');
 });

@@ -72,9 +72,9 @@ test('cached scoped admission cannot become newer through failed guest action af
     <Route path="/login" element={<LoginForm />} />
     <Route path="/admin/productList" element={<h1>Catalog destination</h1>} />
   </Routes></MemoryRouter></AuthProvider>); });
-  const guestButton = [...document.querySelectorAll('button')].find(item => item.textContent?.includes('Empezar compra como invitado'));
-  expect(guestButton).toBeDefined();
-  await act(async () => { guestButton?.click(); });
+  // The real explicit Add boundary prepares the guest; navigation has no guest banner.
+  let guestOutcome: Promise<unknown> | null = null;
+  await act(async () => { guestOutcome = current().prepareGuestCart().catch((error: unknown) => error); });
   expect(sdk.rejectGuest).not.toBeNull();
   sdk.allowSession = true;
   await act(async () => {
@@ -93,6 +93,7 @@ test('cached scoped admission cannot become newer through failed guest action af
   expect(document.querySelector('h1')?.textContent).toBe('Ingresar a mi cuenta');
   expect(document.querySelector('[role="status"]')?.textContent).toContain('No pudimos comprobar el acceso');
   await act(async () => sdk.rejectGuest?.(new Error('Superseded guest sign-in')));
+  await expect(guestOutcome).resolves.toMatchObject({ message: 'Superseded guest sign-in' });
   expect(sdk.sessionCalls).toBe(2); // No newer server admission.
   expect(current().credentialAdmissionVersion).toBe(1); // Restoring cached UI is not a newer server admission.
   expect(document.querySelector('h1')?.textContent).toBe('Ingresar a mi cuenta');

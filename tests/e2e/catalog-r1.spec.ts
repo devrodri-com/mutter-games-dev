@@ -7,7 +7,7 @@ const db=getFirestore(initializeDemoAdmin('browser-fixtures'));
 const product={active:true,title:{es:'Juego sintético R1',en:'Synthetic game R1'},priceUSD:100,stockTotal:5,slug:'r1-synthetic',description:'Prueba local',category:{id:'r1-games',name:'Games'},subcategory:{id:'r1-sub',name:'Sub',categoryId:'r1-games'},variants:[],images:[]};
 const item={id:'r1-ui-product',slug:'r1-synthetic',name:'Snapshot antiguo',title:product.title,priceUSD:50,price:50,quantity:1,image:''};
 async function restoreGuestSnapshot(page: Page, items: (typeof item)[]) {
- await page.goto('/carrito');
+ await page.goto('/producto/r1-synthetic');
  const uid = await beginInitialGuestPurchase(page);
  // This is a returning admitted guest's own cache, not an unknown visitor's
  // unscoped historical selection. The actual UI creates the session first.
@@ -17,7 +17,7 @@ async function restoreGuestSnapshot(page: Page, items: (typeof item)[]) {
    localStorage.setItem('browser-restored-cart-seeded', 'yes');
   }
  }, { owner: uid, snapshot: items });
- await page.reload();
+ await page.goto('/carrito');
 }
 test.beforeEach(async({page})=>{
  await page.route('**/*',route=>['127.0.0.1','localhost'].includes(new URL(route.request().url()).hostname)?route.continue():route.abort());
@@ -30,30 +30,30 @@ test('direct detail, withdrawn product and navigation',async({page})=>{
  await expect(page.getByText('Producto no disponible',{exact:true})).toBeVisible();await page.getByRole('link',{name:'Volver a la tienda'}).click();await expect(page).toHaveURL(/shop/);expect(errors).toEqual([]);
 });
 test('restored cart updates price, explicit last-item clear survives reload and remote readback',async({page})=>{
- await restoreGuestSnapshot(page, [item]);await expect(page.getByText('El precio cambió. Revisá el importe actualizado.')).toBeVisible();await expect(page.getByText('$100.00 c/u',{exact:true})).toBeVisible();
- await page.getByRole('button',{name:'Quitar',exact:true}).click();await expect(page.getByText('Juego sintético R1',{exact:true})).toHaveCount(0);
+ await restoreGuestSnapshot(page, [item]);await expect(page.getByText('El precio cambió. Revisá el importe actualizado.')).toBeVisible();await expect(page.getByText('$100,00 c/u',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Quitar Juego sintético R1',exact:true}).click();await expect(page.getByText('Juego sintético R1',{exact:true})).toHaveCount(0);
  await expect.poll(async()=>page.evaluate(()=>Object.keys(localStorage).filter(k=>k.startsWith('mutter-cart:')).map(k=>JSON.parse(localStorage.getItem(k)||'{}').dirty))).toEqual([false]);
  const uid=await page.evaluate(()=>Object.keys(localStorage).find(k=>k.startsWith('mutter-cart:'))?.slice('mutter-cart:'.length));expect(uid).toBeTruthy();
  if(!uid)throw Error('UID missing');expect((await db.collection('carts').doc(uid).get()).data()?.cartItems).toEqual([]);
  await page.reload();await expect(page.getByText('Juego sintético R1',{exact:true})).toHaveCount(0);
 });
 test('withdrawn snapshot retained with warning and excluded from checkout',async({page})=>{
- await db.collection('products').doc(item.id).update({active:false});
- await restoreGuestSnapshot(page, [item]);await expect(page.getByText('No disponible para compra',{exact:true})).toBeVisible();await expect(page.getByText('Juego sintético R1',{exact:true})).toBeVisible();
+ await restoreGuestSnapshot(page, [item]);
+ await db.collection('products').doc(item.id).update({active:false});await expect(page.getByText('No disponible para compra',{exact:true})).toBeVisible();await expect(page.getByText('Juego sintético R1',{exact:true})).toBeVisible();
 });
 
 test('same identity on another device observes explicit clear',async({page,browser})=>{
- await restoreGuestSnapshot(page, [item]);await expect(page.getByText('$100.00 c/u',{exact:true})).toBeVisible();
+ await restoreGuestSnapshot(page, [item]);await expect(page.getByText('$100,00 c/u',{exact:true})).toBeVisible();
  const state=await page.context().storageState({indexedDB:true});
  const device=await browser.newContext({storageState:state});
  try{const other=await device.newPage();await other.route('**/*',route=>['127.0.0.1','localhost'].includes(new URL(route.request().url()).hostname)?route.continue():route.abort());
-  await other.goto('http://127.0.0.1:5277/carrito');await expect(other.getByText('$100.00 c/u',{exact:true})).toBeVisible();
-  await page.getByRole('button',{name:'Quitar',exact:true}).click();await expect(other.getByText('Juego sintético R1',{exact:true})).toHaveCount(0);
+  await other.goto('http://127.0.0.1:5277/carrito');await expect(other.getByText('$100,00 c/u',{exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Quitar Juego sintético R1',exact:true}).click();await expect(other.getByText('Juego sintético R1',{exact:true})).toHaveCount(0);
  }finally{await device.close();}
 });
 
 test('post-cutover guest retains the same UID and selections after expiry, Firebase refresh and SPA reload', async ({ page }) => {
- await restoreGuestSnapshot(page, [{ ...item, quantity: 2 }]); await expect(page.getByText('$100.00 c/u', { exact: true })).toBeVisible();
+ await restoreGuestSnapshot(page, [{ ...item, quantity: 2 }]); await expect(page.getByText('$100,00 c/u', { exact: true })).toBeVisible();
  const modulePath = '/tests/e2e/guest-reentry-client.ts';
  async function identity(): Promise<{ uid: string; sessionId: string; provider: string }> {
   const observed: unknown = await page.evaluate(async path => { const client = await import(path); return client.guestIdentity(); }, modulePath);
@@ -72,7 +72,7 @@ test('post-cutover guest retains the same UID and selections after expiry, Fireb
   await page.evaluate(async path => { const client = await import(path); await client.refreshGuestToken(); }, modulePath);
   // A forced emulator refresh within the same second may return identical
   // token bytes without an observer event. Exercise the actual SPA return.
-  await page.reload(); await expect(page.getByText('$100.00 c/u', { exact: true })).toBeVisible();
+  await page.reload(); await expect(page.getByText('$100,00 c/u', { exact: true })).toBeVisible();
   await expect.poll(async () => (await identity()).sessionId).not.toBe(source.sessionId);
   await expect.poll(async () => page.evaluate(uid => JSON.parse(localStorage.getItem(`mutter-cart:${uid}`) ?? '{}').dirty, first.uid)).toBe(false);
   const returned = await identity(); expect(returned.uid).toBe(first.uid); expect(returned.provider).toBe('custom'); expect(returned.sessionId).not.toBe(source.sessionId);
@@ -120,7 +120,6 @@ test('real checkout reserves the last unit and the open product stops offering i
   await expect(page.getByText('Comprobando el acceso a tu carrito…', { exact: true })).toBeVisible();
  } finally { if (releaseAdmission) releaseAdmission(); }
  await expect(page.getByRole('button', { name: 'Agregar al carrito', exact: true })).toBeEnabled();
- await page.getByRole('button', { name: 'Agregar al carrito', exact: true }).click();
  await expect(page.getByText('Agregado al carrito', { exact: true })).toBeVisible();
  await expect.poll(() => page.evaluate(id => {
   const keys = Object.keys(localStorage).filter(key => key.startsWith('mutter-cart:'));
@@ -138,7 +137,7 @@ test('real checkout reserves the last unit and the open product stops offering i
  const cartPage = await page.context().newPage();
  await cartPage.route('**/*', route => ['127.0.0.1', 'localhost'].includes(new URL(route.request().url()).hostname) ? route.continue() : route.abort());
  await cartPage.goto('/carrito');
- await expect(cartPage.getByText('$100.00 c/u', { exact: true })).toBeVisible();
+ await expect(cartPage.getByText('$100,00 c/u', { exact: true })).toBeVisible();
  expect(await cartPage.evaluate(() => Object.keys(localStorage).find(key => key.startsWith('mutter-cart:'))?.slice('mutter-cart:'.length))).toBe(cartUid);
  await expect(cartPage.getByText('No disponible para compra', { exact: true })).toHaveCount(0);
  const headers = await syntheticBuyer(request);

@@ -31,39 +31,39 @@ async function addThree(page: Page): Promise<string> {
   await expect(page.getByRole('heading', { name: fixture.product.title.es, exact: true })).toBeVisible();
   expect(await identity(page)).toBeNull();
   expect(traffic.signups).toBe(0);
-  await expect(page.getByRole('button', { name: 'Agregar al carrito', exact: true })).toBeDisabled();
-  await page.getByRole('button', { name: 'Empezar compra como invitado', exact: true }).click();
-  const guest = await admittedIdentity(page);
-  expect(traffic.signups).toBe(1);
+  await expect(page.getByRole('button', { name: 'Empezar compra como invitado', exact: true })).toHaveCount(0);
+  await expect(page.getByText(/Podés comprar sin registrarte/)).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Agregar al carrito', exact: true })).toBeEnabled();
   // The quantity control's visible label is real UI; no cart cache is injected.
-  const quantity = page.locator('label').filter({ hasText: /^Cantidad$/ }).locator('..');
-  await quantity.getByRole('button').nth(1).click();
-  await quantity.getByRole('button').nth(1).click();
+  const quantity = page.getByRole('group', { name: 'Cantidad', exact: true });
+  await quantity.getByRole('button', { name: 'Sumar una unidad', exact: true }).click();
+  await quantity.getByRole('button', { name: 'Sumar una unidad', exact: true }).click();
   await expect(quantity.getByText('3', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Agregar al carrito', exact: true }).click();
+  const guest = await admittedIdentity(page);
+  expect(traffic.signups).toBe(1);
   await expect.poll(() => cart(guest.uid)).toMatchObject([{ id: fixture.id, quantity: 3 }]);
   await page.goto(`${origin}/carrito`);
-  await expect(page.getByRole('heading', { name: 'Tu carrito', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /^Tu carrito/ })).toBeVisible();
   await expect(page.getByText(fixture.product.title.es, { exact: true })).toBeVisible();
   return guest.uid;
 }
 function addressInput(page: Page) {
-  return page.locator('label').filter({ hasText: /^Dirección$/ }).locator('..').getByRole('textbox');
+  return page.getByRole('textbox', { name: 'Dirección', exact: true });
 }
 async function fillShipping(page: Page) {
-  await page.getByPlaceholder('Nombre completo', { exact: true }).fill(shipping.name);
+  await page.getByRole('textbox', { name: 'Nombre completo', exact: true }).fill(shipping.name);
   await addressInput(page).fill(shipping.address);
-  await page.getByPlaceholder(/Apartamento, piso/).fill(shipping.apartment);
-  await page.getByPlaceholder('Correo electrónico', { exact: true }).fill(shipping.email);
-  await page.getByPlaceholder('Teléfono', { exact: true }).fill(shipping.phone);
-  await page.getByPlaceholder('Ciudad o Barrio', { exact: true }).fill(shipping.city);
-  await page.getByRole('button', { name: 'Seleccioná un departamento', exact: true }).click();
-  await page.getByRole('option', { name: shipping.department, exact: true }).click();
-  await page.getByPlaceholder('Código postal', { exact: true }).fill(shipping.postalCode);
+  await page.getByRole('textbox', { name: 'Apartamento, piso, etc. (opcional)', exact: true }).fill(shipping.apartment);
+  await page.getByRole('textbox', { name: 'Correo electrónico', exact: true }).fill(shipping.email);
+  await page.getByRole('textbox', { name: 'Teléfono', exact: true }).fill(shipping.phone);
+  await page.getByRole('textbox', { name: 'Ciudad o barrio', exact: true }).fill(shipping.city);
+  await page.getByRole('combobox', { name: 'Departamento', exact: true }).selectOption({ label: shipping.department });
+  await page.getByRole('textbox', { name: 'Código postal', exact: true }).fill(shipping.postalCode);
   await expect(page.locator('input[value="Uruguay"]')).toBeVisible();
   await expect(page.locator('input[type="password"]')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: /registrar|crear cuenta/i })).toHaveCount(0);
+  await expect(page.getByRole('checkbox', { name: 'Crear una cuenta', exact: true })).not.toBeChecked();
+  await expect(page.getByRole('link', { name: 'Ya tengo cuenta: ingresar', exact: true })).toBeVisible();
 }
 async function shippingSurvivesReload(page: Page, uid: string) {
   // Observe the production persistence write before closing this render.
@@ -73,18 +73,18 @@ async function shippingSurvivesReload(page: Page, uid: string) {
   })).toBe(shipping.apartment);
   await page.reload();
   expect((await admittedIdentity(page)).uid).toBe(uid);
-  await expect(page.getByPlaceholder('Nombre completo', { exact: true })).toHaveValue(shipping.name);
+  await expect(page.getByRole('textbox', { name: 'Nombre completo', exact: true })).toHaveValue(shipping.name);
   await expect(addressInput(page)).toHaveValue(shipping.address);
-  await expect(page.getByPlaceholder(/Apartamento, piso/)).toHaveValue(shipping.apartment);
-  await expect(page.getByPlaceholder('Correo electrónico', { exact: true })).toHaveValue(shipping.email);
-  await expect(page.getByPlaceholder('Teléfono', { exact: true })).toHaveValue(shipping.phone);
-  await expect(page.getByPlaceholder('Ciudad o Barrio', { exact: true })).toHaveValue(shipping.city);
-  await expect(page.getByRole('button', { name: shipping.department, exact: true })).toBeVisible();
-  await expect(page.getByPlaceholder('Código postal', { exact: true })).toHaveValue(shipping.postalCode);
+  await expect(page.getByRole('textbox', { name: 'Apartamento, piso, etc. (opcional)', exact: true })).toHaveValue(shipping.apartment);
+  await expect(page.getByRole('textbox', { name: 'Correo electrónico', exact: true })).toHaveValue(shipping.email);
+  await expect(page.getByRole('textbox', { name: 'Teléfono', exact: true })).toHaveValue(shipping.phone);
+  await expect(page.getByRole('textbox', { name: 'Ciudad o barrio', exact: true })).toHaveValue(shipping.city);
+  await expect(page.getByRole('combobox', { name: 'Departamento', exact: true })).toHaveValue(shipping.department);
+  await expect(page.getByRole('textbox', { name: 'Código postal', exact: true })).toHaveValue(shipping.postalCode);
 }
 async function review(page: Page) {
-  await page.getByRole('button', { name: 'Revisar compra', exact: true }).click();
-  await expect(page.getByText(/Total verificado:.*UYU/)).toBeVisible();
+  await page.getByRole('button', { name: 'Confirmar y pagar', exact: true }).click();
+  await expect(page.getByText(/Total actualizado:.*UYU/)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Confirmar y pagar', exact: true })).toBeEnabled();
 }
 async function providerPreference(page: Page, request: Parameters<typeof providerState>[0]): Promise<Preference> {
@@ -110,7 +110,7 @@ async function approvedReturn(page: Page, preference: Preference, uid: string) {
   await assertApproved(page, preference, uid);
 }
 
-test('explicit guest pays for three units, keeps UY apartment after reload and commits stock exactly once', async ({ page, request }, testInfo) => {
+test('default guest pays for three units, keeps UY apartment after reload and commits stock exactly once', async ({ page, request }, testInfo) => {
   await setup(request);
   const uid = await addThree(page);
   await fillShipping(page);

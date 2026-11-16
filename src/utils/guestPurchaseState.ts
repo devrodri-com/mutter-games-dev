@@ -4,9 +4,10 @@ import type { LegacyGuestNewPurchase } from './credentialAccess';
 export type GuestPurchaseTransition = LegacyGuestNewPurchase & { schema: 1; phase: 'PREPARING' | 'SIGNED_OUT' | 'CREATING' | 'CREATED' | 'SETTLED'; startedAtMs: number };
 export const GUEST_PURCHASE_STATE_EVENT = 'mutter-guest-purchase-state';
 const formEvent = 'mutter-purchase-form-preparing';
-/** Only an explained, explicit new-purchase action resets this local form. */
-export function prepareNewPurchaseForm(): void {
+/** Fresh Add preserves saved form data; an explained new purchase may reset it. */
+export function prepareNewPurchaseForm(savedPurchaseData: 'reset' | 'preserve' = 'reset'): void {
   localStorage.setItem('mutter-cart-migrated', 'yes');
+  if (savedPurchaseData === 'preserve') return;
   localStorage.removeItem('shippingData');
   localStorage.removeItem('lastOrderId');
   window.dispatchEvent(new Event(formEvent));

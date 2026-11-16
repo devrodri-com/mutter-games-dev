@@ -14,11 +14,13 @@ interface ProductPurchaseActionsProps {
 
 /** Both responsive purchase controls share the same admission and cart readiness. */
 export function ProductPurchaseActions({ placement, lang, priceUSD, isOutOfStock, isAdding, onBuy }: ProductPurchaseActionsProps) {
-  const { credentialAccess, credentialError, credentialScope } = useAuth();
+  const { credentialAccess, credentialError, credentialScope, canStartGuestPurchase, purchaseStarting } = useAuth();
   const { cartReady, cartError } = useCart();
   const adminOnly = credentialScope === 'JOHN_ADMIN_CLOSED_V1';
-  const ready = !adminOnly && credentialAccess === 'active' && cartReady && !cartError;
-  const disabled = isOutOfStock || isAdding || !ready;
+  const freshGuest = canStartGuestPurchase && credentialAccess === 'pending';
+  const ready = !adminOnly && (freshGuest || (credentialAccess === 'active' && cartReady && !cartError));
+  const busy = isAdding || purchaseStarting;
+  const disabled = isOutOfStock || busy || !ready;
   const label = isOutOfStock ? (lang === 'en' ? 'OUT OF STOCK' : 'SIN STOCK')
     : placement === 'main' ? (lang === 'en' ? 'Add to cart' : 'Agregar al carrito')
       : (lang === 'en' ? 'Buy now' : 'Comprar ahora');
@@ -26,14 +28,14 @@ export function ProductPurchaseActions({ placement, lang, priceUSD, isOutOfStock
     type="button"
     disabled={disabled}
     aria-label={label}
-    aria-busy={isAdding}
+    aria-busy={busy}
     aria-describedby={!ready && !isOutOfStock ? 'product-purchase-access' : undefined}
     onClick={onBuy}
     className={placement === 'main'
       ? `h-12 rounded-lg shadow hover:shadow-md tracking-wide transition flex items-center justify-center gap-2 border font-semibold disabled:opacity-50 disabled:cursor-not-allowed ${isOutOfStock ? 'bg-gray-300 text-white cursor-not-allowed' : 'bg-black text-white border-black hover:bg-white hover:text-black'}`
       : 'flex-1 h-11 rounded-lg bg-black text-white font-semibold tracking-wide shadow hover:bg-white hover:text-black border border-black transition disabled:opacity-50 disabled:cursor-not-allowed'}
   >
-    {isAdding && !isOutOfStock ? <svg aria-hidden="true" className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+    {busy && !isOutOfStock ? <svg aria-hidden="true" className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
     </svg> : <>{placement === 'main' && !isOutOfStock && <Check size={18} aria-hidden="true" />}{label}</>}

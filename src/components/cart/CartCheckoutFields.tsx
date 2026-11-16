@@ -14,9 +14,14 @@ type Props = {
   pickup: boolean;
   setPickup: Dispatch<SetStateAction<boolean>>;
   onReview: () => void;
+  accountBlocked: boolean;
+  checkoutBusy: boolean;
+  isCheckoutBusy: () => boolean;
+  onAccountBusyChange: (busy: boolean) => void;
+  onAccountBlockedChange: (blocked: boolean) => void;
 };
 
-export default function CartCheckoutFields({ shippingInfo, setShippingInfo, pickup, setPickup, onReview }: Props) {
+export default function CartCheckoutFields({ shippingInfo, setShippingInfo, pickup, setPickup, onReview, accountBlocked, onAccountBusyChange, onAccountBlockedChange, checkoutBusy, isCheckoutBusy }: Props) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const update = (key: keyof ShippingData, value: string) => {
     setShippingInfo(previous => ({ ...previous, [key]: value }));
@@ -43,7 +48,7 @@ export default function CartCheckoutFields({ shippingInfo, setShippingInfo, pick
       {(error || postalHint) && <p id={`${key}-error`} className="cart-field-error">{error || 'El código postal debe tener 5 dígitos.'}</p>}
     </div>;
   };
-  const submit = (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); onReview(); };
+  const submit = (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); if (!accountBlocked) onReview(); };
   return <form id="cart-checkout" className="cart-details" noValidate onSubmit={submit}>
     <section className="cart-form-card" aria-labelledby="cart-contact-heading">
       <div className="cart-section-heading"><h2 id="cart-contact-heading">Tus datos</h2><p>Contacto para tu pedido.</p></div>
@@ -72,7 +77,7 @@ export default function CartCheckoutFields({ shippingInfo, setShippingInfo, pick
       <label className="cart-pickup" htmlFor="pickup"><input type="checkbox" id="pickup" checked={pickup} onChange={event => setPickup(event.target.checked)} />
         <span><strong>Retirar en Zona La Teja</strong><small>Coordinar por WhatsApp · sin costo de envío</small></span>
       </label>
-      <div className="cart-account"><CheckoutAccountOption /></div>
+      <div className="cart-account"><CheckoutAccountOption checkoutBusy={checkoutBusy} isCheckoutBusy={isCheckoutBusy} onBusyChange={onAccountBusyChange} onCheckoutBlockedChange={onAccountBlockedChange} /></div>
     </section>
   </form>;
 }

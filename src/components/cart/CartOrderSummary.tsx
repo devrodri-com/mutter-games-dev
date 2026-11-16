@@ -13,9 +13,10 @@ type Props = {
   cartReady: boolean;
   cartError: string | null;
   onRefresh: () => void;
+  accountBlocked: boolean;
 };
 
-export default function CartOrderSummary({ subtotal, total, pickup, shippingText, shippingInfo, checkout, cartReady, cartError, onRefresh }: Props) {
+export default function CartOrderSummary({ subtotal, total, pickup, shippingText, shippingInfo, checkout, cartReady, cartError, onRefresh, accountBlocked }: Props) {
   const address = [shippingInfo.address, shippingInfo.address2, shippingInfo.city,
     shippingInfo.state.replace(/^Departamento de\s+/i, ''), shippingInfo.postalCode, shippingInfo.country].filter(Boolean).join(', ');
   const quote = checkout.quote;
@@ -40,11 +41,11 @@ export default function CartOrderSummary({ subtotal, total, pickup, shippingText
     </div>}
     {checkout.recovery && <p role="alert" className="cart-checkout-notice">Existe un intento que requiere verificación. Podés reintentar la misma compra; no generes otra intención de pago.</p>}
     {cartError && <div role="alert" className="cart-checkout-notice">{cartError}<button type="button" onClick={onRefresh} className="cart-retry">Reintentar</button></div>}
-    <button type="submit" form="cart-checkout" className="cart-review" disabled={checkout.loading || !cartReady || Boolean(cartError)} aria-busy={checkout.loading}>
+    <button type="submit" form="cart-checkout" className="cart-review" disabled={checkout.loading || accountBlocked || !cartReady || Boolean(cartError)} aria-busy={checkout.loading}>
       {checkout.loading ? 'Verificando…' : 'Confirmar y pagar'}
       <ArrowRight size={18} aria-hidden="true" />
     </button>
-    <p className="cart-review-help">Revisá los datos y el total antes de continuar.</p>
+    <p className="cart-review-help">{accountBlocked ? 'Terminá de crear tu cuenta o continuá como invitado.' : 'Revisá los datos y el total antes de continuar.'}</p>
   </div>;
 }
 

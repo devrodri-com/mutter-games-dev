@@ -10,7 +10,7 @@ export function bootstrapAnonymousVisitor(auth: Auth): Promise<User> {
   return Promise.reject(new Error('Elegí empezar una compra como invitado o ingresar a tu cuenta para continuar.'));
 }
 /** Called only by the explained public guest action, never by startup. */
-export function startExplicitAnonymousVisitor(auth: Auth): Promise<User> {
+export function startExplicitAnonymousVisitor(auth: Auth, options: { savedPurchaseData?: 'preserve' } = {}): Promise<User> {
   const current = auth.currentUser;
   if (current) return Promise.resolve(current);
   const existing = requests.get(auth);
@@ -21,7 +21,7 @@ export function startExplicitAnonymousVisitor(auth: Auth): Promise<User> {
     if (observedIdentityUid(auth)) throw new Error('La sesión se cerró. Elegí cómo continuar; tu cuenta y tus datos se conservan.');
     const transition = readGuestPurchaseTransition(auth);
     if (transition && transition.phase !== 'SETTLED') throw new Error('La compra nueva espera tu confirmación para continuar.');
-    prepareNewPurchaseForm();
+    prepareNewPurchaseForm(options.savedPurchaseData ?? 'reset');
     let superseded = false;
     const stop = beforeAuthStateChanged(auth, next => {
       if (!next) return;

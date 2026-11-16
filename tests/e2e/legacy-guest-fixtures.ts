@@ -50,7 +50,8 @@ export async function localOnly(page: Page) {
 async function save(path: string, value: Record<string, unknown>) { documents.add(path); await db.doc(path).set(value); }
 export async function seedLegacy(page: Page) {
   await localOnly(page);
-  await page.goto('/carrito');
+  await db.doc(`products/${item.id}`).set(product);
+  await page.goto(`/producto/${item.slug}`);
   await beginInitialGuestPurchase(page);
   await expect.poll(async () => (await identity(page))?.sessionId).toBeTruthy();
   const initial = await identity(page); if (initial) users.add(initial.uid);
@@ -91,7 +92,7 @@ export async function seedLegacy(page: Page) {
     localStorage.setItem('unrelated-owner-storage', 'preserve-me');
   }, { uid, value: item });
   await signIn(page, await auth.createCustomToken(uid));
-  await page.reload();
+  await page.goto('/carrito');
   await expect(page.getByRole('button', { name: 'Empezar compra nueva', exact: true })).toBeVisible();
   await new Promise(resolve => setTimeout(resolve, Math.max(0, cutoff + 1001 - Date.now())));
   return { uid, orderId, account, cart, order, paths, before, cutoff };

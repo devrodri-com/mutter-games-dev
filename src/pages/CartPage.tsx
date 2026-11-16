@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ToastContainer } from 'react-toastify';
 import { toast } from 'react-hot-toast';
@@ -25,6 +25,31 @@ export default function CartPage() {
   const { language } = useLanguage();
   const [pickup, setPickup] = useState(false);
   const checkout = useCatalogCheckout(pickup);
+  const checkoutInFlight = useRef(false);
+  const [checkoutBusy, setCheckoutBusy] = useState(false);
+  const isCheckoutBusy = useCallback(() => checkoutInFlight.current, []);
+  const accountGuard = useRef({ busy: false, blocked: false });
+  const [accountState, setAccountState] = useState(accountGuard.current);
+  const handleAccountBusyChange = useCallback((busy: boolean) => {
+    accountGuard.current = { ...accountGuard.current, busy };
+    setAccountState(accountGuard.current);
+  }, []);
+  const handleAccountBlockedChange = useCallback((blocked: boolean) => {
+    accountGuard.current = { ...accountGuard.current, blocked };
+    setAccountState(accountGuard.current);
+  }, []);
+  const accountBlocked = accountState.busy || accountState.blocked;
+  const handleReview = () => {
+    if (checkoutInFlight.current || checkout.loading || accountGuard.current.busy || accountGuard.current.blocked) return;
+    checkoutInFlight.current = true;
+    setCheckoutBusy(true);
+    void checkout.pay().catch((error: unknown) => {
+      toast.error(error instanceof Error ? error.message : 'No pudimos preparar tu compra. Intentá nuevamente.');
+    }).finally(() => {
+      checkoutInFlight.current = false;
+      setCheckoutBusy(false);
+    });
+  };
   const adminOnly = credentialScope === 'JOHN_ADMIN_CLOSED_V1';
   const { label: shippingText, cost: shippingCost } = getShippingInfoByDepartment(shippingInfo.state || '');
   const breakdown = calculateCartBreakdown(items);
@@ -57,11 +82,13 @@ export default function CartPage() {
           <p>Pago protegido con Mercado Pago · Envío a todo el país</p>
         </div> : <>
           <div className="cart-checkout-layout">
-            <CartCheckoutFields shippingInfo={shippingInfo} setShippingInfo={setShippingInfo} pickup={pickup} setPickup={setPickup} onReview={() => { void checkout.pay(); }} />
+            <CartCheckoutFields shippingInfo={shippingInfo} setShippingInfo={setShippingInfo} pickup={pickup} setPickup={setPickup} onReview={handleReview} accountBlocked={accountBlocked || checkoutBusy}
+              checkoutBusy={checkoutBusy || checkout.loading} isCheckoutBusy={isCheckoutBusy}
+              onAccountBusyChange={handleAccountBusyChange} onAccountBlockedChange={handleAccountBlockedChange} />
             <aside className="cart-order" aria-label="Tu pedido">
               <div className="cart-order-products"><h2>Resumen de tu pedido</h2><CartItems items={items} language={language === 'en' ? 'en' : 'es'} onRemove={handleRemove} /></div>
               <CartOrderSummary subtotal={breakdown.subtotal} total={total} pickup={pickup} shippingText={shippingText} shippingInfo={shippingInfo}
-                checkout={checkout} cartReady={cartReady} cartError={cartError} onRefresh={handleRefresh} />
+                checkout={checkout} cartReady={cartReady} cartError={cartError} onRefresh={handleRefresh} accountBlocked={accountBlocked} />
             </aside>
           </div>
           <section className="cart-related">

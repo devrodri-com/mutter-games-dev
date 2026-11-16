@@ -17,7 +17,7 @@ interface AuthContextType {
   credentialAdmissionVersion: number;
   getCredentialAdmissionVersion: () => number;
   newPurchaseOffer: LegacyGuestNewPurchase | null; purchaseStarting: boolean; startNewPurchase: () => Promise<void>;
-  canStartGuestPurchase: boolean; startGuestPurchase: () => Promise<void>;
+  canStartGuestPurchase: boolean; prepareGuestCart: () => Promise<CredentialAdmission>;
 }
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -159,15 +159,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally { starting.current = false; setPurchaseStarting(false); }
   };
   const login = async () => { await refreshAccess(); };
-  const startGuestPurchase = async () => {
-    if (starting.current || !canStartGuestPurchase || auth.currentUser) return;
-    try { if (guestPurchaseSourceUid()) return; }
-    catch (error: unknown) { reject(error); return; }
+  /** The explicit Add action may prepare a fresh guest; browsing never calls this. */
+  const prepareGuestCart = async (): Promise<CredentialAdmission> => {
+    const current = auth.currentUser, admitted = admittedIdentity.current;
+    const buyer = (result: CredentialAdmission) => result.scope !== 'JOHN_ADMIN_CLOSED_V1' && !result.admin && !result.superadmin;
+    if (current && admitted?.uid === current.uid && credentialAccess === 'active' && admitted.expiresAtMs > Date.now()) {
+      if (!buyer(admitted)) throw new CredentialAccessError('ACCESS_UNAVAILABLE', 'Este acceso no permite preparar un carrito de compras.');
+      return admitted;
+    }
+    if (starting.current || !canStartGuestPurchase || current || guestPurchaseSourceUid())
+      throw new CredentialAccessError('ACCESS_UNAVAILABLE', 'Comprobá o recuperá el acceso a tu carrito para continuar.');
     starting.current = true; setPurchaseStarting(true); setCredentialError(null);
-    try { acceptServerAdmission(await ensureCredentialSession(await startExplicitAnonymousVisitor(auth))); }
-    catch (error: unknown) {
-      if (admittedIdentity.current) applyIdentity(admittedIdentity.current);
-      else reject(error);
+    let createdUid: string | null = null;
+    try {
+      const visitor = await startExplicitAnonymousVisitor(auth, { savedPurchaseData: 'preserve' });
+      if (!visitor.isAnonymous || visitor.email || visitor.phoneNumber || visitor.providerData.length > 0 || auth.currentUser?.uid !== visitor.uid)
+        throw new CredentialAccessError('ACCESS_UNAVAILABLE', 'Cambió la cuenta durante el ingreso. Tu cuenta y tus datos se conservan.');
+      createdUid = visitor.uid;
+      const result = await ensureCredentialSession(visitor);
+      if (auth.currentUser?.uid !== createdUid || result.uid !== createdUid || !buyer(result))
+        throw new CredentialAccessError('ACCESS_UNAVAILABLE', 'Cambió el acceso durante el ingreso. Tu cuenta y tus datos se conservan.');
+      acceptServerAdmission(result);
+      return result;
+    } catch (error: unknown) {
+      const preserved = admittedIdentity.current;
+      if (preserved && preserved.uid === auth.currentUser?.uid) applyIdentity(preserved);
+      else if (!auth.currentUser || auth.currentUser.uid === createdUid) reject(error);
+      throw error;
     } finally { starting.current = false; setPurchaseStarting(false); }
   };
   const logout = () => {
@@ -177,6 +195,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!auth.currentUser) forgetObservedIdentity(auth, uid);
     }).catch(() => setCredentialError('No pudimos completar el cierre de sesión. Intentá nuevamente.'));
   };
-  return <AuthContext.Provider value={{ user, login, logout, isLoading: credentialAccess === 'loading', credentialAccess, credentialError, credentialScope: admittedIdentity.current?.scope ?? null, credentialAdmissionVersion, getCredentialAdmissionVersion, refreshAccess, newPurchaseOffer, purchaseStarting, startNewPurchase, canStartGuestPurchase, startGuestPurchase }}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={{ user, login, logout, isLoading: credentialAccess === 'loading', credentialAccess, credentialError, credentialScope: admittedIdentity.current?.scope ?? null, credentialAdmissionVersion, getCredentialAdmissionVersion, refreshAccess, newPurchaseOffer, purchaseStarting, startNewPurchase, canStartGuestPurchase, prepareGuestCart }}>{children}</AuthContext.Provider>;
 }
 export function useAuth() { const context = useContext(AuthContext); if (!context) throw new Error('useAuth debe usarse dentro de AuthProvider'); return context; }

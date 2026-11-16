@@ -3,10 +3,13 @@ import { expect, type Page } from '@playwright/test';
 export const initialGuestCopy = 'Podés comprar sin registrarte. Esta compra empezará con un carrito vacío y no recupera ni traslada compras anteriores. Si tenés una cuenta, podés ingresar.';
 export const initialGuestAction = (page: Page) => page.getByRole('button', { name: 'Empezar compra como invitado', exact: true });
 
-/** The real UI decision remains part of setup, before any guest SDK creation. */
+/** The first explicit Add uses the real production admission and cart lifecycle. */
 export async function chooseInitialGuestPurchase(page: Page) {
-  await expect(page.getByText(initialGuestCopy, { exact: true })).toBeVisible();
-  await initialGuestAction(page).click();
+  await expect(page.getByText(initialGuestCopy, { exact: true })).toHaveCount(0);
+  await expect(initialGuestAction(page)).toHaveCount(0);
+  const add = page.getByRole('button', { name: 'Agregar al carrito', exact: true });
+  await expect(add).toBeEnabled();
+  await add.click();
 }
 
 async function admittedGuestUid(page: Page): Promise<string | null> {
@@ -22,5 +25,6 @@ export async function beginInitialGuestPurchase(page: Page): Promise<string> {
   await expect.poll(() => admittedGuestUid(page)).not.toBeNull();
   const uid = await admittedGuestUid(page);
   if (!uid) throw Error('Expected actual UI-created admitted guest');
+  await expect(page.getByText('Agregado al carrito', { exact: true })).toBeVisible();
   return uid;
 }

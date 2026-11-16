@@ -3,10 +3,9 @@ import { ProductPurchaseActions } from '../components/product/ProductPurchaseAct
 //src/pages/ProductPage.tsx
 
 import { useParams, Link } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Helmet } from "react-helmet-async";
 import ProductPageNavbar from "../components/ProductPageNavbar";
-import PublicGuestPurchase from "../components/PublicGuestPurchase";
 import { usePublishedProduct } from "../hooks/usePublishedProduct";
 import { useCart } from "../context/CartContext";
 import { ChevronLeft, ArrowUp, CreditCard, Truck, Store } from "lucide-react";
@@ -46,6 +45,7 @@ export default function ProductPage() {
   const [quantity, setQuantity] = useState(1);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const { addToCart, items } = useCart();
+  const addInFlight = useRef(false);
   const [showToast, setShowToast] = useState(false);
   const [stockMessage, setStockMessage] = useState<string>('');
   const [isAdding, setIsAdding] = useState(false);
@@ -86,6 +86,7 @@ export default function ProductPage() {
   };
 
   const handleQuickBuy = async () => {
+    if (addInFlight.current) return;
     if (!product || isOutOfStock) {
       setStockMessage('Sin stock disponible de esta opción');
       setShowToast(true);
@@ -118,6 +119,7 @@ export default function ProductPage() {
       setTimeout(() => setShowToast(false), 2500);
       return;
     }
+    addInFlight.current = true;
     setIsAdding(true);
     const cartItem = {
       id: product.id,
@@ -133,11 +135,17 @@ export default function ProductPage() {
       stock: selectedOption?.stock,
       color: '',
     };
-    const added = await addToCart(cartItem);
-    if (!added) { setIsAdding(false); return; }
-    toast.success(lang === 'en' ? 'Added to cart' : 'Agregado al carrito');
-    scrollToTop();
-    setTimeout(() => setIsAdding(false), 800);
+    try {
+      const added = await addToCart(cartItem);
+      if (!added) return;
+      toast.success(lang === 'en' ? 'Added to cart' : 'Agregado al carrito');
+      scrollToTop();
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : 'No pudimos agregar el producto. Intentá nuevamente.');
+    } finally {
+      addInFlight.current = false;
+      setIsAdding(false);
+    }
   };
   // ------------------------------------------------------------------------
   // EFECTO: CONTROL DE STICKY CTA (MOBILE) SEGÚN VISIBILIDAD DEL BLOQUE DE COMPRA
@@ -210,7 +218,6 @@ export default function ProductPage() {
         })}</script>}
       </Helmet>
       <ProductPageNavbar />
-      <PublicGuestPurchase inLayout />
 
       <main className="product-detail-main">
         <nav className="product-detail-breadcrumb" aria-label="Ubicación">

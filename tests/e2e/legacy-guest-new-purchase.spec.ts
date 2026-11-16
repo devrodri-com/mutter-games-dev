@@ -1,6 +1,6 @@
 import { test, expect, type Page, type Route } from '@playwright/test';
 import { admittedAdministrator, admittedBuyer, auth, clientPath, cleanup, db, dispose, epoch, identity, item,
-  localOnly, seedLegacy, signIn, trackCurrent, trackUid, unchanged, type Legacy } from './legacy-guest-fixtures';
+  localOnly, product, seedLegacy, signIn, trackCurrent, trackUid, unchanged, type Legacy } from './legacy-guest-fixtures';
 import { chooseInitialGuestPurchase, initialGuestAction, initialGuestCopy } from './initial-guest-purchase';
 
 const action = (page: Page) => page.getByRole('button', { name: 'Empezar compra nueva', exact: true });
@@ -75,12 +75,14 @@ test.afterEach(async ({ page }) => {
 });
 test.afterAll(async () => { await dispose(); });
 
-test('first arrival with SDK null waits for an explicit guest decision across reload and another tab', async ({ page, context }, testInfo) => {
-  // Model a first arrival only. No marker is seeded or SDK persistence erased;
-  // this is not evidence that an emulator reproduced provider invalidation.
+test('first arrival browses without signup or guest gate; its first Add persists once across tabs', async ({ page, context }, testInfo) => {
+  // This is a first arrival, with no historical marker or SDK identity erased.
   await localOnly(page); const signups = observeSignups(page);
+  await db.doc(`products/${item.id}`).set(product);
   await page.goto('/carrito');
-  await expect(page.getByText(initialGuestCopy, { exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Tu carrito está vacío', exact: true })).toBeVisible();
+  await expect(page.getByText(initialGuestCopy, { exact: true })).toHaveCount(0);
+  await expect(initialGuestAction(page)).toHaveCount(0);
   expect(await identity(page)).toBeNull();
   expect(await page.evaluate(() => localStorage.getItem('mutter-observed-identity:demo-mutter-r1'))).toBeNull();
   await expect(action(page)).toHaveCount(0); expect(signups()).toBe(0);
@@ -88,25 +90,37 @@ test('first arrival with SDK null waits for an explicit guest decision across re
   try {
     await other.goto('/carrito');
     for (const tab of [page, other]) {
-      await tab.reload(); await expect(tab.getByText(initialGuestCopy, { exact: true })).toBeVisible();
-      await expect(initialGuestAction(tab)).toBeVisible(); await expect(action(tab)).toHaveCount(0);
+      await tab.reload();
+      await expect(tab.getByText(initialGuestCopy, { exact: true })).toHaveCount(0);
+      await expect(initialGuestAction(tab)).toHaveCount(0); await expect(action(tab)).toHaveCount(0);
       expect(await identity(tab)).toBeNull();
     }
-    expect(signups() + otherSignups()).toBe(0);
-    await initialGuestAction(page).focus(); await expect(initialGuestAction(page)).toBeFocused();
-    const box = await initialGuestAction(page).boundingBox(), viewport = page.viewportSize();
-    if (!box || !viewport) throw Error('Expected visible initial guest action');
+    await page.goto(`/producto/${item.slug}`);
+    const add = page.getByRole('button', { name: 'Agregar al carrito', exact: true });
+    await expect(add).toBeEnabled();
+    await expect(page.getByRole('checkbox', { name: 'Crear una cuenta', exact: true })).toHaveCount(0);
+    await add.focus(); await expect(add).toBeFocused();
+    const box = await add.boundingBox(), viewport = page.viewportSize();
+    if (!box || !viewport) throw Error('Expected visible first Add action');
     expect(box.x).toBeGreaterThanOrEqual(0); expect(box.x + box.width).toBeLessThanOrEqual(viewport.width);
-    await page.screenshot({ path: testInfo.outputPath('first-arrival-null-explicit-decision.png'), fullPage: true });
+    expect(await identity(page)).toBeNull(); expect(signups() + otherSignups()).toBe(0);
+    await page.screenshot({ path: testInfo.outputPath('first-arrival-direct-add.png'), fullPage: true });
     await chooseInitialGuestPurchase(page);
     const created = await confirmedNew(page, ''), shared = await confirmedNew(other, '');
     expect(shared.uid).toBe(created.uid); expect(signups() + otherSignups()).toBe(1);
     expect((await db.doc(`credentialAccess/${created.uid}`).get()).data()).toMatchObject({ uid: created.uid,
       status: 'NATIVE_POST_CUTOVER', roles: { admin: false, superadmin: false } });
+    await expect(page.getByText('Agregado al carrito', { exact: true })).toBeVisible();
+    await expect.poll(async () => (await db.doc(`carts/${created.uid}`).get()).data()?.cartItems)
+      .toMatchObject([{ id: item.id, quantity: 1 }]);
+    await page.goto('/carrito');
     for (const tab of [page, other]) {
       await expect(initialGuestAction(tab)).toHaveCount(0); await expect(action(tab)).toHaveCount(0);
-      await expect(tab.getByRole('heading', { name: 'Tu carrito está vacío', exact: true })).toBeVisible();
+      await expect(tab.getByText(product.title.es, { exact: true })).toBeVisible();
+      await expect(tab.getByRole('checkbox', { name: 'Crear una cuenta', exact: true })).not.toBeChecked();
+      await expect(tab.locator('input[type="password"]')).toHaveCount(0);
     }
+    await page.screenshot({ path: testInfo.outputPath('first-add-cart-optional-account.png'), fullPage: true });
   } finally { await other.close(); }
 });
 
