@@ -35,7 +35,7 @@ async function statusView(db: Firestore, id: string, order: Record<string, unkno
         const products = await db.getAll(...[...new Set(purchase.items.map(item => item.id))].map(productId => db.collection('products').doc(productId)));
         try {
             // Reuse the same catalog validation as start; the buyer retains their own held units.
-            quotePurchase(purchase, new Map(products.map(product => [product.id, product.data()])), inventory.reservationId);
+            quotePurchase(purchase, new Map(products.map(product => [product.id, product.data()])), inventory.reservationId, { inventory, now });
         } catch (error) {
             if (!(error instanceof CheckoutError)) throw error;
             reusable = false;

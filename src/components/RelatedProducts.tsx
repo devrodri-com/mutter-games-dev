@@ -3,13 +3,15 @@
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import ProductCard from "./ProductCard";
-import { fetchProductsByCategory } from "@/firebase/products";
+import { fetchProductsByCategory, fetchProductsPage } from "@/firebase/products";
+import type { Product } from "../data/types";
 
 interface Props {
   excludeSlugs?: string[];
   categoryName?: string;
   title?: string;
   ctaHref?: string; // opcional: para "Ver más {categoria}"
+  cardPresentation?: "default" | "catalog";
 }
 
 export default function RelatedProducts({
@@ -17,30 +19,35 @@ export default function RelatedProducts({
   categoryName,
   title,
   ctaHref,
+  cardPresentation = "default",
 }: Props) {
   // Carril accesible
   const listId = "related-products-carril";
   const scrollRef = useRef<HTMLUListElement>(null);
 
-  const [products, setProducts] = useState<any[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [hasOverflow, setHasOverflow] = useState(false);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
+  const visibleProducts = products.filter((product) => !excludeSlugs.includes(product.slug ?? ""));
 
   // Carga
   useEffect(() => {
     let mounted = true;
     setLoading(true);
-    fetchProductsByCategory(categoryName || "", 8)
-      .then((res: any[] | undefined) => {
+    setError(false);
+    const request = categoryName
+      ? fetchProductsByCategory(categoryName, 8)
+      : fetchProductsPage({ limit: 8 }).then((page) => page.products);
+    request
+      .then((res) => {
         if (!mounted) return;
-        // aplicar excludeSlugs antes de setear
-        const filtered = (res || []).filter((p: any) => !excludeSlugs.includes(p.slug ?? ""));
-        setProducts(filtered);
+        setProducts(res);
       })
       .catch((err: unknown) => {
-        // mantener silencioso en UI
+        if (mounted) { setProducts([]); setError(true); }
         console.error("Error loading products in RelatedProducts:", err);
       })
       .finally(() => {
@@ -67,7 +74,7 @@ export default function RelatedProducts({
 
   useEffect(() => {
     recomputeOverflow();
-  }, [products.length, loading]);
+  }, [visibleProducts.length, loading]);
 
   useEffect(() => {
     const onResize = () => recomputeOverflow();
@@ -114,6 +121,11 @@ export default function RelatedProducts({
       </div>
     </li>
   ));
+
+  if (!loading && !error && visibleProducts.length === 0) return null;
+  if (!loading && error) return <section aria-label="Productos relacionados">
+    <p role="alert" className="py-4 text-sm text-gray-600">No pudimos cargar los productos relacionados.</p>
+  </section>;
 
   return (
     <section className="relative">
@@ -167,7 +179,7 @@ export default function RelatedProducts({
         >
           {loading
             ? skeletons
-            : products.map((product) => {
+            : visibleProducts.map((product) => {
                 const priceUSD = product.priceUSD || 0;
                 const slug = product.slug;
 
@@ -177,6 +189,7 @@ export default function RelatedProducts({
                     className="flex-shrink-0 snap-start scroll-ml-4 w-[220px] sm:w-[270px] min-h-[360px]"
                   >
                     <ProductCard
+                      presentation={cardPresentation}
                       product={{
                         ...product,
                         priceUSD,

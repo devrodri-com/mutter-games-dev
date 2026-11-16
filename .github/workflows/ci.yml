@@ -48,6 +48,19 @@ jobs:
       - name: Frontend source typecheck
         run: npm run typecheck:frontend
 
+      - name: Audited utility and regression typecheck
+        run: npm run typecheck:audited
+
+      - name: Audited utility lint
+        run: npm run lint:audited
+
+      - name: Audited catalog and payload regressions without network
+        run: |
+          set -euo pipefail
+          sudo -n env -i PATH="$PATH:/usr/sbin:/sbin" \
+            unshare --net --fork /bin/bash -c \
+            'set -euo pipefail; ip link set dev lo up; npm run test:audited'
+
       - name: Published server source typecheck
         run: npm run typecheck:server
 

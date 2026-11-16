@@ -8,7 +8,7 @@ export type JsonObject = { [key: string]: JsonValue };
 export type CatalogEditDocument = { id: string; version: string; product: JsonObject };
 export const catalogEditFields = EDITABLE_FIELDS;
 export type CatalogEditField = typeof catalogEditFields[number];
-export type CatalogEditChanges = Partial<Record<CatalogEditField, JsonValue>>;
+export type CatalogEditChanges = Partial<Record<Exclude<CatalogEditField, 'active'>, JsonValue>> & { active?: boolean };
 export function isObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
@@ -26,7 +26,10 @@ export function parseChanges(value: unknown): CatalogEditChanges {
   for (const field of catalogEditFields) if (Object.prototype.hasOwnProperty.call(value, field)) {
     const item = value[field];
     if (!isJson(item)) throw new Error('El campo editado no es válido.');
-    changes[field] = item;
+    if (field === 'active') {
+      if (typeof item !== 'boolean') throw new Error('El estado de la publicación debe ser activo o inactivo.');
+      changes.active = item;
+    } else changes[field] = item;
   }
   return changes;
 }
@@ -52,7 +55,12 @@ export function changedFields(product: JsonObject, touched: CatalogEditChanges):
   for (const field of catalogEditFields) {
     const value = touched[field]; if (value === undefined) continue;
     const next = combined[field];
-    if (!Object.prototype.hasOwnProperty.call(product, field) || !sameJson(product[field], next)) changes[field] = value;
+    if (!Object.prototype.hasOwnProperty.call(product, field) || !sameJson(product[field], next)) {
+      if (field === 'active') {
+        if (typeof value !== 'boolean') throw new Error('El estado de la publicación debe ser activo o inactivo.');
+        changes.active = value;
+      } else changes[field] = value;
+    }
   }
   return changes;
 }

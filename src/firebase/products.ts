@@ -10,7 +10,7 @@ export async function fetchProductsPage(options:FetchProductsPageOptions):Promis
   if(options.filters?.subcategoryId)constraints.push(where("subcategory.id","==",options.filters.subcategoryId));
   const q=query(collection(db,"products"),...constraints,limit(options.limit+1),...(options.cursor?[startAfter(options.cursor)]:[]));
   const snapshot=await getDocsFromServer(q);const docs=snapshot.docs.slice(0,options.limit);
-  return {products:docs.map(d=>mapCatalogProduct(d.id,d.data())),lastDoc:docs.at(-1)??null,hasMore:snapshot.docs.length>options.limit};
+  return {products:docs.filter(d=>isPublished(d.data())).map(d=>mapCatalogProduct(d.id,d.data())),lastDoc:docs.at(-1)??null,hasMore:snapshot.docs.length>options.limit};
 }
 export async function fetchProductById(id:string):Promise<Product|null>{
   const snapshot=await getDocFromServer(doc(db,"products",id));
@@ -24,11 +24,11 @@ export async function fetchProducts():Promise<Product[]>{
 }
 export async function fetchProductsByCategory(categoryName:string,maxItems=8):Promise<Product[]>{
   const snapshot=await getDocsFromServer(query(collection(db,"products"),where("active","==",true),where("category.name","==",categoryName),limit(maxItems)));
-  return snapshot.docs.map(d=>mapCatalogProduct(d.id,d.data()));
+  return snapshot.docs.filter(d=>isPublished(d.data())).map(d=>mapCatalogProduct(d.id,d.data()));
 }
 export async function fetchProductBySlug(slug:string):Promise<Product|null>{
   const snapshot=await getDocsFromServer(query(collection(db,"products"),where("active","==",true),where("slug","==",slug),limit(1)));
-  if(!snapshot.empty)return mapCatalogProduct(snapshot.docs[0].id,snapshot.docs[0].data());
+  if(!snapshot.empty)return isPublished(snapshot.docs[0].data())?mapCatalogProduct(snapshot.docs[0].id,snapshot.docs[0].data()):null;
   // Legacy computed routes start with the document ID. Resolve only candidate IDs;
   // never download the full collection for a missing detail route.
   const boundaries=[...slug.matchAll(/-/g)].map(match=>match.index).slice(0,30);

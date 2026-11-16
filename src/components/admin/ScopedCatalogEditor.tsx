@@ -29,7 +29,13 @@ export default function ScopedCatalogEditor({ initial, categories, onSave, onReo
   const disabled = saving || pending || imageBusy;
   const hasChanges = !sameJson(initial.document.product, product);
   function change(field: CatalogEditField, value: JsonValue) {
-    if (!saving && !pending) setTouched(previous => ({ ...previous, [field]: isObject(previous[field]) && isObject(value)
+    if (saving || pending) return;
+    if (field === 'active') {
+      if (imageBusy) return;
+      if (typeof value !== 'boolean') { setError('Elegí el estado de la publicación.'); return; }
+      setTouched(previous => ({ ...previous, active: value })); return;
+    }
+    setTouched(previous => ({ ...previous, [field]: isObject(previous[field]) && isObject(value)
       ? { ...previous[field], ...value } : value }));
   }
   function close() {
@@ -72,12 +78,14 @@ export default function ScopedCatalogEditor({ initial, categories, onSave, onReo
         <header className="mutter-modal__header">
           <div className="mutter-modal__heading"><img src="/brand/login/mutter-compacto-color-positivo.svg" alt="Mutter Games" className="mutter-modal__brand" /><div className="min-w-0"><p className="mb-1 text-xs font-medium uppercase tracking-wide text-gray-500">Publicación</p>
             <DialogTitle className="break-words text-xl font-semibold text-gray-900">{title || 'Editar publicación'}</DialogTitle>
-            <p className="mt-2 text-sm text-gray-600">Estado: <strong>{product.active === true ? 'Activa' : product.active === false ? 'Inactiva' : 'Original conservado'}</strong>. Se conserva al guardar.</p></div></div>
+            <p className="mt-2 text-sm text-gray-600">Estado: <strong>{product.active === true ? 'Activa' : product.active === false ? 'Inactiva' : 'Original conservado'}</strong>. Sólo cambia si elegís otro estado y guardás.</p></div></div>
           <button type="button" disabled={saving || imageBusy} onClick={close} aria-label="Cerrar publicación" className="mutter-modal__close">✕</button>
         </header>
         <div className="mutter-modal__body space-y-5">
           {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</p>}
           {pending && <p role="status" className="rounded-lg bg-amber-50 p-3 text-sm">Hay un guardado pendiente de comprobación. Conservamos tus cambios; no se enviarán otra vez.</p>}
+          <label className="mutter-modal__visibility flex items-start gap-3 text-sm"><input className="mt-1" type="checkbox" checked={product.active === true} disabled={disabled} onChange={event => change('active', event.target.checked)} />
+            <span><strong>Mostrar esta publicación en la web</strong><span className="mt-1 block text-gray-500">El estado elegido se aplicará al guardar los cambios.</span></span></label>
           <PublicationFields productId={initial.document.id} original={initial.document.product} product={product} categories={categories} disabled={disabled}
             onChange={change} onImageOperation={operation => setImageOperations(previous => previous.includes(operation) ? previous : [...previous, operation])} onImageBusy={setImageBusy} />
         </div>
@@ -85,7 +93,7 @@ export default function ScopedCatalogEditor({ initial, categories, onSave, onReo
           {confirmClose ? <div role="alert" className="flex flex-wrap items-center justify-between gap-3"><p className="text-sm">Tenés cambios sin guardar.</p><div className="flex flex-wrap gap-2">
             <button type="button" onClick={() => setConfirmClose(false)} className="rounded-lg border px-4 py-2 text-sm">Seguir editando</button>
             <button type="button" onClick={onClose} className="rounded-lg border border-red-200 px-4 py-2 text-sm text-red-700">Descartar cambios</button></div></div>
-            : <div className="flex flex-wrap items-center justify-between gap-3"><span className="text-xs text-gray-500">Las compras siguen cerradas.</span><div className="flex gap-2">
+            : <div className="flex flex-wrap items-center justify-between gap-3"><span className="text-xs text-gray-500">Se guardan sólo los campos que cambiaste.</span><div className="flex gap-2">
               <button type="button" disabled={saving || imageBusy} onClick={close} className="rounded-lg border px-4 py-2 text-sm disabled:opacity-40">Cerrar</button>
               <button type="button" disabled={saving || imageBusy} onClick={() => void (superseded ? reopen() : save())} className="mutter-modal__primary">{saving ? 'Comprobando…' : superseded ? 'Abrir versión actual' : pending ? 'Comprobar guardado' : 'Guardar cambios'}</button>
             </div></div>}

@@ -1,6 +1,6 @@
 export const EDITABLE_FIELDS = ['title', 'description', 'category', 'subcategory', 'tipo', 'subtitle',
   'defaultDescriptionType', 'extraDescriptionTop', 'extraDescriptionBottom', 'descriptionPosition',
-  'sku', 'customName', 'customNumber', 'allowCustomization', 'images', 'variants', 'priceUSD', 'stockTotal'] as const;
+  'sku', 'customName', 'customNumber', 'allowCustomization', 'images', 'variants', 'priceUSD', 'stockTotal', 'active'] as const;
 export const MERGED_FIELDS = ['title', 'description', 'category', 'subcategory'] as const;
 
 // A small input language, not a sanitizer: accepted bytes are stored unchanged.

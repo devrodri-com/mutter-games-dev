@@ -1,102 +1,11 @@
-//src/components/CartNavbar.tsx
+import { ArrowLeft } from 'lucide-react';
+import { Link } from 'react-router-dom';
 
-import { Link } from "react-router-dom";
-import { ShoppingCart } from "lucide-react";
-import { FaWhatsapp, FaInstagram } from "react-icons/fa";
-import { useCart } from "../context/CartContext";
-import { useState } from "react";
-import logo from "/logo2.png";
-
-export default function ShopNavbar() {
-  const { items } = useCart();
-  const totalItems = items.reduce((sum, item) => sum + item.quantity, 0);
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-
-  return (
-    <header className="bg-white/95 backdrop-blur-md text-black fixed top-0 w-full z-50 shadow-md border-b border-gray-200 py-0.5">
-      {/* Mobile */}
-      <div className="flex sm:hidden items-center justify-between px-4 py-0.5">
-        <div className="flex items-center gap-2">
-          <Link to="/" className="flex items-center">
-            <img
-              src={logo}
-              alt="Mutter Games"
-              className="max-h-[2.25rem] w-auto object-contain"
-            />
-          </Link>
-        </div>
-        <div className="flex items-center gap-3">
-          <a
-            href="https://wa.me/59899389140"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[#FF2D55]"
-          >
-            <FaWhatsapp className="w-5 h-5" />
-          </a>
-          <a
-            href="https://www.instagram.com/muttergames/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[#FF2D55]"
-            aria-label="Instagram Mutter Games"
-          >
-            <FaInstagram className="w-5 h-5" />
-          </a>
-          <button
-            className="text-[#FF2D55]"
-            onClick={() => setIsMenuOpen(!isMenuOpen)}
-          >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          </button>
-        </div>
-      </div>
-
-      {/* Mobile Dropdown Menu */}
-      {isMenuOpen && (
-        <div className="sm:hidden px-4 pb-2">
-          <nav className="flex flex-col gap-2 text-sm items-center text-center">
-            <Link to="/shop" onClick={() => setIsMenuOpen(false)} className="text-[#FF2D55] font-semibold">
-              Tienda
-            </Link>
-          </nav>
-        </div>
-      )}
-
-      {/* Desktop */}
-      <div className="hidden sm:flex max-w-7xl mx-auto px-4 py-1 items-center justify-between">
-        <Link to="/" className="flex items-center">
-          <img
-            src={logo}
-            alt="Mutter Games"
-            className="h-12 w-auto object-contain"
-          />
-        </Link>
-        <nav className="flex items-center gap-6 text-base">
-          <Link to="/shop" className="text-[#FF2D55] hover:text-[#cc2444] font-semibold">Tienda</Link>
-        </nav>
-        <div className="flex items-center gap-4">
-          <a
-            href="https://wa.me/59899389140"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[#FF2D55]"
-          >
-            <FaWhatsapp className="w-5 h-5" />
-          </a>
-          <a
-            href="https://www.instagram.com/muttergames/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[#FF2D55]"
-            aria-label="Instagram Mutter Games"
-          >
-            <FaInstagram className="w-5 h-5" />
-          </a>
-        </div>
-      </div>
-    </header>
-  );
+/** Used only by the cart. Other storefront headers keep their existing layout. */
+export default function CartNavbar() {
+  return <header className="cart-topbar"><div className="cart-topbar-inner">
+    <Link to="/" className="cart-logo" aria-label="Mutter Games, inicio"><img src="/brand/login/mutter-compacto-color-positivo.svg" alt="Mutter Games" width="846" height="150" /></Link>
+    <Link to="/shop" className="cart-continue"><ArrowLeft size={18} aria-hidden="true" /><span className="cart-continue-long">Seguir comprando</span><span className="cart-continue-short">Tienda</span></Link>
+  </div></header>;
 }
+

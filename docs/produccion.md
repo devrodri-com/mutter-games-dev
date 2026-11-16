@@ -1,7 +1,7 @@
 # Fuentes de la versión publicada
 
-Esta consolidación conserva las fuentes de `dpl_DH3tviTCAP6yAWxAASph2mm8dmN3`.
-Inventario del paquete: `8f32af1a499c2963d0b8ed5400468413ca65d4060c081a3554bdf97d8877a448`.
+Esta consolidación conserva las fuentes de `dpl_HfQcrENamRuwF4aS6pFZBjMotjbQ`.
+Inventario del paquete: `e04171c90ce1b2588f7bbcc474c5f0dc7f9829944ab36f7591255cc365e208a8`.
 La configuración y los datos efectivos de producción permanecen fuera de Git.
 Actualizar este repositorio no modifica publicaciones, cuentas, stock ni compras.
 
@@ -13,6 +13,9 @@ Usar Node **24.22.1**, el constructor exacto del paquete conservado:
 npm run install:controlled
 npm run typecheck:frontend
 npm run typecheck:server
+npm run typecheck:audited
+npm run lint:audited
+npm run test:audited
 npm run build
 ```
 
@@ -72,7 +75,11 @@ no genera ni publica ese paquete de servidor. El antiguo constructor
 `build:prebuilt`, fijado a Node22, no representa esta versión y no debe utilizarse
 para publicarla. Esta consolidación no habilita ese flujo antiguo.
 
-Las fuentes del producto y los tests se conservan sin cambios funcionales. Las
+Esta referencia incorpora las fuentes publicadas de catálogo, Admin, carrito, fichas, Nosotros y categorías, y las correcciones de tipos auditadas hasta el 16 de noviembre de 2026. Los seis archivos de la SPA siguen siendo byte por byte los publicados. Los 68 casos de `test:audited` cubren catálogo, enlaces, guardas y payloads con servicios simulados; son un conjunto separado de los 180 casos del gate de comercio.
+
+Las correcciones de lint validan los campos seleccionados de clientes y la forma de respuestas CJ antes de usarlos; los datos malformados ahora se rechazan expresamente. Los datos válidos, IDs, metadatos y guardas conservan su comportamiento. Esas funciones antiguas no se invocan desde la SPA actual, por lo que no cambian los archivos emitidos. Los fixtures conservan sólo código anterior y clasificación pública para detectar regresiones. La importación CSS de la ficha usa una copia con nombre distinto (`product-shop.css`): el origen de Mac resolvía `Shop.css` y `shop.css` como dos módulos con los mismos bytes. La copia permite resolver ambos estilos en Linux y conserva la misma salida publicada, comprobada por el constructor.
+
+Las fuentes de aplicación corresponden a la versión publicada y a esas correcciones auditadas. Las
 adaptaciones propias de esta consolidación se limitan al constructor local, CI,
 metadatos de comprobación y exclusiones de Git. Las herramientas históricas del
 primer corte que contienen identidades IAM personales permanecen en el registro

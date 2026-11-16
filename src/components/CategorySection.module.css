@@ -1,0 +1,225 @@
+.section {
+  background: #0f0f0f;
+  color: #fff;
+  padding: clamp(2.5rem, 5vw, 5rem) 1.25rem;
+  scroll-margin-top: 5rem;
+}
+
+.container {
+  max-width: 80rem;
+  margin-inline: auto;
+}
+
+.heading {
+  margin-bottom: clamp(1.75rem, 3vw, 2.75rem);
+  text-align: left;
+}
+
+.heading h2 {
+  margin: 0 0 0.625rem;
+  font-size: clamp(2rem, 3.5vw, 3rem);
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+
+.heading p {
+  margin: 0;
+  color: #b9b9c2;
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 9.5rem), 1fr));
+  gap: 0.875rem;
+}
+
+.card {
+  --category-accent: #ff8aa1;
+  position: relative;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  align-items: stretch;
+  width: 100%;
+  min-width: 0;
+  min-height: 15rem;
+  aspect-ratio: 0.76;
+  overflow: hidden;
+  border: 1px solid #333337;
+  border-radius: 1.125rem;
+  background: #151516;
+  color: #fff;
+  text-decoration: none;
+  isolation: isolate;
+}
+
+.card:focus-visible {
+  outline: 3px solid var(--category-accent);
+  outline-offset: 4px;
+}
+
+.card:hover {
+  border-color: var(--category-accent);
+}
+
+.media {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.playstation .image,
+.xbox .image,
+.nintendo .image {
+  mix-blend-mode: lighten;
+}
+
+.playstation .image {
+  transform: scale(1.12);
+}
+
+.playstation {
+  --category-accent: #a8b3eb;
+}
+
+.xbox {
+  --category-accent: #9ac392;
+}
+
+.nintendo {
+  --category-accent: #e9a0a4;
+}
+
+.photo .image {
+  padding: 0.625rem;
+}
+
+.cardBody {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.625rem;
+  width: 100%;
+  min-width: 0;
+  padding: 0.875rem;
+}
+
+.cardText {
+  min-width: 0;
+}
+
+.brandTitle {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.cardTitle {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.3;
+  overflow-wrap: break-word;
+}
+
+.description {
+  display: none;
+  margin: 0;
+  color: #dedee4;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.mobileAction {
+  display: block;
+  color: #dedee4;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.arrow {
+  display: none;
+  flex-shrink: 0;
+  color: var(--category-accent);
+}
+
+@media (min-width: 480px) {
+  .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 640px) {
+  .section {
+    padding-inline: 2rem;
+  }
+
+  .grid {
+    gap: 1.5rem;
+  }
+
+  .card {
+    aspect-ratio: 1.1;
+    min-height: 20rem;
+  }
+
+  .cardBody {
+    padding: 1.125rem;
+  }
+
+  .cardTitle {
+    font-size: clamp(1.25rem, 2vw, 1.75rem);
+  }
+
+  .description,
+  .arrow {
+    display: block;
+  }
+
+  .mobileAction {
+    display: none;
+  }
+}
+
+@media (min-width: 1024px) {
+  .grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .card {
+    aspect-ratio: 1.18;
+  }
+
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .card,
+  .image {
+    transition: transform 180ms ease, border-color 180ms ease;
+  }
+
+  .card:hover {
+    transform: translateY(-2px);
+  }
+}

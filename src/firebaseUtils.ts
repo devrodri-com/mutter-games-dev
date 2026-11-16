@@ -1,8 +1,10 @@
 // src/firebaseUtils.ts
 
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, sendPasswordResetEmail, getAuth } from "firebase/auth";
-import { getFirestore, initializeFirestore, doc as firestoreDoc, setDoc, getDoc as firestoreGetDoc, collection, getDocs, addDoc, doc, updateDoc, deleteDoc, getDoc, query, orderBy, serverTimestamp, where } from "firebase/firestore";
+import { createUserWithEmailAndPassword, getAuth } from "firebase/auth";
+import { getFirestore, initializeFirestore, doc as firestoreDoc, setDoc, getDoc as firestoreGetDoc, collection, getDocs, addDoc, doc, updateDoc, getDoc, query, orderBy, serverTimestamp } from "firebase/firestore";
 import app, { ensureAuthReady } from "./firebase";
+import { mapClientDocument } from "./domain/clientDocument";
+import { parseCJProductResponse } from "./domain/cjProduct";
 // Firestore: inicialización segura (evita crash si ya fue inicializado en otro módulo)
 export const db = (() => {
   try {
@@ -21,9 +23,6 @@ export const auth = getAuth(app);
 import { getApp } from "firebase/app";
 const firebaseProjectInfo = getApp().options;
 if (import.meta?.env?.DEV) console.log("🔥 Firebase Project Info:", firebaseProjectInfo);
-// Normaliza emails para usarlos como ID de documento
-const normalizeEmail = (e: string) => e.trim().toLowerCase();
-
 // 🔎 Helper para depurar: obtener el UID actual (anónimo o logueado)
 export async function getCurrentUid(): Promise<string> {
   return ensureAuthedUid();
@@ -46,21 +45,8 @@ export async function fetchClientsFromFirebase(): Promise<ClientWithId[]> {
   const q = query(clientsRef, orderBy("createdAt", "desc"));
   const snap = await getDocs(q);
   return snap.docs.map((docSnap) => {
-    const x = docSnap.data() as any;
-    return {
-      id: docSnap.id,
-      name: x.name || x.fullName || "-",
-      email: (x.email || "").toLowerCase(),
-      phone: x.phone || x.phoneNumber || "",
-      address: x.address || x.addressLine1 || "",
-      city: x.city || "",
-      state: x.state || x.department || "",
-      zip: x.zip || x.postalCode || "",
-      country: x.country || "",
-      // opcionales (no rompen si el tipo no los define)
-      createdAt: x.createdAt,
-      updatedAt: x.updatedAt,
-    } as any;
+    const data: Record<string, unknown> = docSnap.data();
+    return mapClientDocument(docSnap.id, data);
   });
 }
 
@@ -71,6 +57,7 @@ export async function fetchClientsFromFirebase(): Promise<ClientWithId[]> {
 // ⚠️ CRÍTICO: Estas operaciones deberían estar protegidas por validación de roles en el backend.
 
 export async function deleteClientFromFirebase(clientId: string) {
+  void clientId; // Se conserva la firma del guard deshabilitado.
   try {
     throw new Error(
       "deleteClientFromFirebase está deshabilitada en el frontend. Usa el backend /api/admin/clients para eliminar clientes."
@@ -104,26 +91,24 @@ export async function importProductFromCJ(cjProductId: string) {
       })
     });
 
-    const result = await response.json();
-    if (!result || !result.data) throw new Error("Producto no encontrado en CJ");
-
-    const data = result.data;
+    const result: unknown = await response.json();
+    const data = parseCJProductResponse(result);
 
     const newProduct = {
       title: data.name,
       name: data.name,
-      images: data.productImageInfoList?.map((img: any) => img.imageUrl) || [],
-      priceUSD: parseFloat(data.productInfo?.sellPrice || "0"),
+      images: data.productImageInfoList?.map((img) => img.imageUrl) || [],
+      priceUSD: parseFloat(String(data.productInfo?.sellPrice || "0")),
       slug: `${cjProductId}-${data.name.toLowerCase().replace(/\s+/g, "-")}`,
       description: data.productInfo?.description || "",
       category: { id: "", name: "Dropshipping" },
       subcategory: { id: "", name: "CJ" },
       active: true,
-      variants: data.productVariantInfoList?.map((variant: any) => ({
+      variants: data.productVariantInfoList?.map((variant) => ({
         id: variant.variantSku,
         name: variant.variantKey, // ejemplo: "Red / XL"
         image: variant.imageUrl,
-        price: parseFloat(variant.sellPrice),
+        price: parseFloat(String(variant.sellPrice)),
       })) || [],
     };
 
@@ -182,7 +167,7 @@ export const registerClient = async ({
       updatedAt: new Date().toISOString(),
       uid: uid || (existingDoc.exists() ? existingDoc.data()?.uid || "" : ""),
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error("Error al registrar cliente:", error);
     throw error;
   }
@@ -190,10 +175,12 @@ export const registerClient = async ({
 
 
 // 🔥 Función para guardar un cliente en Firebase (sin registrar Auth)
-export async function saveClientToFirebase(client: Client): Promise<void> {
+type ClientWithMetadata = Client & { uid?: unknown; source?: unknown };
+
+export async function saveClientToFirebase(client: ClientWithMetadata): Promise<void> {
   try {
     const dbFirestore = db;
-    const id = (client as any)?.uid ? String((client as any).uid) : client.email.toLowerCase();
+    const id = client?.uid ? String(client.uid) : client.email.toLowerCase();
     const clientDocRef = firestoreDoc(dbFirestore, "clients", id);
 
     const existingDoc = await firestoreGetDoc(clientDocRef);
@@ -206,9 +193,9 @@ export async function saveClientToFirebase(client: Client): Promise<void> {
         updatedAt: serverTimestamp(),
         // si ya existe, preserva el createdAt original
         ...(existingDoc.exists() ? {} : { createdAt: serverTimestamp() }),
-        uid: (client as any)?.uid || (existingDoc.exists() ? existingDoc.data()?.uid || "" : ""),
+        uid: client?.uid || (existingDoc.exists() ? existingDoc.data()?.uid || "" : ""),
         active: true,
-        source: (client as any)?.source || "manual",
+        source: client?.source || "manual",
       },
       { merge: true }
     );
@@ -327,6 +314,10 @@ export async function registerAdminUser({
   password: string;
   isSuperAdmin?: boolean;
 }): Promise<void> {
+  void name;
+  void email;
+  void password;
+  void isSuperAdmin;
   try {
     throw new Error(
       "registerAdminUser está deshabilitada en el frontend. Usa el backend /api/admin/users para gestionar administradores."
@@ -344,6 +335,7 @@ export const discountStockByOrder = async (order: {
 
   for (const item of order.cartItems) {
     const { id: productId, variantId, quantity, variantLabel } = item;
+    void variantId; // La selección existente usa variantLabel; se conserva la lectura.
     if (!productId || !variantLabel || !quantity) continue;
 
     const productRef = doc(db, "products", productId);
@@ -418,6 +410,7 @@ export async function getAdminUserByEmail(email: string): Promise<{
   rol: string;
   activo: boolean;
 } | null> {
+  void email;
   throw new Error(
     "getAdminUserByEmail está deshabilitada en el frontend. Usa el backend /api/admin/users para resolver administradores por email."
   );
@@ -427,6 +420,8 @@ export async function signInAdmin(email: string, password: string): Promise<{
   uid: string;
   adminDocCreated: boolean;
 }> {
+  void email;
+  void password;
   throw new Error(
     "signInAdmin está deshabilitada en el frontend. Usa el flujo de autenticación estándar de Firebase Auth y el backend /api/admin/users para login de administradores."
   );
@@ -434,6 +429,7 @@ export async function signInAdmin(email: string, password: string): Promise<{
 
 // 🔐 Enviar email de reseteo de contraseña para admins
 export async function sendAdminPasswordReset(email: string): Promise<void> {
+  void email;
   throw new Error(
     "sendAdminPasswordReset está deshabilitada en el frontend. Usa el backend para enviar reseteos de contraseña de administradores."
   );

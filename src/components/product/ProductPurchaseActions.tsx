@@ -14,9 +14,10 @@ interface ProductPurchaseActionsProps {
 
 /** Both responsive purchase controls share the same admission and cart readiness. */
 export function ProductPurchaseActions({ placement, lang, priceUSD, isOutOfStock, isAdding, onBuy }: ProductPurchaseActionsProps) {
-  const { credentialAccess, credentialError } = useAuth();
+  const { credentialAccess, credentialError, credentialScope } = useAuth();
   const { cartReady, cartError } = useCart();
-  const ready = credentialAccess === 'active' && cartReady && !cartError;
+  const adminOnly = credentialScope === 'JOHN_ADMIN_CLOSED_V1';
+  const ready = !adminOnly && credentialAccess === 'active' && cartReady && !cartError;
   const disabled = isOutOfStock || isAdding || !ready;
   const label = isOutOfStock ? (lang === 'en' ? 'OUT OF STOCK' : 'SIN STOCK')
     : placement === 'main' ? (lang === 'en' ? 'Add to cart' : 'Agregar al carrito')
@@ -42,19 +43,20 @@ export function ProductPurchaseActions({ placement, lang, priceUSD, isOutOfStock
     {button}
     {!ready && !isOutOfStock && <div id="product-purchase-access" className="md:col-span-2">
       <p role="status" className="text-sm text-gray-700">
-        {credentialAccess === 'loading' ? (lang === 'en' ? 'Checking access to your cart…' : 'Comprobando el acceso a tu carrito…')
+        {adminOnly ? (lang === 'en' ? 'This session is only for managing listings. Shopping is not enabled for this session.' : 'Este acceso es sólo para gestionar publicaciones. El carrito y las compras no están habilitados para esta sesión.')
+          : credentialAccess === 'loading' ? (lang === 'en' ? 'Checking access to your cart…' : 'Comprobando el acceso a tu carrito…')
           : credentialAccess === 'pending' ? (lang === 'en' ? 'Your account and cart are preserved. Sign in or contact Mutter to recover access.' : 'Conservamos tu cuenta y tu carrito. Entrá con tu cuenta o contactá a Mutter para recuperar el acceso.')
             : credentialAccess === 'unavailable' ? credentialError || (lang === 'en' ? 'We could not verify access to your cart.' : 'No pudimos comprobar el acceso a tu carrito.')
               : cartError || (lang === 'en' ? 'Preparing your cart…' : 'Preparando tu carrito…')}
-        {(credentialAccess === 'pending' || credentialAccess === 'unavailable') && <> <Link className="underline" to="/login?return=cart">{lang === 'en' ? 'Sign in or recover access' : 'Entrar con mi cuenta o recuperar el acceso'}</Link></>}
-        {credentialAccess === 'active' && cartError && <> <Link className="underline" to="/carrito">{lang === 'en' ? 'Review my cart' : 'Revisar mi carrito'}</Link></>}
+        {!adminOnly && (credentialAccess === 'pending' || credentialAccess === 'unavailable') && <> <Link className="underline" to="/login?return=cart">{lang === 'en' ? 'Sign in or recover access' : 'Entrar con mi cuenta o recuperar el acceso'}</Link></>}
+        {!adminOnly && credentialAccess === 'active' && cartError && <> <Link className="underline" to="/carrito">{lang === 'en' ? 'Review my cart' : 'Revisar mi carrito'}</Link></>}
       </p>
     </div>}
   </div>;
 
   const formattedPrice = `${Math.floor(priceUSD).toLocaleString('es-AR')},${priceUSD.toFixed(2).split('.')[1]}`;
-  return <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-gray-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 shadow-[0_-6px_20px_rgba(0,0,0,0.08)]">
-    <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-3" style={{ paddingBottom: 'calc(12px + env(safe-area-inset-bottom, 0px))' }}>
+  return <div className="product-purchase-sticky md:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-gray-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 shadow-[0_-6px_20px_rgba(0,0,0,0.08)]">
+    <div className="product-purchase-sticky__content max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-3" style={{ paddingBottom: 'calc(12px + env(safe-area-inset-bottom, 0px))' }}>
       <div className="flex flex-col leading-tight">
         <div className="flex items-end gap-1">
           <span className="text-xl font-extrabold leading-none">${formattedPrice.split(',')[0]}</span>

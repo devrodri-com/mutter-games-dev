@@ -62,7 +62,7 @@ export async function checkout(db: Firestore, uid: string, input: unknown, provi
                 throw new CheckoutError(409, 'RECOVERY_REQUIRED', 'El intento está cerrado o requiere verificación. No inicies otro pago.');
             }
             const docs = await tx.getAll(...productRefs);
-            quotePurchase(purchase, new Map(docs.map(d => [d.id, d.data()])), inventory.reservationId);
+            quotePurchase(purchase, new Map(docs.map(d => [d.id, d.data()])), inventory.reservationId, { inventory, now: now() });
             return { ready: { id, init_point: data.initPoint }, quote: null, expiresAt: inventory.expiresAt };
         }
         const lockSnapshot = await tx.get(lock);

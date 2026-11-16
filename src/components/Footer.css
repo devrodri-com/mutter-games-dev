@@ -1,0 +1,28 @@
+@font-face { font-family: MutterUIInter; src: url('/brand/login/Inter-Regular.ttf') format('truetype'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: MutterUIInter; src: url('/brand/login/Inter-SemiBold.ttf') format('truetype'); font-weight: 600; font-style: normal; font-display: swap; }
+@font-face { font-family: MutterUISpartan; src: url('/brand/login/LeagueSpartan-Bold.ttf') format('truetype'); font-weight: 700; font-style: normal; font-display: swap; }
+.mutter-footer { color: #14141a; background: #fff; border-top: 1px solid #dedee4; font: 400 14px/1.5 MutterUIInter, Arial, sans-serif; margin-top: auto; }
+.mutter-footer *, .mutter-footer *::before, .mutter-footer *::after { box-sizing: border-box; }
+.mutter-footer-inner { max-width: 1232px; padding: 0 28px; margin: 0 auto; }
+.mutter-footer-top { display: flex; justify-content: space-between; align-items: center; gap: 36px; padding: 31px 0; }
+.mutter-footer-brand img { display: block; width: 205px; max-width: 100%; height: auto; }
+.mutter-footer-brand p { font-size: 12px; color: #60636e; margin: 12px 0 0; }
+.mutter-footer nav { display: flex; gap: 12px 27px; flex-wrap: wrap; font-size: 12px; font-weight: 600; }
+.mutter-footer a { color: inherit; text-decoration: none; }
+.mutter-footer nav a { padding: 8px 0; }
+.mutter-footer a:hover { text-decoration: underline; }
+.mutter-footer a:focus-visible { outline: 3px solid #d91b45; outline-offset: 4px; border-radius: 2px; }
+.mutter-footer-bottom { border-top: 1px solid #dedee4; padding: 17px 0 19px; display: flex; justify-content: space-between; gap: 16px; font-size: 11px; color: #60636e; }
+.mutter-footer-bottom a { font-weight: 600; text-decoration: underline; text-underline-offset: 3px; padding: 5px 0; }
+.mutter-footer--dark { background: #111115; color: #f3f3f6; border-color: #33343b; }
+.mutter-footer--dark .mutter-footer-brand > a { display: inline-block; padding: 8px 12px; border-radius: 5px; background: white; }
+.mutter-footer--dark .mutter-footer-brand p, .mutter-footer--dark .mutter-footer-bottom { color: #b8bac3; border-color: #33343b; }
+@media (max-width: 760px) {
+  .mutter-footer-inner { padding: 0 21px; }
+  .mutter-footer-top { flex-direction: column; align-items: flex-start; gap: 22px; padding: 27px 0; }
+  .mutter-footer-brand img { width: 178px; }
+  .mutter-footer-brand p { font-size: 11px; line-height: 1.6; margin-top: 11px; }
+  .mutter-footer nav { gap: 8px 23px; font-size: 12px; }
+  .mutter-footer-bottom { flex-direction: column; gap: 9px; padding: 18px 0 22px; font-size: 11px; line-height: 1.6; }
+}
+

@@ -1,0 +1,185 @@
+{
+  "source": "Official existing Firebase SDK getDocsFromServer, public unauthenticated categories metadata only",
+  "projectId": "mutter-games",
+  "time": "2026-11-15T18:19:26.327Z",
+  "categories": [
+    {
+      "id": "SjEJ55X4EuhOU67Xc4TE",
+      "name": {
+        "es": "OTROS",
+        "en": "OTROS"
+      },
+      "subcategories": [
+        {
+          "id": "8gxaPdbfYCERs5sJEqcF",
+          "name": "Discos y Accesorios"
+        }
+      ]
+    },
+    {
+      "id": "by3pj0mhQjby9Qj019ST",
+      "name": {
+        "en": "JUEGOS FAMILY GAME",
+        "es": "JUEGOS FAMILY GAME"
+      },
+      "subcategories": [
+        {
+          "id": "8MjNMyvbRbNb18m6hLJu",
+          "name": "CARTUCHOS"
+        },
+        {
+          "id": "qryC0TnqxrKbVM6uVwfL",
+          "name": "ACCESORIOS"
+        }
+      ]
+    },
+    {
+      "id": "jgslGXmUTykbxU9Rznwn",
+      "name": {
+        "en": "NINTENDO",
+        "es": "NINTENDO"
+      },
+      "subcategories": [
+        {
+          "id": "6VesypGU9bs3KtT6y59f",
+          "name": "Nintendo Wii"
+        },
+        {
+          "id": "SZfQec60X8Hx7ta4PN88",
+          "name": "Nintendo GameCube"
+        },
+        {
+          "id": "WgEbV6jUk6YKUJppqPyg",
+          "name": "Nintendo Wii U"
+        },
+        {
+          "id": "gqvis4odi0Tjp0Ra3Vir",
+          "name": "Nintendo DS / 3DS"
+        },
+        {
+          "id": "puircuX8w8LtWA9y0Vzg",
+          "name": "Nintendo Switch"
+        }
+      ]
+    },
+    {
+      "id": "mDCgXzKnEXa7LsNZyUve",
+      "name": {
+        "en": "COLECCIONABLES",
+        "es": "COLECCIONABLES"
+      },
+      "subcategories": [
+        {
+          "id": "1TB5rJIgL29jHPiGDBqV",
+          "name": "FIGURAS DE ACCION"
+        },
+        {
+          "id": "8qbYEA32ExNVYrqm189T",
+          "name": "PELICULAS BLU RAY ORIGINALES"
+        },
+        {
+          "id": "A1c8cp5VGqngOX22bkcj",
+          "name": "PELICULAS VHS ORIGINALES"
+        },
+        {
+          "id": "NYmCCgNMVQPDpPgFNMNM",
+          "name": "LEGOS"
+        },
+        {
+          "id": "On3vKNhO7E5yF1eBWJSN",
+          "name": "DISCOS VINILO"
+        },
+        {
+          "id": "UYOMZjX5st4jIu8Uphyc",
+          "name": "PLAYMOBIL"
+        },
+        {
+          "id": "ZtojrFI3q8KiJVzvl2Ub",
+          "name": "CASETE DE MUSICA ORIGINALES"
+        },
+        {
+          "id": "ct1NU4nPJbnc8NDJqvee",
+          "name": "PELICULAS DVD ORIGINALES"
+        },
+        {
+          "id": "jND9ib2ADBH9E2MPjCEN",
+          "name": "REVISTAS Y LIBROS"
+        },
+        {
+          "id": "nCLpuARldX39t6BdbRoH",
+          "name": "CD MUSICA ORIGINALES"
+        },
+        {
+          "id": "tUJXDGHEKT6MSXxEWhyG",
+          "name": "DVD MUSICA ORIGINALES"
+        },
+        {
+          "id": "vXz3hJBrGOex6rXDk0bC",
+          "name": "PELICULAS 4K ULTRA HD"
+        }
+      ]
+    },
+    {
+      "id": "oSOjLi6kEye6tCY1l8UC",
+      "name": {
+        "en": "PLAYSTATION",
+        "es": "PLAYSTATION"
+      },
+      "subcategories": [
+        {
+          "id": "3RJv33CqADoyhYnNMaHZ",
+          "name": "PS Vita"
+        },
+        {
+          "id": "EeGW6jqNfl6FrLT6NUrA",
+          "name": "PSP"
+        },
+        {
+          "id": "NH4qAiQfS02IVNo6Vj2e",
+          "name": "Playstation 5"
+        },
+        {
+          "id": "WTCbGDIPrzcNaijihjKZ",
+          "name": "Playstation 1"
+        },
+        {
+          "id": "YJm61UWh2NZeZW4TWBc5",
+          "name": "Playstation 2"
+        },
+        {
+          "id": "bWOUmxtiWVWx8grBqCce",
+          "name": "Playstation 3"
+        },
+        {
+          "id": "hH3vItJ9tX6LnVF71hnC",
+          "name": "Playstation 4"
+        }
+      ]
+    },
+    {
+      "id": "p7szeIMsdtyOGsvrd8iU",
+      "name": {
+        "en": "XBOX",
+        "es": "XBOX"
+      },
+      "subcategories": [
+        {
+          "id": "7mVQjyHFV3OQYBXtH9UQ",
+          "name": "One / One S"
+        },
+        {
+          "id": "I5dbhBNMvyMYdZxtoX5c",
+          "name": "Series X / S"
+        },
+        {
+          "id": "cyHb0kyTTIkWUjfaZVWU",
+          "name": "Classic"
+        },
+        {
+          "id": "smy5hDSjeGAv2e29yjhc",
+          "name": "360"
+        }
+      ]
+    }
+  ]
+}

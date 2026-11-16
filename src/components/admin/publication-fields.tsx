@@ -92,11 +92,6 @@ export default function PublicationFields({ productId, original, product, catego
       </div>
       {stockDiscrepancy && <p role="status" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">El total registrado difiere de la suma de las opciones. Esa diferencia se conserva al guardar.</p>}
       {stockError && <p role="alert" className="rounded-lg bg-amber-50 p-3 text-sm text-amber-900">{stockError} El stock todavía no se guardó.</p>}
-      <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={product.allowCustomization === true} onChange={event => onChange('allowCustomization', event.target.checked)} />Permitir personalización</label>
-      {product.allowCustomization === true && <div className="grid gap-4 sm:grid-cols-2">
-        <label className="text-sm">Nombre personalizado<input className={inputClass} value={text(product.customName)} onChange={event => onChange('customName', event.target.value)} /></label>
-        <label className="text-sm">Número personalizado<input className={inputClass} value={text(product.customNumber)} onChange={event => onChange('customNumber', event.target.value)} /></label>
-      </div>}
     </fieldset>
     <PublicationImages productId={productId} value={product.images} disabled={disabled} onChange={value => onChange('images', value)} onOperation={onImageOperation} onBusy={onImageBusy} />
     <PublicationVariants value={product.variants} product={product} disabled={disabled} creating={creating} onChange={value => onChange('variants', value)} />

@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto';
-import { availableStock, identityForOption } from '../../src/domain/webInventory.js';
+import { availableStock, identityForOption, parseReservations, reservationLinesMatch } from '../../src/domain/webInventory.js';
+import { catalogIsArchived, catalogPublicationVisible } from './catalog-archive-fields.js';
+import type { OrderInventory } from './inventory-transactions.js';
 export class CheckoutError extends Error {
     constructor(public status: number, public code: string, message: string) { super(message); }
 }
@@ -89,14 +91,27 @@ export function parsePurchase(value: unknown): Purchase {
 function unavailable(): never { throw new CheckoutError(409, 'CATALOG_UNAVAILABLE', 'Un producto u opción ya no está disponible. Revisá tu carrito.'); }
 function nonnegative(value: unknown): number { if (typeof value !== 'number' || !Number.isFinite(value) || value < 0)
     unavailable(); return value; }
-export function quotePurchase(purchase: Purchase, catalog: Map<string, unknown>, excludeReservationId?: string): Quote {
+export type ExistingReservationContext = { inventory: OrderInventory; now: number };
+/** Only the two already-owned order branches supply this server context. A raw
+ * reservation exclusion is never enough to make an archived product available. */
+function archivedResume(product: Record<string, unknown>, id: string, excludeId: string | undefined, context: ExistingReservationContext | undefined): boolean {
+    if (!catalogIsArchived(product) || product.catalogArchiveWasActive !== true || !context
+        || context.inventory.state !== 'reserved' || context.inventory.reservationId !== excludeId
+        || !Number.isSafeInteger(context.now) || context.inventory.expiresAt <= context.now) return false;
+    const expected = context.inventory.lines.filter(line => line.productId === id)
+        .map(line => ({ slot: line.slot, identity: line.identity, quantity: line.quantity }));
+    const own = parseReservations(product.webReservations)[context.inventory.reservationId];
+    return expected.length > 0 && Boolean(own) && own.expiresAt === context.inventory.expiresAt
+        && reservationLinesMatch(own.lines, expected);
+}
+export function quotePurchase(purchase: Purchase, catalog: Map<string, unknown>, excludeReservationId?: string, existingReservation?: ExistingReservationContext): Quote {
     const quantities = new Map<string, number>();
     const lines = purchase.items.map(item => {
         const raw = catalog.get(item.id);
         if (!raw || typeof raw !== 'object' || Array.isArray(raw))
             unavailable();
         const product = record(raw);
-        if (product.active !== true)
+        if (!catalogPublicationVisible(product) && !archivedResume(product, item.id, excludeReservationId, existingReservation))
             unavailable();
         const title = typeof product.title === 'string' ? product.title : typeof product.title === 'object' && product.title ? record(product.title).es ?? record(product.title).en : product.name;
         if (typeof title !== 'string' || !title.trim())
@@ -150,6 +165,16 @@ export function quotePurchase(purchase: Purchase, catalog: Map<string, unknown>,
             unavailable();
         return { ...item, title: title.trim(), unitPrice: Math.round(unitPrice * 100) / 100, stock: available, inventorySlot: canonicalVariant, inventoryIdentity };
     });
+    for (const id of new Set(lines.map(line => line.id))) {
+        const product = record(catalog.get(id));
+        if (!catalogIsArchived(product)) continue;
+        if (!existingReservation) unavailable();
+        const expected = existingReservation.inventory.lines.filter(line => line.productId === id);
+        const selected = lines.filter(line => line.id === id), slots = new Set(selected.map(line => line.inventorySlot));
+        if (expected.length !== slots.size || expected.some(line => !slots.has(line.slot)
+            || quantities.get(id + '/' + line.slot) !== line.quantity
+            || selected.find(item => item.inventorySlot === line.slot)?.inventoryIdentity !== line.identity)) unavailable();
+    }
     // Existing storefront policy: UYU structured data and $169 Montevideo; DAC paid on arrival.
     const shippingCost = purchase.shipping.pickup ? 0 : purchase.shipping.department === 'Montevideo' ? 169 : 0;
     const total = (lines.reduce((sum, line) => sum + Math.round(line.unitPrice * 100) * line.quantity, 0) + shippingCost * 100) / 100;

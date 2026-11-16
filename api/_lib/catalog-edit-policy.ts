@@ -69,6 +69,8 @@ export function parseEditRequest(value: unknown): EditRequest {
       if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) invalid('El stock debe ser un entero igual o mayor que cero.');
     } else if (field === 'priceUSD') {
       if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) invalid('Precio inválido.');
+    } else if (field === 'active') {
+      if (typeof value !== 'boolean') invalid('Estado de publicación inválido.');
     } else if (field === 'allowCustomization') {
       if (typeof value !== 'boolean') invalid('Personalización inválida.');
     } else if (field === 'descriptionPosition') {
@@ -94,6 +96,9 @@ export function editUpdate(snapshot: DocumentSnapshot, request: EditRequest): Re
     'La publicación cambió mientras la editabas. Conservá tu texto y volvé a abrirla antes de guardar.');
   const current = snapshot.data();
   if (!current) throw new CatalogEditError(404, 'PRODUCT_NOT_FOUND', 'La publicación no existe.');
+  if (request.changes.active === true && current.catalogArchived !== undefined && current.catalogArchived !== false) {
+    throw new CatalogEditError(409, 'ARCHIVED_REQUIRES_RESTORE', 'Primero restaurá la publicación desde Archivadas. Después podés activarla.');
+  }
   const update: Record<string, CatalogUpdateValue> = {};
   for (const [key, value] of Object.entries(request.changes)) {
     if (key === 'variants') {

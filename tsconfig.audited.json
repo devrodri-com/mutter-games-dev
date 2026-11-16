@@ -1,0 +1,35 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "lib": [
+      "ES2020",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": [
+        "src/*"
+      ]
+    }
+  },
+  "include": [
+    "src/components/CategorySection.tsx",
+    "src/domain/shopSelection.ts",
+    "src/hooks/useShopProducts.ts",
+    "src/vite-env.d.ts",
+    "src/firebaseUtils.ts",
+    "src/domain/clientDocument.ts",
+    "src/domain/cjProduct.ts",
+    "tests/catalog/firebase-utils-diagnostics.test.ts",
+    "tests/catalog/firebase-utils-payloads.test.ts"
+  ]
+}

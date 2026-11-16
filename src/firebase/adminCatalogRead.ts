@@ -10,7 +10,7 @@ export const JOHN_CATALOG_SCOPE = 'JOHN_ADMIN_CLOSED_V1';
 
 export type AdminCatalogProduct = Pick<Product,
   'id' | 'title' | 'category' | 'subcategory' | 'active' | 'images' | 'stockTotal' | 'variants'>
-  & { priceUSD?: number };
+  & { priceUSD?: number; catalogArchived?: boolean };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -38,6 +38,7 @@ export function catalogProductForDisplay(id: string, input: unknown, categories:
     category: { id: text(category.id), name: text(category.name) },
     subcategory: { id: text(subcategory.id), name: text(subcategory.name), categoryId: text(category.id) },
     active: product.active === true,
+    catalogArchived: record(input).catalogArchived === true,
     images: Array.isArray(product.images) ? product.images.filter((image): image is string => typeof image === 'string') : [],
     priceUSD: number(option.priceUSD) ?? number(product.priceUSD),
     stockTotal: number(product.stockTotal),
@@ -62,7 +63,7 @@ async function currentAdmission(): Promise<CredentialAdmission> {
 export async function requireWritableCatalog(): Promise<void> {
   const admission = await currentAdmission();
   if (admission.scope === JOHN_CATALOG_SCOPE) {
-    throw new Error('Este acceso permite solamente ver las publicaciones. Las compras siguen cerradas.');
+    throw new Error('Este acceso permite solamente gestionar publicaciones.');
   }
 }
 

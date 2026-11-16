@@ -190,7 +190,7 @@ function LegacyProductList() {
   };
 
   const handleDeleteClick = (id: string, name: string) => {
-    if (readOnly) { setError('Los borrados no están incluidos en esta recuperación. Las compras siguen cerradas.'); return; }
+    if (readOnly) { setError('Este acceso no permite eliminar publicaciones.'); return; }
     setConfirmDeleteId(id);
     setConfirmDeleteName(name);
   };

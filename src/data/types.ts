@@ -10,7 +10,7 @@ export type Product = {
   subtitle?: string;
   name: string;
   slug?: string;
-  description: string;
+  description: string | { es?: string; en?: string };
   extraDescription?: string;
   priceUSD: number;
   category: { id: string; name: string };
@@ -18,6 +18,7 @@ export type Product = {
   images?: string[];
   stock?: { [size: string]: number };
   active: boolean;
+  catalogArchived?: boolean;
   defaultDescriptionType?: string;
   extraDescriptionTop?: string;
   extraDescriptionBottom?: string;

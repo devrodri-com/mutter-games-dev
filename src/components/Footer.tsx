@@ -1,34 +1,27 @@
-// src/components/Footer.tsx
+import { Link } from 'react-router-dom';
+import './Footer.css';
 
-type FooterProps = {
-  variant?: "light" | "dark";
-};
+type FooterProps = { variant?: 'light' | 'dark' };
 
-export default function Footer({ variant = "dark" }: FooterProps) {
-  const isDark = variant === "dark";
-
-  return (
-    <footer
-      className={`border-t py-4 mt-12 text-center text-xs leading-tight flex flex-col sm:flex-row sm:items-center sm:justify-center gap-1 ${
-        isDark
-          ? "bg-black border-gray-800 text-gray-400"
-          : "bg-white border-gray-200 text-gray-600"
-      }`}
-    >
-      <span>© 2025 Mutter Games & Coleccionables</span>
-      <span>
-        Made with 💻 by{" "}
-        <a
-          href="https://www.devrodri.com"
-          target="_blank"
-          rel="noopener noreferrer"
-          className={`font-medium transition ${
-            isDark ? "text-white/80 hover:text-white" : "text-gray-800 hover:text-black"
-          }`}
-        >
-          Rodrigo Opalo
-        </a>
-      </span>
-    </footer>
-  );
+export default function Footer({ variant = 'light' }: FooterProps) {
+  return <footer className={`mutter-footer mutter-footer--${variant}`}>
+    <div className="mutter-footer-inner">
+      <div className="mutter-footer-top">
+        <div className="mutter-footer-brand">
+          <Link to="/" aria-label="Mutter Games, inicio"><img src="/brand/login/mutter-compacto-color-positivo.svg" width="846" height="150" alt="Mutter Games" /></Link>
+          <p>Consolas, videojuegos y coleccionables.</p>
+        </div>
+        <nav aria-label="Enlaces de Mutter">
+          <Link to="/shop">Tienda</Link><Link to="/about">Nosotros</Link>
+          <a href="https://wa.me/59899389140" target="_blank" rel="noopener noreferrer">WhatsApp</a>
+          <a href="https://www.instagram.com/muttergames/" target="_blank" rel="noopener noreferrer">Instagram</a>
+        </nav>
+      </div>
+      <div className="mutter-footer-bottom">
+        <span>© {new Date().getFullYear()} Mutter Games &amp; Coleccionables</span>
+        <span>Desarrollado por <a href="https://www.devrodri.com" target="_blank" rel="noopener noreferrer">Rodrigo Opalo</a></span>
+      </div>
+    </div>
+  </footer>;
 }
+

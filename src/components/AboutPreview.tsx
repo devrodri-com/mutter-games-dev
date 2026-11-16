@@ -11,7 +11,7 @@ export default function AboutPreview() {
           Juegos, consolas y coleccionables con historia
         </h2>
         <p className="text-base md:text-lg text-white leading-relaxed">
-          Más de 20 años comprando, vendiendo y restaurando.<br />Selección curada de retro, next-gen y coleccionables, probados y listos para jugar.
+          Más de 20 años comprando, vendiendo y restaurando.<br />Juegos retro, de última generación y coleccionables, probados y listos para jugar.
         </p>
         <div className="mt-8">
           <a

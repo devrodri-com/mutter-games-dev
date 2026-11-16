@@ -202,7 +202,7 @@ export function CartProvider({ children }: {
     }, [uid, cartAccess, adminOnly]);
     const persist = async (next: CartItem[]) => {
         if (!uid || activeUid.current !== uid || accessState.current !== 'active') {
-            if (activeUid.current === uid) fail(new Error(adminOnly ? 'Las compras siguen cerradas. Este acceso sólo habilita tus publicaciones.' : 'Tu carrito se conserva. Comprobá o recuperá el acceso para continuar.'));
+            if (activeUid.current === uid) fail(new Error(adminOnly ? 'Se necesita el acceso de compras para usar el carrito. Este acceso es sólo para gestionar publicaciones.' : 'Tu carrito se conserva. Comprobá o recuperá el acceso para continuar.'));
             return false;
         }
         const owner = uid;
@@ -292,7 +292,7 @@ export function CartProvider({ children }: {
     };
     const refreshCart = (): Promise<CartItem[]> => refreshCurrentCart(0);
     const addToCart = async (item: CartItem) => {
-        if (adminOnly) { fail(new Error('Las compras siguen cerradas. Este acceso sólo habilita tus publicaciones.')); return false; }
+        if (adminOnly) { fail(new Error('Se necesita el acceso de compras para usar el carrito. Este acceso es sólo para gestionar publicaciones.')); return false; }
         const version = revision.current;
         try {
             const next = [...itemsRef.current];

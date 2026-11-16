@@ -4,10 +4,12 @@ import { adminApp } from './_lib/firebase-server.js';
 import type { AccessResponse } from './_lib/credential-access-handler.js';
 import { CredentialAccessError } from './_lib/credential-access-state.js';
 import { authenticateEditor, revalidateEditor } from './_lib/catalog-edit-authorization.js';
-import { CatalogEditError, invalid, operationId, parseEditRequest, productId } from './_lib/catalog-edit-policy.js';
+import { CatalogEditError, invalid, object, operationId, parseEditRequest, productId } from './_lib/catalog-edit-policy.js';
 import { readEditProduct, readEditReceipt, saveEdit } from './_lib/catalog-edit-service.js';
 import { parseCreateRequest } from './_lib/catalog-edit-create-policy.js';
 import { createPublication } from './_lib/catalog-edit-create-service.js';
+import { parseArchiveRequest } from './_lib/catalog-archive-policy.js';
+import { saveArchive } from './_lib/catalog-archive-service.js';
 
 export type CatalogEditRequest = { url?: string; method?: string; headers: Record<string, unknown>; body?: unknown };
 function target(req: CatalogEditRequest) {
@@ -39,7 +41,13 @@ export default async function handler(req: CatalogEditRequest, res: AccessRespon
       commitStarted = true;
       return res.status(201).json(await createPublication(auth, db, editor, selected.id, request));
     }
-    const request = parseEditRequest(req.body);
+    const body: unknown = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+    if (object(body) && (body.intent === 'withdraw' || body.intent === 'restore')) {
+      const request = parseArchiveRequest(body);
+      commitStarted = true;
+      return res.status(200).json(await saveArchive(auth, db, editor, selected.id, request));
+    }
+    const request = parseEditRequest(body);
     commitStarted = true;
     return res.status(200).json(await saveEdit(auth, db, editor, selected.id, request));
   } catch (error: unknown) {

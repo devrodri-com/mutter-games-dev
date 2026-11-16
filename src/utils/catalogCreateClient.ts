@@ -5,18 +5,22 @@ import { catalogVersionAfter, canonical, isJson, isObject, parseCatalogDocument,
 import { actorForEdit, assertActor, catalogPath, catalogRequest, type Actor } from './catalogTransport';
 
 export class CatalogCreatePendingError extends Error {}
+export class CatalogCreateDraftChangedError extends Error {}
 export class CatalogCreateSupersededError extends CatalogCreatePendingError {}
-export type CatalogCreateDraft = { id: string; operationId: string; product: JsonObject; imageOperationIds: string[]; pending: boolean };
+export type CatalogCreateDraft = { id: string; operationId: string; product: JsonObject; imageOperationIds: string[]; pending: boolean;
+  visibilityChoiceRequired?: boolean };
+type VisibilityChoice = 'default-active' | 'explicit-active' | 'explicit-inactive';
 type Receipt = { status: 'CONFIRMED'; intent: 'create'; id: string; operationId: string; version: string; requestHash: string; product: JsonObject };
 type Stored = { schema: 1; uid: string; id: string; operationId: string; product: JsonObject; imageOperationIds: string[];
-  phase: 'DRAFT' | 'SENT' | 'CONFIRMED'; receipt?: Receipt };
+  phase: 'DRAFT' | 'SENT' | 'CONFIRMED'; receipt?: Receipt; visibilityChoice?: VisibilityChoice };
 const key = (uid: string) => `mutter-catalog-create:${uid}`;
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 function imageIds(value: unknown): string[] {
   if (!Array.isArray(value) || value.length > 30 || value.some(id => typeof id !== 'string' || !uuid.test(id)) || new Set(value).size !== value.length) throw new Error('Referencias de imagen inválidas.');
   return value.map(String).sort();
 }
-function read(actor: Actor): Stored | null {
+type StoredRecord = { stored: Stored; raw: Record<string, unknown>; bytes: string };
+function readRecord(actor: Actor): StoredRecord | null {
   assertActor(actor); const raw = localStorage.getItem(key(actor.uid)); if (!raw) return null;
   let value: unknown;
   try { value = JSON.parse(raw); } catch { throw new CatalogCreatePendingError('Conservamos una creación pendiente que necesita revisión.'); }
@@ -27,40 +31,78 @@ function read(actor: Actor): Stored | null {
   if (phase !== 'DRAFT' && phase !== 'SENT' && phase !== 'CONFIRMED') throw new CatalogCreatePendingError('Fase de creación inválida.');
   const stored: Stored = { schema: 1, uid: actor.uid, id: value.id, operationId: value.operationId, product: value.product,
     imageOperationIds: imageIds(value.imageOperationIds), phase };
+  // Older or unrecognized local metadata must never discard the saved product.
+  // Only a marker consistent with its boolean can settle an inactive draft.
+  if ((value.visibilityChoice === 'default-active' || value.visibilityChoice === 'explicit-active') && stored.product.active === true
+    || value.visibilityChoice === 'explicit-inactive' && stored.product.active === false) stored.visibilityChoice = value.visibilityChoice;
   if (phase === 'CONFIRMED') stored.receipt = parseReceipt(value.receipt, stored);
-  return stored;
+  return { stored, raw: value, bytes: raw };
 }
+function read(actor: Actor): Stored | null { return readRecord(actor)?.stored ?? null; }
 function assertStored(actor: Actor, previous: Stored): void {
   const current = read(actor);
   if (!current || !sameJson(current, previous)) throw new CatalogCreatePendingError('El borrador cambió en otra ventana. Volvé a abrirlo antes de continuar.');
 }
 function store(actor: Actor, next: Stored, previous?: Stored): void {
   assertActor(actor);
-  if (previous) assertStored(actor, previous);
+  if (previous?.phase === 'DRAFT') {
+    const current = read(actor);
+    if (!current || !sameJson(current, previous)) throw new CatalogCreateDraftChangedError('El borrador cambió en otra ventana. Cerralo y volvé a abrirlo para ver lo guardado.');
+  } else if (previous) assertStored(actor, previous);
   else if (read(actor)) throw new CatalogCreatePendingError('Ya hay una creación pendiente.');
   localStorage.setItem(key(actor.uid), JSON.stringify(next));
 }
 const asDraft = (value: Stored): CatalogCreateDraft => ({ id: value.id, operationId: value.operationId,
-  product: structuredClone(value.product), imageOperationIds: [...value.imageOperationIds], pending: value.phase !== 'DRAFT' });
+  product: structuredClone(value.product), imageOperationIds: [...value.imageOperationIds], pending: value.phase !== 'DRAFT',
+  visibilityChoiceRequired: value.phase === 'DRAFT' && value.product.active === false && value.visibilityChoice !== 'explicit-inactive' });
 export function newCatalogDraft(): CatalogCreateDraft {
   const actor = auth.currentUser;
   if (!actor) throw new Error('Ingresá para crear una publicación.');
   const previous = read(actor); if (previous) return asDraft(previous);
   const operationId = crypto.randomUUID();
-  const draft: Stored = { schema: 1, uid: actor.uid, id: `admin-${operationId}`, operationId, phase: 'DRAFT', imageOperationIds: [],
+  const draft: Stored = { schema: 1, uid: actor.uid, id: `admin-${operationId}`, operationId, phase: 'DRAFT', imageOperationIds: [], visibilityChoice: 'default-active',
     product: { title: { es: '', en: '' }, description: '', category: { id: '', name: '' }, subcategory: { id: '', name: '' },
-      tipo: '', images: [], active: false, variants: [{ label: { es: 'Modelo', en: '' }, options: [{ value: 'Única', priceUSD: 0, stock: 0 }] }],
+      tipo: '', images: [], active: true, variants: [{ label: { es: 'Modelo', en: '' }, options: [{ value: 'Única', priceUSD: 0, stock: 0 }] }],
       sku: '', allowCustomization: false, customName: '', customNumber: '' } };
   store(actor, draft); return asDraft(draft);
 }
-export function updateCatalogDraft(draft: CatalogCreateDraft, product: JsonObject, images: string[]): void {
+function currentDraft(actor: Actor, identity: Pick<CatalogCreateDraft, 'id' | 'operationId'>): StoredRecord {
+  const record = readRecord(actor);
+  if (!record || record.stored.id !== identity.id || record.stored.operationId !== identity.operationId) {
+    throw new CatalogCreateDraftChangedError('Este borrador cambió. Cerralo y volvé a abrirlo para ver lo guardado.');
+  }
+  if (record.stored.phase !== 'DRAFT') throw new CatalogCreatePendingError('Primero comprobá el resultado de la creación anterior.');
+  return record;
+}
+/** A visibility choice never accepts an older window's product or image payload. */
+export function chooseCatalogDraftVisibility(identity: Pick<CatalogCreateDraft, 'id' | 'operationId'>, active: boolean): CatalogCreateDraft {
+  if (typeof active !== 'boolean') throw new Error('Elegí el estado de la publicación.');
   const actor = auth.currentUser;
   if (!actor) throw new Error('Ingresá para conservar el borrador.');
-  const previous = read(actor);
-  if (!previous || previous.id !== draft.id || previous.operationId !== draft.operationId) throw new CatalogCreatePendingError('No se encontró este borrador.');
-  if (previous.phase !== 'DRAFT') throw new CatalogCreatePendingError('Primero comprobá el resultado de la creación anterior.');
+  const record = currentDraft(actor, identity);
+  const visibilityChoice = active ? 'explicit-active' : 'explicit-inactive';
+  const next: Stored = { ...record.stored, product: { ...record.stored.product, active }, visibilityChoice };
+  assertActor(actor);
+  if (localStorage.getItem(key(actor.uid)) !== record.bytes) throw new CatalogCreateDraftChangedError('El borrador cambió en otra ventana. Volvé a elegir su estado.');
+  // Preserve all other current raw fields, including image-reference order and
+  // unknown local metadata. This synchronous fence is not a cross-window CAS.
+  localStorage.setItem(key(actor.uid), JSON.stringify({ ...record.raw, product: next.product, visibilityChoice }));
+  return asDraft(next);
+}
+export function updateCatalogDraft(draft: CatalogCreateDraft, product: JsonObject, images: string[]): CatalogCreateDraft {
+  const actor = auth.currentUser;
+  if (!actor) throw new Error('Ingresá para conservar el borrador.');
+  const previous = currentDraft(actor, draft).stored;
+  if (draft.pending || !sameJson(previous.product, draft.product)
+    || !sameJson(previous.imageOperationIds, draft.imageOperationIds)
+    || asDraft(previous).visibilityChoiceRequired !== (draft.visibilityChoiceRequired === true)) {
+    throw new CatalogCreateDraftChangedError('El borrador cambió en otra ventana. Cerralo y volvé a abrirlo para ver lo guardado.');
+  }
   if (!isJson(product)) throw new Error('El borrador no es válido.');
-  store(actor, { ...previous, product: structuredClone(product), imageOperationIds: imageIds(images) }, previous);
+  if (product.active !== previous.product.active) throw new Error('Cambiá el estado desde la casilla de visibilidad para conservar tu elección.');
+  const next: Stored = { ...previous, product: structuredClone(product), imageOperationIds: imageIds(images) };
+  store(actor, next, previous);
+  return asDraft(next);
 }
 function normalized(stored: Stored): JsonObject {
   const product = normalizeCatalogCreate(stored.product, stored.operationId);
@@ -84,11 +126,15 @@ async function verifyHash(receipt: Receipt, pending: Stored): Promise<void> {
 }
 export async function createCatalogPublication(draft: CatalogCreateDraft, product: JsonObject, images: string[]): Promise<CatalogEditDocument> {
   const actor = await actorForEdit(); let pending = read(actor);
-  if (!pending || pending.id !== draft.id || pending.operationId !== draft.operationId) throw new CatalogCreatePendingError('El borrador cambió. Volvé a abrirlo.');
+  if (!pending || pending.id !== draft.id || pending.operationId !== draft.operationId) {
+    if (!pending || pending.phase === 'DRAFT') throw new CatalogCreateDraftChangedError('Este borrador cambió. Cerralo y volvé a abrirlo para ver lo guardado.');
+    throw new CatalogCreatePendingError('El borrador cambió. Volvé a abrirlo.');
+  }
   const ids = imageIds(images);
   if (pending.phase === 'DRAFT') {
     updateCatalogDraft(draft, product, ids); pending = read(actor);
     if (!pending) throw new CatalogCreatePendingError('No se conservó el borrador.');
+    if (asDraft(pending).visibilityChoiceRequired) throw new Error('Elegí si este borrador se creará activo o conservá su estado inactivo.');
     normalized(pending); // Invalid new publications are rejected before reserving a send.
   } else if (!sameJson(pending.product, product) || !sameJson(pending.imageOperationIds, ids)) throw new CatalogCreatePendingError('Primero comprobá la creación enviada, sin modificar su contenido.');
   const newlySent = pending.phase === 'DRAFT';

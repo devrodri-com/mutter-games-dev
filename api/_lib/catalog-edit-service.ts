@@ -6,6 +6,7 @@ import { CatalogEditError, canonical, editUpdate, object, parseEditRequest, prod
   requestHash, timestampVersion, type EditRequest } from './catalog-edit-policy.js';
 import { confirmedCreate } from './catalog-edit-create-service.js';
 import { prepareImageAssociations } from './catalog-edit-images.js';
+import { confirmedArchive } from './catalog-archive-service.js';
 
 export type ConfirmedEdit = { status: 'CONFIRMED'; id: string; operationId: string; version: string;
   baseVersion: string; changes: Record<string, unknown>; requestHash: string };
@@ -25,6 +26,7 @@ function confirmed(snapshot: DocumentSnapshot, editor: Editor, id: string, opera
 export async function readEditReceipt(db: Firestore, editor: Editor, id: string, operationId: string) {
   const snapshot = await db.doc(receiptPath(editor.uid, operationId)).get();
   if (snapshot.get('kind') === 'SCOPED_PUBLICATION_CREATE_V1') return confirmedCreate(snapshot, editor, id, operationId);
+  if (snapshot.get('kind') === 'CATALOG_ARCHIVE_V1') return confirmedArchive(snapshot, editor, id, operationId);
   return snapshot.exists ? confirmed(snapshot, editor, id, operationId)
     : { status: 'NOT_CONFIRMED' as const, id, operationId, resubmissionAuthorized: false };
 }
@@ -59,7 +61,7 @@ export async function saveEdit(auth: Auth, db: Firestore, editor: Editor, id: st
       // A known ABORTED transaction made no commit. First resolve an identical
       // concurrent operation from its receipt, without another write attempt.
       const receipt = await readEditReceipt(db, editor, id, request.operationId);
-      if (receipt.status === 'CONFIRMED' && 'changes' in receipt && receipt.requestHash === hash) return receipt;
+      if (receipt.status === 'CONFIRMED' && 'changes' in receipt && !('kind' in receipt) && receipt.requestHash === hash) return receipt;
       throw new CatalogEditError(409, 'PRODUCT_VERSION_CONFLICT',
         'La publicación o los permisos cambiaron durante el guardado. Conservá tu texto y volvé a abrirla.');
     }
@@ -67,7 +69,7 @@ export async function saveEdit(auth: Auth, db: Firestore, editor: Editor, id: st
   }
   try {
     const receipt = await readEditReceipt(db, editor, id, request.operationId);
-    if (receipt.status === 'CONFIRMED' && 'changes' in receipt) return receipt;
+    if (receipt.status === 'CONFIRMED' && 'changes' in receipt && !('kind' in receipt)) return receipt;
   } catch {
     throw new CatalogEditError(503, 'EDIT_CONFIRMATION_UNAVAILABLE',
       'El guardado necesita confirmación. Consultá su recibo sin volver a enviarlo.');

@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 import type { CartItem, Product } from '../data/types';
-import { currentCartItem, isPublished, mapCatalogProduct } from '../domain/catalog';
+import { isPublished, mapCatalogProduct } from '../domain/catalog';
+import { currentCartView } from '../domain/cartVariantPresentation';
 type ObservedProduct = Product | null | 'unverified';
 export function useLiveCartInventory(uid: string | null, items: CartItem[]): CartItem[] {
     const ids = [...new Set(items.map(item => item.id))].sort();
@@ -32,7 +33,6 @@ export function useLiveCartInventory(uid: string | null, items: CartItem[]): Car
     // This is a projection of current selections only. Never persist snapshots or alter the edit queue.
     return items.map(item => {
         const product = observed?.uid === uid && observed.idsKey === idsKey ? observed.products.get(item.id) : undefined;
-        if (product === 'unverified') return { ...item, availability: 'unverified' };
-        return product === undefined ? item : currentCartItem(item, product);
+        return product === undefined ? item : currentCartView(item, product);
     });
 }

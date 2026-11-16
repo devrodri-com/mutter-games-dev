@@ -47,7 +47,7 @@ export default function AdminPanel() {
             <><strong>Usuario logueado:</strong> <span className="text-red-500">No logueado</span></>
           )}
         </div>
-        {catalogOnly && <p role="status" className="mb-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">Las compras siguen cerradas. Podés abrir, editar y crear publicaciones; guardar cambios conserva el estado de las publicaciones existentes.</p>}
+        {catalogOnly && <p role="status" className="mb-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">Podés crear y editar publicaciones, y elegir si se muestran en la web.</p>}
         <Routes>
           <Route index element={<Navigate to={defaultView} replace />} />
           {!catalogOnly && <Route

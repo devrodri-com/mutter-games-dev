@@ -2,11 +2,9 @@
 
 import { Link } from "react-router-dom";
 import { Product } from "../data/types";
+import { getCatalogDisplayPrice } from "../domain/shopSelection";
+import { formatCartAmount } from "../utils/cartPresentation";
 
-type LocalizedTitle = {
-  en: string;
-  es: string;
-};
 import { motion } from "framer-motion";
 import { useTranslation } from "react-i18next";
 
@@ -14,9 +12,10 @@ type ProductCardProps = {
   product: Product;
   className?: string;
   imgClassName?: string;
+  presentation?: "default" | "catalog";
 };
 
-export default function ProductCard({ product, className, imgClassName }: ProductCardProps) {
+export default function ProductCard({ product, className, imgClassName, presentation = "default" }: ProductCardProps) {
   // Asegurarnos de que tenemos un slug limpio y válido
   const safeSlug = product.slug ? encodeURIComponent(product.slug) : `product-${product.id}`;
 
@@ -39,19 +38,37 @@ export default function ProductCard({ product, className, imgClassName }: Produc
       ? product.subtitle[language] || ""
       : "";
 
-  // Obtener el precio más bajo entre las variantes si existen, si no usar priceUSD
-  const getMinPrice = () => {
-    if (product.variants && product.variants.length > 0) {
-      const prices = product.variants
-        .flatMap((variant) =>
-          variant.options?.map((opt) => Number(opt.priceUSD)).filter((p) => !isNaN(p))
-        );
-      return prices.length > 0 ? Math.min(...prices) : product.priceUSD ?? 0;
-    }
-    return product.priceUSD ?? 0;
-  };
+  const productPriceUSD = getCatalogDisplayPrice(product);
 
-  const productPriceUSD = getMinPrice();
+  if (presentation === "catalog") {
+    return (
+      <article className={`shop-product-card ${className || ""}`}>
+        <Link to={productDetailUrl} className="shop-product-link">
+          <div className="shop-product-image">
+            <img
+              src={productImage}
+              alt={productName}
+              className={imgClassName}
+              loading="lazy"
+              decoding="async"
+              onError={(event) => {
+                const image = event.currentTarget;
+                const fallback = new URL("/images/placeholder.jpg", image.ownerDocument.baseURI).href;
+                if (image.src !== fallback) image.src = "/images/placeholder.jpg";
+              }}
+            />
+          </div>
+          <div className="shop-product-copy">
+            {productSubtitle && <p className="shop-product-subtitle">{productSubtitle}</p>}
+            <h3 className="shop-product-title">{productName}</h3>
+            <p className="shop-product-price">{formatCartAmount(productPriceUSD)}</p>
+          </div>
+        </Link>
+      </article>
+    );
+  }
+
+  const [wholePrice, fractionPrice = "00"] = productPriceUSD.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).split(".");
 
   const categoryBorderColors: { [key: string]: string } = {
     PURE: "ring-[#1D4ED8]",          // azul
@@ -96,13 +113,10 @@ export default function ProductCard({ product, className, imgClassName }: Produc
           <div className="mt-2.5 flex items-baseline text-[1.15rem] md:text-lg font-semibold tracking-tight whitespace-nowrap">
             <span className="text-base font-medium">$</span>
             <span className="ml-0.5 font-mono tabular-nums">
-              {productPriceUSD.toLocaleString("en-US", {
-                minimumFractionDigits: 0,
-                maximumFractionDigits: 0,
-              })}
+              {wholePrice}
             </span>
             <span className="text-[0.7rem] relative -top-1.5 ml-0.5">
-              {String(productPriceUSD.toFixed(2)).split(".")[1]}
+              {fractionPrice}
             </span>
           </div>
         </div>

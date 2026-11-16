@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { Dialog, DialogPanel, DialogTitle } from '@headlessui/react';
 import type { Category } from '../../data/types';
 import { isObject, type CatalogEditDocument, type CatalogEditField, type JsonObject, type JsonValue } from '../../domain/catalogEdit';
-import { CatalogCreatePendingError, CatalogCreateSupersededError, createCatalogPublication, reopenSupersededCatalogCreate, updateCatalogDraft, type CatalogCreateDraft } from '../../utils/catalogCreateClient';
+import { CatalogCreatePendingError, CatalogCreateSupersededError, chooseCatalogDraftVisibility, createCatalogPublication, reopenSupersededCatalogCreate, updateCatalogDraft, type CatalogCreateDraft } from '../../utils/catalogCreateClient';
 import PublicationFields from './publication-fields';
 import './admin-visual.css';
 import { publicationFormDraft } from './publication-form-draft';
@@ -13,29 +13,39 @@ export default function PublicationCreate({ draft, categories, onCreated, onClos
   draft: CatalogCreateDraft; categories: Category[]; onCreated: (document: CatalogEditDocument, superseded?: boolean) => void; onClose: () => void;
 }) {
   const [product, setProduct] = useState<JsonObject>(draft.product);
-  const [imageOperations, setImageOperations] = useState<string[]>(draft.imageOperationIds);
-  const latest = useRef({ product: draft.product, imageOperations: draft.imageOperationIds });
+  const latest = useRef({ draft, product: draft.product, imageOperations: draft.imageOperationIds });
   const [saving, setSaving] = useState(false), [pending, setPending] = useState(draft.pending), [imageBusy, setImageBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [superseded, setSuperseded] = useState(false);
+  const [visibilityChoiceRequired, setVisibilityChoiceRequired] = useState(draft.visibilityChoiceRequired === true);
+  function retain(current: CatalogCreateDraft) {
+    latest.current = { draft: current, product: current.product, imageOperations: current.imageOperationIds };
+    setProduct(current.product);
+    setVisibilityChoiceRequired(current.visibilityChoiceRequired === true);
+  }
   function change(field: CatalogEditField, value: JsonValue) {
     if (saving || pending) return;
+    if (field === 'active') {
+      if (typeof value === 'boolean') changeState(value);
+      return;
+    }
     const next = publicationFormDraft(latest.current.product, { [field]: value });
-    try { updateCatalogDraft(draft, next, latest.current.imageOperations); latest.current.product = next; setProduct(next); }
+    try { retain(updateCatalogDraft(latest.current.draft, next, latest.current.imageOperations)); }
     catch (failure: unknown) {
       setError(failure instanceof Error ? failure.message : 'No se pudo conservar el borrador.');
       if (field === 'images') throw failure; // The upload must retain its receipt when incorporating into the draft fails.
     }
   }
   function changeState(active: boolean) {
-    const next = { ...latest.current.product, active };
-    try { updateCatalogDraft(draft, next, latest.current.imageOperations); latest.current.product = next; setProduct(next); }
+    if (saving || pending || imageBusy) return;
+    try { retain(chooseCatalogDraftVisibility(latest.current.draft, active)); }
     catch (failure: unknown) { setError(failure instanceof Error ? failure.message : 'No se pudo conservar el borrador.'); }
   }
   async function save() {
     if (saving || imageBusy) return;
     setError(null);
     if (!pending) {
+      if (visibilityChoiceRequired) { setError('Elegí si querés activar este borrador o conservarlo inactivo.'); return; }
       const title = typeof product.title === 'string' ? product.title : isObject(product.title) ? text(product.title.es) || text(product.title.en) : '';
       if (!title.trim()) { setError('Escribí el título de la publicación.'); return; }
       if (!selectedPublicationSubcategory(product, categories)) {
@@ -44,7 +54,7 @@ export default function PublicationCreate({ draft, categories, onCreated, onClos
       if (!Array.isArray(product.images) || !product.images.length) { setError('Agregá al menos una imagen antes de crear la publicación.'); return; }
     }
     setSaving(true);
-    try { onCreated(await createCatalogPublication(draft, product, imageOperations)); }
+    try { onCreated(await createCatalogPublication(latest.current.draft, latest.current.product, latest.current.imageOperations)); }
     catch (failure: unknown) {
       if (failure instanceof CatalogCreatePendingError) setPending(true);
       if (failure instanceof CatalogCreateSupersededError) setSuperseded(true);
@@ -65,17 +75,21 @@ export default function PublicationCreate({ draft, categories, onCreated, onClos
     <div className="mutter-modal__viewport fixed inset-0 overflow-y-auto"><div className="mutter-modal__position flex min-h-full items-center justify-center">
       <DialogPanel className="mutter-modal__panel w-full bg-white">
         <header className="mutter-modal__header"><div className="mutter-modal__heading"><img src="/brand/login/mutter-compacto-color-positivo.svg" alt="Mutter Games" className="mutter-modal__brand" /><div>
-          <DialogTitle className="text-xl font-semibold">Crear publicación</DialogTitle><p className="mt-1 text-sm text-gray-500">Tu borrador se conserva en este navegador. Crear una publicación no habilita las compras.</p></div></div>
+          <DialogTitle className="text-xl font-semibold">Crear publicación</DialogTitle><p className="mt-1 text-sm text-gray-500">Tu borrador se conserva en este navegador.</p></div></div>
           <button type="button" disabled={saving || imageBusy} onClick={close} aria-label="Cerrar creación" className="mutter-modal__close">✕</button></header>
         <div className="mutter-modal__body space-y-5">
           {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{error}</p>}
           {pending && <p role="status" className="rounded-lg bg-amber-50 p-3 text-sm">La creación necesita comprobación. Conservamos el intento y no crearemos otra publicación.</p>}
+          {!pending && visibilityChoiceRequired && <div role="status" className="rounded-lg bg-amber-50 p-3 text-sm">
+            <p>Elegí si este borrador se mostrará en la web: activá la casilla o conservá su estado inactivo.</p>
+            <button type="button" disabled={disabled} onClick={() => changeState(false)} className="mt-3 rounded-lg border border-amber-300 px-3 py-2 font-medium disabled:opacity-40">Conservar inactiva</button>
+          </div>}
           <label className="mutter-modal__visibility flex items-start gap-3 text-sm"><input className="mt-1" type="checkbox" checked={product.active === true} disabled={disabled} onChange={event => changeState(event.target.checked)} />
-            <span><strong>Mostrar esta publicación en la web</strong><span className="mt-1 block text-gray-500">{product.active === true ? 'Se creará activa. Las compras seguirán cerradas.' : 'Se creará inactiva. Las publicaciones existentes no cambian.'}</span></span></label>
+            <span><strong>Mostrar esta publicación en la web</strong><span className="mt-1 block text-gray-500">{product.active === true ? 'Se creará activa.' : 'Se creará inactiva.'}</span></span></label>
           <PublicationFields productId={draft.id} original={draft.product} product={product} categories={categories} creating disabled={disabled}
             onChange={change} onImageOperation={operation => {
               const next = latest.current.imageOperations.includes(operation) ? latest.current.imageOperations : [...latest.current.imageOperations, operation];
-              updateCatalogDraft(draft, latest.current.product, next); latest.current.imageOperations = next; setImageOperations(next);
+              retain(updateCatalogDraft(latest.current.draft, latest.current.product, next));
             }} onImageBusy={setImageBusy} />
         </div>
         <footer className="mutter-modal__footer sticky bottom-0 flex flex-wrap items-center justify-end gap-3">

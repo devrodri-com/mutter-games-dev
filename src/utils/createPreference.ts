@@ -19,22 +19,38 @@ export type CheckoutQuote = {
 export class CheckoutRequestError extends Error {
     constructor(message: string, public code: string) { super(message); }
 }
+/** Proven local preparation failure: the guarded checkout POST has not been invoked. */
+export class CheckoutNotSentError extends Error {
+    readonly cause: unknown;
+    constructor(cause: unknown) {
+        super(cause instanceof Error ? cause.message : 'No se pudo preparar la compra.');
+        this.name = 'CheckoutNotSentError';
+        this.cause = cause;
+    }
+}
 export function purchaseInput(items: CartItem[], shipping: ShippingData, pickup: boolean) {
     return { items: items.map(i => ({ id: i.id, variantId: i.variantId ?? '', quantity: i.quantity, customName: i.customName ?? '', customNumber: i.customNumber ?? '' })), shipping: { pickup, department: shipping.state, name: shipping.name, address: [shipping.address, shipping.address2].filter(Boolean).join(', '), city: shipping.city, postalCode: shipping.postalCode, phone: shipping.phone, email: shipping.email } };
 }
-async function request(body: unknown): Promise<Record<string, unknown>> {
-    const user = auth.currentUser;
-    if (!user)
-        throw new Error('Esperá a que termine de cargar tu sesión.');
-    const admission = await ensureCredentialSession(user);
-    const admittedUser = auth.currentUser;
-    if (admission.uid !== user.uid || admittedUser?.uid !== user.uid)
-        throw new Error('Cambió la sesión. Revisá la compra antes de continuar.');
-    // Admission may replace the SDK user while exchanging a renewed capability.
-    // Take its current token once; payment requests are never replayed here.
-    const token = await admittedUser.getIdToken();
-    if (auth.currentUser?.uid !== user.uid)
-        throw new Error('Cambió la sesión. Revisá la compra antes de continuar.');
+async function request(body: unknown, beforeStart?: () => void): Promise<Record<string, unknown>> {
+    let token: string;
+    try {
+        const user = auth.currentUser;
+        if (!user) throw new Error('Esperá a que termine de cargar tu sesión.');
+        const admission = await ensureCredentialSession(user);
+        const admittedUser = auth.currentUser;
+        if (admission.uid !== user.uid || admittedUser?.uid !== user.uid)
+            throw new Error('Cambió la sesión. Revisá la compra antes de continuar.');
+        // Admission may replace the SDK user at the same UID. Read its current token once.
+        token = await admittedUser.getIdToken();
+        if (auth.currentUser?.uid !== user.uid)
+            throw new Error('Cambió la sesión. Revisá la compra antes de continuar.');
+        // Synchronous guard; no await may separate it from the actual START fetch.
+        beforeStart?.();
+    } catch (error) {
+        if (beforeStart) throw new CheckoutNotSentError(error);
+        throw error;
+    }
+    // Fetch invocation and everything after it remain potentially sent/uncertain.
     const response = await fetch('/api/create-mp-preference', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(body) });
     const data: unknown = await response.json();
     if (!data || typeof data !== 'object' || Array.isArray(data))
@@ -53,8 +69,8 @@ export async function requestQuote(purchase: ReturnType<typeof purchaseInput>): 
         throw new Error('Cotización inválida.'); return { id: i.id, variantId: i.variantId, quantity: i.quantity, unitPrice: i.unitPrice, stock: i.stock, title: i.title }; });
     return { hash: q.hash, items, total: q.total, shippingCost: q.shippingCost, currency: q.currency };
 }
-export async function startCheckout(purchase: ReturnType<typeof purchaseInput>, quoteHash: string, key: string) {
-    const data = await request({ action: 'start', purchase, quoteHash, key });
+export async function startCheckout(purchase: ReturnType<typeof purchaseInput>, quoteHash: string, key: string, beforeSend: () => void = () => undefined) {
+    const data = await request({ action: 'start', purchase, quoteHash, key }, beforeSend);
     if (typeof data.id !== 'string' || typeof data.init_point !== 'string')
         throw new Error('El intento requiere verificación.');
     return { id: data.id, url: paymentUrl(data.init_point) };
@@ -88,8 +104,8 @@ function checkoutStatus(data: Record<string, unknown>): CheckoutStatus {
     return { ...(typeof data.verificationPending === 'boolean' ? { verificationPending: data.verificationPending } : {}), id: data.id, inventoryState, paymentStatus: data.paymentStatus, reservedUntil: data.reservedUntil, canRetry: data.canRetry,
         ...(typeof data.init_point === 'string' ? { url: paymentUrl(data.init_point) } : {}) };
 }
-export async function requestCheckoutStatus(identity: { key: string } | { orderId: string }): Promise<CheckoutStatus> {
-    return checkoutStatus(await request({ action: 'status', ...identity }));
+export async function requestCheckoutStatus(identity: { key: string } | { orderId: string }, beforeSend?: () => void): Promise<CheckoutStatus> {
+    return checkoutStatus(await request({ action: 'status', ...identity }, beforeSend));
 }
 export async function verifyCheckoutPayment(orderId: string, paymentId: string): Promise<CheckoutStatus> {
     return checkoutStatus(await request({ action: 'verify', orderId, paymentId }));

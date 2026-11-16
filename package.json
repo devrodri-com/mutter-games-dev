@@ -67,7 +67,10 @@
     "precheck:dependency-six": "node scripts/braces-remediation/control.cjs verify",
     "typecheck:frontend": "tsc --noEmit --incremental false -p tsconfig.json",
     "typecheck:server": "tsc --noEmit --strict --skipLibCheck --moduleResolution NodeNext --target ES2022 --module NodeNext --esModuleInterop api/access.ts api/catalog-edit.ts api/catalog-media.ts api/internal/web-stock-reconcile.ts api/create-mp-preference.ts",
-    "test:published": "python3 scripts/published/run-native.py"
+    "test:published": "python3 scripts/published/run-native.py",
+    "typecheck:audited": "tsc --noEmit -p tsconfig.audited.json",
+    "lint:audited": "eslint src/firebaseUtils.ts src/domain/clientDocument.ts src/domain/cjProduct.ts tests/catalog/firebase-utils-diagnostics.test.ts tests/catalog/firebase-utils-payloads.test.ts",
+    "test:audited": "vitest run --config vitest.audited.config.ts --fileParallelism=false"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

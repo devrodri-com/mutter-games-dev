@@ -10,6 +10,7 @@ import { uploadImageToImageKit } from "../../utils/imagekitUtils";
 import TiptapEditor from "./TiptapEditor";
 import { TIPOS } from "../../constants/tipos";
 import ScopedCatalogEditor, { type ScopedCatalogEditorProps } from './ScopedCatalogEditor';
+import { editSpanishProductDescription, selectProductDescription } from '../../domain/productDescription';
 
 interface Props {
   product: Product;
@@ -97,20 +98,15 @@ function LegacyEditProductModal({
       setVariants(product.variants || []);
       setSelectedCategory(product.category?.id || "");
       setSelectedSubcategory(product.subcategory?.id || "");
-      setDescription(product.description || "");
+      setDescription(selectProductDescription(product.description, 'es'));
     }
   }, [product, open]);
 
   // Sincronizar imágenes y variantes con form
   useEffect(() => {
     setForm((prev) => (prev ? { ...prev, images, variants } : prev));
-    // eslint-disable-next-line
   }, [images, variants]);
 
-  // Sincronizar descripción
-  useEffect(() => {
-    setForm((prev) => (prev ? { ...prev, description } : prev));
-  }, [description]);
 
   // Cerrar dropdowns al click fuera o con ESC (solo UI)
   useEffect(() => {
@@ -136,10 +132,6 @@ function LegacyEditProductModal({
   }, [isCatOpen, isSubOpen, isTipoOpen]);
 
   // Handlers de inputs
-  const handleChange = <K extends keyof Product,>(key: K, value: Product[K]) => {
-    setForm((prev) => (prev ? { ...prev, [key]: value } : prev));
-  };
-
   const handleVariantChange = <K extends keyof NonNullable<Product['variants']>[number],>(vIdx: number, key: K, value: NonNullable<Product['variants']>[number][K]) => {
     setVariants((prev) =>
       prev.map((v, i) =>
@@ -255,7 +247,7 @@ function LegacyEditProductModal({
       const categoryName = typeof category?.name === 'string' ? category.name : category?.name?.es || category?.name?.en || '';
       const subcatName = typeof subcatObj?.name === 'string' ? subcatObj.name : subcatObj?.name?.es || subcatObj?.name?.en || '';
       const updated: Product = {
-        ...form, images, variants, description,
+        ...form, images, variants, description: editSpanishProductDescription(product.description, description),
         category: selectedCategory === product.category?.id ? form.category : {id:selectedCategory,name:categoryName},
         subcategory: selectedSubcategory === product.subcategory?.id ? form.subcategory : {id:selectedSubcategory,name:subcatName,categoryId:subcatObj?.categoryId || ''},
       };

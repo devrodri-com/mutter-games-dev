@@ -3,6 +3,10 @@
 export type ReservationLine = { slot: string; identity: string; quantity: number };
 export type WebReservation = { expiresAt: number; lines: ReservationLine[] };
 export type ReservationMap = Record<string, WebReservation>;
+/** Both inputs have already passed ledger parsing; keep the persisted order exact. */
+export function reservationLinesMatch(actual: ReservationLine[], expected: ReservationLine[]): boolean {
+    return JSON.stringify(actual) === JSON.stringify(expected);
+}
 export function inventoryObject(value: unknown): Record<string, unknown> {
     if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Inventario inválido.');
     return value as Record<string, unknown>;

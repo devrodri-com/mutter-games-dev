@@ -1,0 +1,24 @@
+.mutter-about{background:#0f0f0f;color:#fff;min-height:100vh;display:flex;flex-direction:column}
+.mutter-about-main{flex:1}
+.mutter-about-section{max-width:64rem;margin:0 auto;padding:5rem 1.5rem 4rem;text-align:center}
+.mutter-about-eyebrow{color:#ff2d55;text-transform:uppercase;letter-spacing:.1em;font-size:1rem;line-height:1.5;margin:0}
+.mutter-about-section h1{margin:1rem 0 0;font-size:3rem;font-weight:800;line-height:1;letter-spacing:normal}
+.mutter-about-story{max-width:65ch;margin:1.75rem auto 0;font-size:1.125rem;line-height:1.7;color:#d9d9dc}
+.mutter-about-story p{margin:0}
+.mutter-about-story p+p{margin-top:1.125rem}
+.mutter-about-benefits{max-width:50rem;margin:1.75rem auto 0;font-size:.875rem;line-height:1.75;color:#a6a6ac}
+.mutter-about-actions{display:flex;flex-wrap:wrap;justify-content:center;gap:1rem;margin-top:1.75rem}
+.mutter-about-actions a{display:inline-flex;align-items:center;justify-content:center;min-height:3rem;padding:.75rem 1.5rem;font-size:1rem;font-weight:600;line-height:1.5;border-radius:.375rem;transition:background-color .15s,color .15s,border-color .15s}
+.mutter-about-primary{background:#dc1b45;border:1px solid #dc1b45;color:#fff}
+.mutter-about-primary:hover{background:#bd173b;border-color:#bd173b}
+.mutter-about-secondary{background:transparent;color:#fff;border:1px solid #fff}
+.mutter-about-secondary:hover{background:#fff;color:#b7193a}
+.mutter-about-actions a:focus-visible{outline:3px solid #ff6d8b;outline-offset:4px}
+@media(max-width:767px){
+.mutter-about-section{padding:5rem 1.5rem 3.5rem}
+.mutter-about-eyebrow{font-size:.8125rem;letter-spacing:.08em}
+.mutter-about-section h1{font-size:2.25rem;line-height:1.15}
+.mutter-about-story{font-size:1rem;line-height:1.75;margin-top:1.5rem}
+.mutter-about-benefits{font-size:.8125rem;margin-top:1.5rem}
+}
+@media(prefers-reduced-motion:reduce){.mutter-about-actions a{transition:none}}

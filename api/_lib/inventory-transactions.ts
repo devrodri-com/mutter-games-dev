@@ -1,6 +1,6 @@
 import { FieldValue, type DocumentSnapshot, type Transaction } from 'firebase-admin/firestore';
 import { CheckoutError, record, type Quote } from './checkout-domain.js';
-import { parseReservations, reservedQuantity, slotInventory, inventoryObject, stockQuantity, type ReservationLine, type ReservationMap } from '../../src/domain/webInventory.js';
+import { parseReservations, reservedQuantity, slotInventory, inventoryObject, stockQuantity, reservationLinesMatch, type ReservationLine, type ReservationMap } from '../../src/domain/webInventory.js';
 
 export type InventoryLine = ReservationLine & { productId: string };
 export type OrderInventory = {
@@ -83,7 +83,7 @@ export function transitionProducts(products: DocumentSnapshot[], inventory: Orde
         const lines = inventory.lines.filter(line => line.productId === snapshot.id);
         const own = holds[inventory.reservationId];
         const expected = lines.map(line => ({ slot: line.slot, identity: line.identity, quantity: line.quantity }));
-        if (inventory.state === 'reserved' && (!own || JSON.stringify(own.lines) !== JSON.stringify(expected))) throw new Error('Reservation ledger mismatch');
+        if (inventory.state === 'reserved' && (!own || !reservationLinesMatch(own.lines, expected))) throw new Error('Reservation ledger mismatch');
         delete holds[inventory.reservationId];
         const update: ProductInventoryUpdate = { webCatalogVersion: catalogVersion(snapshot), webReservations: holds };
         if (!commit) return { snapshot, update };
